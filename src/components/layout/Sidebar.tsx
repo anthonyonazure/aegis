@@ -33,9 +33,10 @@ const navItems: NavItem[] = [
 interface SidebarProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
+  isConnected?: boolean;
 }
 
-export const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
+export const Sidebar = ({ activeTab, onTabChange, isConnected = false }: SidebarProps) => {
   const [collapsed, setCollapsed] = useState(false);
 
   return (
@@ -105,11 +106,19 @@ export const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
         <div className="p-4 border-t border-sidebar-border">
           <div className="glass-panel p-3">
             <div className="flex items-center gap-2 mb-2">
-              <div className="status-dot status-dot-warning" />
-              <span className="text-xs font-medium text-foreground">Not Connected</span>
+              <div className={cn(
+                "status-dot",
+                isConnected ? "status-dot-success" : "status-dot-warning"
+              )} />
+              <span className="text-xs font-medium text-foreground">
+                {isConnected ? 'Connected' : 'Not Connected'}
+              </span>
             </div>
             <p className="text-xs text-muted-foreground">
-              Connect to a tenant to begin exporting
+              {isConnected 
+                ? 'Ready to export tenant configuration'
+                : 'Connect to a tenant to begin exporting'
+              }
             </p>
           </div>
         </div>

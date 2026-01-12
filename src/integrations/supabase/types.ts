@@ -14,7 +14,192 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      export_jobs: {
+        Row: {
+          categories: string[]
+          completed_at: string | null
+          created_at: string
+          error: string | null
+          formats: string[]
+          id: string
+          metadata: Json | null
+          name: string
+          output_path: string | null
+          progress: number
+          status: string
+          tenant_connection_id: string | null
+        }
+        Insert: {
+          categories?: string[]
+          completed_at?: string | null
+          created_at?: string
+          error?: string | null
+          formats?: string[]
+          id?: string
+          metadata?: Json | null
+          name: string
+          output_path?: string | null
+          progress?: number
+          status?: string
+          tenant_connection_id?: string | null
+        }
+        Update: {
+          categories?: string[]
+          completed_at?: string | null
+          created_at?: string
+          error?: string | null
+          formats?: string[]
+          id?: string
+          metadata?: Json | null
+          name?: string
+          output_path?: string | null
+          progress?: number
+          status?: string
+          tenant_connection_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "export_jobs_tenant_connection_id_fkey"
+            columns: ["tenant_connection_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      exported_resources: {
+        Row: {
+          bicep_config: string | null
+          category: string
+          created_at: string
+          data: Json
+          export_job_id: string
+          id: string
+          powershell_script: string | null
+          resource_id: string | null
+          resource_name: string | null
+          resource_type: string
+          terraform_config: string | null
+        }
+        Insert: {
+          bicep_config?: string | null
+          category: string
+          created_at?: string
+          data: Json
+          export_job_id: string
+          id?: string
+          powershell_script?: string | null
+          resource_id?: string | null
+          resource_name?: string | null
+          resource_type: string
+          terraform_config?: string | null
+        }
+        Update: {
+          bicep_config?: string | null
+          category?: string
+          created_at?: string
+          data?: Json
+          export_job_id?: string
+          id?: string
+          powershell_script?: string | null
+          resource_id?: string | null
+          resource_name?: string | null
+          resource_type?: string
+          terraform_config?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exported_resources_export_job_id_fkey"
+            columns: ["export_job_id"]
+            isOneToOne: false
+            referencedRelation: "export_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      git_configs: {
+        Row: {
+          auto_commit: boolean | null
+          branch: string | null
+          cicd_template: string | null
+          commit_message_template: string | null
+          created_at: string
+          id: string
+          provider: string
+          repo_url: string | null
+          tenant_connection_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          auto_commit?: boolean | null
+          branch?: string | null
+          cicd_template?: string | null
+          commit_message_template?: string | null
+          created_at?: string
+          id?: string
+          provider: string
+          repo_url?: string | null
+          tenant_connection_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          auto_commit?: boolean | null
+          branch?: string | null
+          cicd_template?: string | null
+          commit_message_template?: string | null
+          created_at?: string
+          id?: string
+          provider?: string
+          repo_url?: string | null
+          tenant_connection_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "git_configs_tenant_connection_id_fkey"
+            columns: ["tenant_connection_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_connections: {
+        Row: {
+          auth_method: string
+          client_id: string | null
+          created_at: string
+          id: string
+          last_sync: string | null
+          status: string
+          tenant_id: string
+          tenant_name: string | null
+          updated_at: string
+        }
+        Insert: {
+          auth_method: string
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          last_sync?: string | null
+          status?: string
+          tenant_id: string
+          tenant_name?: string | null
+          updated_at?: string
+        }
+        Update: {
+          auth_method?: string
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          last_sync?: string | null
+          status?: string
+          tenant_id?: string
+          tenant_name?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

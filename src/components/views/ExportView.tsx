@@ -7,7 +7,8 @@ import {
   FolderOpen,
   Download,
   Check,
-  AlertCircle
+  AlertCircle,
+  Loader2
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -15,6 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 import { ExportFormat } from '@/types/tenant';
 
@@ -58,6 +60,8 @@ interface ExportViewProps {
   selectedFormats: ExportFormat['id'][];
   onFormatToggle: (format: ExportFormat['id']) => void;
   onStartExport: () => void;
+  isExporting?: boolean;
+  progress?: number;
 }
 
 export const ExportView = ({
@@ -65,12 +69,14 @@ export const ExportView = ({
   selectedFormats,
   onFormatToggle,
   onStartExport,
+  isExporting = false,
+  progress = 0,
 }: ExportViewProps) => {
   const [outputPath, setOutputPath] = useState('./exports');
   const [separateFiles, setSeparateFiles] = useState(true);
   const [includeMetadata, setIncludeMetadata] = useState(true);
 
-  const canExport = selectedResources.length > 0 && selectedFormats.length > 0;
+  const canExport = selectedResources.length > 0 && selectedFormats.length > 0 && !isExporting;
 
   return (
     <div className="space-y-6">
@@ -91,11 +97,40 @@ export const ExportView = ({
             disabled={!canExport}
             className="gap-2"
           >
-            <Download className="w-4 h-4" />
-            Start Export
+            {isExporting ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Exporting... {progress}%
+              </>
+            ) : (
+              <>
+                <Download className="w-4 h-4" />
+                Start Export
+              </>
+            )}
           </Button>
         </div>
       </div>
+
+      {/* Export Progress */}
+      {isExporting && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <Card className="glass-panel border-primary/20">
+            <CardContent className="p-4">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-foreground font-medium">Exporting resources...</span>
+                  <span className="text-muted-foreground">{progress}%</span>
+                </div>
+                <Progress value={progress} className="h-2" />
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
 
       {/* Warning if no resources selected */}
       {selectedResources.length === 0 && (
