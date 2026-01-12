@@ -8,6 +8,12 @@ async function getCurrentUserId(): Promise<string> {
   return user.id;
 }
 
+// Sanitize database errors to prevent information leakage
+function sanitizeDatabaseError(error: unknown, operation: string): Error {
+  console.error(`Database error (${operation}):`, error);
+  return new Error(`Failed to ${operation}. Please try again.`);
+}
+
 // Tenant Connections
 export async function createTenantConnection(connection: Omit<TenantConnection, 'id'>) {
   const userId = await getCurrentUserId();
@@ -25,7 +31,7 @@ export async function createTenantConnection(connection: Omit<TenantConnection, 
     .select()
     .single();
 
-  if (error) throw error;
+  if (error) throw sanitizeDatabaseError(error, 'create tenant connection');
   return data;
 }
 
@@ -41,7 +47,7 @@ export async function updateTenantConnection(id: string, updates: Partial<Tenant
     .select()
     .single();
 
-  if (error) throw error;
+  if (error) throw sanitizeDatabaseError(error, 'update tenant connection');
   return data;
 }
 
@@ -51,7 +57,7 @@ export async function getTenantConnections() {
     .select('*')
     .order('created_at', { ascending: false });
 
-  if (error) throw error;
+  if (error) throw sanitizeDatabaseError(error, 'fetch tenant connections');
   return data;
 }
 
@@ -64,7 +70,7 @@ export async function getActiveTenantConnection() {
     .limit(1)
     .maybeSingle();
 
-  if (error) throw error;
+  if (error) throw sanitizeDatabaseError(error, 'fetch active connection');
   return data;
 }
 
@@ -91,7 +97,7 @@ export async function createExportJob(job: {
     .select()
     .single();
 
-  if (error) throw error;
+  if (error) throw sanitizeDatabaseError(error, 'create export job');
   return data;
 }
 
@@ -110,7 +116,7 @@ export async function updateExportJob(id: string, updates: Partial<ExportJob>) {
     .select()
     .single();
 
-  if (error) throw error;
+  if (error) throw sanitizeDatabaseError(error, 'update export job');
   return data;
 }
 
@@ -120,7 +126,7 @@ export async function getExportJobs() {
     .select('*')
     .order('created_at', { ascending: false });
 
-  if (error) throw error;
+  if (error) throw sanitizeDatabaseError(error, 'fetch export jobs');
   return data;
 }
 
@@ -131,7 +137,7 @@ export async function getExportJob(id: string) {
     .eq('id', id)
     .single();
 
-  if (error) throw error;
+  if (error) throw sanitizeDatabaseError(error, 'fetch export job');
   return data;
 }
 
@@ -141,7 +147,7 @@ export async function deleteExportJob(id: string) {
     .delete()
     .eq('id', id);
 
-  if (error) throw error;
+  if (error) throw sanitizeDatabaseError(error, 'delete export job');
 }
 
 // Exported Resources
@@ -152,7 +158,7 @@ export async function getExportedResources(exportJobId: string) {
     .eq('export_job_id', exportJobId)
     .order('created_at', { ascending: true });
 
-  if (error) throw error;
+  if (error) throw sanitizeDatabaseError(error, 'fetch exported resources');
   return data;
 }
 
@@ -175,7 +181,7 @@ export async function saveGitConfig(config: Omit<GitConfig, 'id'> & { tenantConn
     .select()
     .single();
 
-  if (error) throw error;
+  if (error) throw sanitizeDatabaseError(error, 'save git config');
   return data;
 }
 
@@ -188,7 +194,7 @@ export async function getGitConfig(tenantConnectionId?: string) {
   
   const { data, error } = await query.order('created_at', { ascending: false }).limit(1).maybeSingle();
 
-  if (error) throw error;
+  if (error) throw sanitizeDatabaseError(error, 'fetch git config');
   return data;
 }
 

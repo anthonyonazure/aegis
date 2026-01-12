@@ -1,15 +1,42 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-interface ConvertRequest {
-  data: any;
-  resourceType: string;
-  format: 'terraform' | 'bicep' | 'powershell';
+// Input validation schema
+const ConvertRequestSchema = z.object({
+  data: z.any().refine((val) => {
+    try {
+      const str = JSON.stringify(val);
+      return str.length < 5 * 1024 * 1024; // 5MB limit for data payload
+    } catch {
+      return false;
+    }
+  }, 'Data payload too large or invalid'),
+  resourceType: z.string().regex(/^[a-z-]+\/[a-z0-9-]+$/, 'Invalid resource type format'),
+  format: z.enum(['terraform', 'bicep', 'powershell']),
+});
+
+// Error sanitization function
+function sanitizeError(error: unknown): string {
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  
+  // Log full error server-side for debugging
+  console.error('Function error (sanitized for client):', errorMessage);
+  
+  // Return generic message
+  if (errorMessage.includes('too large') || errorMessage.includes('size')) {
+    return 'Data payload is too large to process.';
+  }
+  if (errorMessage.includes('format') || errorMessage.includes('invalid')) {
+    return 'Invalid input format provided.';
+  }
+  
+  return 'Conversion failed. Please try again or contact support.';
 }
 
 async function verifyAuth(req: Request): Promise<{ userId: string } | { error: string; status: number }> {
@@ -356,6 +383,9 @@ ${JSON.stringify(item, null, 2)}
 Write-Host "Resource exported: ${item.displayName || item.name || item.id}"`;
 }
 
+// Maximum payload size: 10MB
+const MAX_PAYLOAD_SIZE = 10 * 1024 * 1024;
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -374,15 +404,28 @@ serve(async (req) => {
 
     console.log('Authenticated user:', authResult.userId);
 
-    const body: ConvertRequest = await req.json();
-    const { data, resourceType, format } = body;
-
-    if (!data || !resourceType || !format) {
+    // Check payload size
+    const contentLength = req.headers.get('content-length');
+    if (contentLength && parseInt(contentLength) > MAX_PAYLOAD_SIZE) {
       return new Response(
-        JSON.stringify({ error: 'Missing required parameters: data, resourceType, format' }),
+        JSON.stringify({ error: 'Request payload too large' }),
+        { status: 413, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const rawBody = await req.json();
+
+    // Validate input
+    const parseResult = ConvertRequestSchema.safeParse(rawBody);
+    if (!parseResult.success) {
+      console.error('Validation error:', parseResult.error.errors);
+      return new Response(
+        JSON.stringify({ error: 'Invalid request parameters' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    const { data, resourceType, format } = parseResult.data;
 
     let result: string;
 
@@ -398,7 +441,7 @@ serve(async (req) => {
         break;
       default:
         return new Response(
-          JSON.stringify({ error: `Unsupported format: ${format}` }),
+          JSON.stringify({ error: 'Unsupported format' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
     }
@@ -415,9 +458,8 @@ serve(async (req) => {
 
   } catch (error: unknown) {
     console.error('Convert error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Conversion failed';
     return new Response(
-      JSON.stringify({ error: errorMessage }),
+      JSON.stringify({ error: sanitizeError(error) }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
