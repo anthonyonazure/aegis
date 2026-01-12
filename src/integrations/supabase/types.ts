@@ -209,12 +209,68 @@ export type Database = {
         }
         Relationships: []
       }
+      tenant_credentials: {
+        Row: {
+          client_id: string
+          created_at: string
+          encrypted_secret: string
+          encryption_version: number
+          id: string
+          tenant_connection_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          encrypted_secret: string
+          encryption_version?: number
+          id?: string
+          tenant_connection_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          encrypted_secret?: string
+          encryption_version?: number
+          id?: string
+          tenant_connection_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_credentials_tenant_connection_id_fkey"
+            columns: ["tenant_connection_id"]
+            isOneToOne: true
+            referencedRelation: "tenant_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_decrypted_credential: {
+        Args: { p_tenant_connection_id: string; p_user_id: string }
+        Returns: {
+          client_id: string
+          client_secret: string
+          tenant_id: string
+        }[]
+      }
+      store_encrypted_credential: {
+        Args: {
+          p_client_id: string
+          p_client_secret: string
+          p_tenant_connection_id: string
+        }
+        Returns: string
+      }
     }
     Enums: {
       [_ in never]: never

@@ -74,6 +74,38 @@ export async function getActiveTenantConnection() {
   return data;
 }
 
+// Store encrypted credentials server-side
+export async function storeEncryptedCredential(
+  tenantConnectionId: string,
+  clientId: string,
+  clientSecret: string
+): Promise<string> {
+  const { data, error } = await supabase
+    .rpc('store_encrypted_credential', {
+      p_tenant_connection_id: tenantConnectionId,
+      p_client_id: clientId,
+      p_client_secret: clientSecret,
+    });
+
+  if (error) throw sanitizeDatabaseError(error, 'store credentials');
+  return data;
+}
+
+// Check if credentials are stored for a connection
+export async function hasStoredCredentials(tenantConnectionId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('tenant_credentials')
+    .select('id')
+    .eq('tenant_connection_id', tenantConnectionId)
+    .maybeSingle();
+
+  if (error) {
+    console.error('Error checking credentials:', error);
+    return false;
+  }
+  return !!data;
+}
+
 // Export Jobs
 export async function createExportJob(job: {
   name: string;

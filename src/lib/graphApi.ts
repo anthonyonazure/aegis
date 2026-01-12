@@ -128,6 +128,36 @@ export async function getAccessToken(
   }
 }
 
+// Refresh token using stored credentials (no secret transmitted)
+export async function refreshTokenFromStoredCredentials(
+  tenantConnectionId: string
+): Promise<{ accessToken?: string; expiresIn?: number; error?: string }> {
+  try {
+    // Client-side validation
+    const connectionIdResult = UUIDSchema.safeParse(tenantConnectionId);
+    if (!connectionIdResult.success) {
+      return { error: 'Invalid connection ID format.' };
+    }
+
+    const { data, error } = await supabase.functions.invoke(GRAPH_API_FUNCTION, {
+      body: {
+        action: 'get-token-from-stored',
+        tenantConnectionId,
+      },
+    });
+
+    if (error) {
+      console.error('Token refresh error:', error);
+      return { error: 'Failed to refresh token. Please re-authenticate.' };
+    }
+
+    return data;
+  } catch (err) {
+    console.error('Token refresh exception:', err);
+    return { error: 'Failed to refresh token. Please try again.' };
+  }
+}
+
 export async function exportResources(
   accessToken: string,
   resources: string[],
