@@ -28,6 +28,7 @@ export type Database = {
           progress: number
           status: string
           tenant_connection_id: string | null
+          user_id: string
         }
         Insert: {
           categories?: string[]
@@ -42,6 +43,7 @@ export type Database = {
           progress?: number
           status?: string
           tenant_connection_id?: string | null
+          user_id: string
         }
         Update: {
           categories?: string[]
@@ -56,6 +58,7 @@ export type Database = {
           progress?: number
           status?: string
           tenant_connection_id?: string | null
+          user_id?: string
         }
         Relationships: [
           {
@@ -129,6 +132,7 @@ export type Database = {
           repo_url: string | null
           tenant_connection_id: string | null
           updated_at: string
+          user_id: string
         }
         Insert: {
           auto_commit?: boolean | null
@@ -141,6 +145,7 @@ export type Database = {
           repo_url?: string | null
           tenant_connection_id?: string | null
           updated_at?: string
+          user_id: string
         }
         Update: {
           auto_commit?: boolean | null
@@ -153,6 +158,7 @@ export type Database = {
           repo_url?: string | null
           tenant_connection_id?: string | null
           updated_at?: string
+          user_id?: string
         }
         Relationships: [
           {
@@ -175,6 +181,7 @@ export type Database = {
           tenant_id: string
           tenant_name: string | null
           updated_at: string
+          user_id: string
         }
         Insert: {
           auth_method: string
@@ -186,6 +193,7 @@ export type Database = {
           tenant_id: string
           tenant_name?: string | null
           updated_at?: string
+          user_id: string
         }
         Update: {
           auth_method?: string
@@ -197,6 +205,7 @@ export type Database = {
           tenant_id?: string
           tenant_name?: string | null
           updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }

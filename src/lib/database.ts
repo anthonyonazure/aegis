@@ -1,11 +1,21 @@
 import { supabase } from '@/integrations/supabase/client';
 import { TenantConnection, ExportJob, GitConfig } from '@/types/tenant';
 
+// Helper to get current user ID
+async function getCurrentUserId(): Promise<string> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+  return user.id;
+}
+
 // Tenant Connections
 export async function createTenantConnection(connection: Omit<TenantConnection, 'id'>) {
+  const userId = await getCurrentUserId();
+  
   const { data, error } = await supabase
     .from('tenant_connections')
     .insert({
+      user_id: userId,
       tenant_id: connection.tenantId,
       tenant_name: connection.tenantName,
       auth_method: connection.authMethod,
@@ -65,9 +75,12 @@ export async function createExportJob(job: {
   categories: string[];
   formats: string[];
 }) {
+  const userId = await getCurrentUserId();
+  
   const { data, error } = await supabase
     .from('export_jobs')
     .insert({
+      user_id: userId,
       name: job.name,
       tenant_connection_id: job.tenantConnectionId,
       categories: job.categories,
@@ -83,7 +96,7 @@ export async function createExportJob(job: {
 }
 
 export async function updateExportJob(id: string, updates: Partial<ExportJob>) {
-  const updateData: any = {};
+  const updateData: Record<string, unknown> = {};
   if (updates.status) updateData.status = updates.status;
   if (updates.progress !== undefined) updateData.progress = updates.progress;
   if (updates.error) updateData.error = updates.error;
@@ -145,9 +158,12 @@ export async function getExportedResources(exportJobId: string) {
 
 // Git Config
 export async function saveGitConfig(config: Omit<GitConfig, 'id'> & { tenantConnectionId?: string }) {
+  const userId = await getCurrentUserId();
+  
   const { data, error } = await supabase
     .from('git_configs')
     .upsert({
+      user_id: userId,
       tenant_connection_id: config.tenantConnectionId,
       provider: config.provider,
       repo_url: config.repoUrl,
@@ -177,7 +193,7 @@ export async function getGitConfig(tenantConnectionId?: string) {
 }
 
 // Subscribe to export job updates
-export function subscribeToExportJob(jobId: string, callback: (job: any) => void) {
+export function subscribeToExportJob(jobId: string, callback: (job: unknown) => void) {
   const channel = supabase
     .channel(`export-job-${jobId}`)
     .on(
