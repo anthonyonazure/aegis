@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { DashboardView } from '@/components/views/DashboardView';
 import { ResourcesView } from '@/components/views/ResourcesView';
@@ -10,8 +11,13 @@ import { RESOURCE_CATEGORIES, ExportFormat } from '@/types/tenant';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useExport } from '@/hooks/useTenant';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/useAuth';
+import { Button } from '@/components/ui/button';
+import { Loader2, LogOut } from 'lucide-react';
 
 const Index = () => {
+  const navigate = useNavigate();
+  const { user, loading: authLoading, signOut, isAuthenticated } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [selectedResources, setSelectedResources] = useState<string[]>([]);
   const [selectedFormats, setSelectedFormats] = useState<ExportFormat['id'][]>(['json']);
@@ -23,6 +29,13 @@ const Index = () => {
 
   const { isExporting, progress, startExport } = useExport();
   const { toast } = useToast();
+
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      navigate('/login');
+    }
+  }, [authLoading, isAuthenticated, navigate]);
 
   const handleResourceSelect = (resourceId: string) => {
     setSelectedResources(prev => 
@@ -95,6 +108,11 @@ const Index = () => {
     setActiveTab('jobs');
   };
 
+  const handleSignOut = async () => {
+    await signOut();
+    navigate('/login');
+  };
+
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard':
@@ -138,12 +156,39 @@ const Index = () => {
     }
   };
 
+  // Show loading while checking auth
+  if (authLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  // Don't render if not authenticated (will redirect)
+  if (!isAuthenticated) {
+    return null;
+  }
+
   return (
     <div className="flex h-screen bg-background overflow-hidden">
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} isConnected={isConnected} />
       
       <main className="flex-1 overflow-auto">
         <div className="p-6 lg:p-8 max-w-7xl mx-auto">
+          {/* User info and sign out */}
+          <div className="flex justify-end mb-4">
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-muted-foreground">
+                {user?.email}
+              </span>
+              <Button variant="ghost" size="sm" onClick={handleSignOut}>
+                <LogOut className="h-4 w-4 mr-2" />
+                Sign Out
+              </Button>
+            </div>
+          </div>
+          
           <AnimatePresence mode="wait">
             <motion.div
               key={activeTab}

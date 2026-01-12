@@ -59,6 +59,33 @@ interface ExportRequest {
 
 type RequestBody = AuthRequest | ExportRequest;
 
+async function verifyAuth(req: Request): Promise<{ userId: string } | { error: string; status: number }> {
+  const authHeader = req.headers.get('Authorization');
+  
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return { error: 'Missing or invalid authorization header', status: 401 };
+  }
+
+  const token = authHeader.replace('Bearer ', '');
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+  const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+  
+  const supabase = createClient(supabaseUrl, supabaseKey, {
+    global: {
+      headers: { Authorization: authHeader },
+    },
+  });
+
+  const { data, error } = await supabase.auth.getClaims(token);
+  
+  if (error || !data?.claims) {
+    console.error('Auth verification failed:', error);
+    return { error: 'Unauthorized', status: 401 };
+  }
+
+  return { userId: data.claims.sub as string };
+}
+
 async function getAccessToken(tenantId: string, clientId: string, clientSecret: string): Promise<{ token: string; expiresIn: number } | { error: string }> {
   const tokenEndpoint = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`;
   
@@ -166,6 +193,19 @@ serve(async (req) => {
   }
 
   try {
+    // Verify authentication first
+    const authResult = await verifyAuth(req);
+    if ('error' in authResult) {
+      console.log('Authentication failed:', authResult.error);
+      return new Response(
+        JSON.stringify({ error: authResult.error }),
+        { status: authResult.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const userId = authResult.userId;
+    console.log('Authenticated user:', userId);
+
     const body: RequestBody = await req.json();
 
     if (body.action === 'get-token' || body.action === 'test-connection') {
@@ -227,6 +267,21 @@ serve(async (req) => {
       const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
       const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
       const supabase = createClient(supabaseUrl, supabaseKey);
+
+      // Verify the export job belongs to the authenticated user
+      const { data: jobData, error: jobError } = await supabase
+        .from('export_jobs')
+        .select('user_id')
+        .eq('id', exportJobId)
+        .single();
+
+      if (jobError || !jobData || jobData.user_id !== userId) {
+        console.error('Export job verification failed:', jobError);
+        return new Response(
+          JSON.stringify({ error: 'Unauthorized: Export job not found or access denied' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
 
       // Update job status to running
       await supabase

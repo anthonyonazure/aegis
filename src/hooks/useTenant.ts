@@ -180,8 +180,8 @@ export function useExport() {
       setCurrentJobId(job.id);
 
       // Subscribe to job updates
-      const unsubscribe = subscribeToExportJob(job.id, (updatedJob) => {
-        setProgress(updatedJob.progress);
+      const unsubscribe = subscribeToExportJob(job.id, (updatedJob: { progress?: number; status?: string; error?: string }) => {
+        if (updatedJob.progress !== undefined) setProgress(updatedJob.progress);
         if (updatedJob.status === 'completed' || updatedJob.status === 'failed') {
           setIsExporting(false);
           unsubscribe();

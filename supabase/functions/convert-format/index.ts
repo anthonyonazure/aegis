@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -9,6 +10,33 @@ interface ConvertRequest {
   data: any;
   resourceType: string;
   format: 'terraform' | 'bicep' | 'powershell';
+}
+
+async function verifyAuth(req: Request): Promise<{ userId: string } | { error: string; status: number }> {
+  const authHeader = req.headers.get('Authorization');
+  
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return { error: 'Missing or invalid authorization header', status: 401 };
+  }
+
+  const token = authHeader.replace('Bearer ', '');
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+  const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+  
+  const supabase = createClient(supabaseUrl, supabaseKey, {
+    global: {
+      headers: { Authorization: authHeader },
+    },
+  });
+
+  const { data, error } = await supabase.auth.getClaims(token);
+  
+  if (error || !data?.claims) {
+    console.error('Auth verification failed:', error);
+    return { error: 'Unauthorized', status: 401 };
+  }
+
+  return { userId: data.claims.sub as string };
 }
 
 // Convert JSON to Terraform HCL
@@ -255,7 +283,6 @@ function toPowerShell(data: any, resourceType: string): string {
 }
 
 function generateCAPowerShell(policy: any): string {
-  const policyJson = JSON.stringify(policy, null, 2);
   return `# Conditional Access Policy: ${policy.displayName}
 $policyParams = @{
     DisplayName = "${policy.displayName || ''}"
@@ -335,6 +362,18 @@ serve(async (req) => {
   }
 
   try {
+    // Verify authentication first
+    const authResult = await verifyAuth(req);
+    if ('error' in authResult) {
+      console.log('Authentication failed:', authResult.error);
+      return new Response(
+        JSON.stringify({ error: authResult.error }),
+        { status: authResult.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log('Authenticated user:', authResult.userId);
+
     const body: ConvertRequest = await req.json();
     const { data, resourceType, format } = body;
 
