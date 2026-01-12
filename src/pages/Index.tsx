@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { DashboardView } from '@/components/views/DashboardView';
 import { ResourcesView } from '@/components/views/ResourcesView';
@@ -8,11 +8,21 @@ import { GitView } from '@/components/views/GitView';
 import { JobsView } from '@/components/views/JobsView';
 import { RESOURCE_CATEGORIES, ExportFormat } from '@/types/tenant';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useExport } from '@/hooks/useTenant';
+import { useToast } from '@/hooks/use-toast';
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [selectedResources, setSelectedResources] = useState<string[]>([]);
   const [selectedFormats, setSelectedFormats] = useState<ExportFormat['id'][]>(['json']);
+  
+  // Connection state
+  const [isConnected, setIsConnected] = useState(false);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [connectionId, setConnectionId] = useState<string | null>(null);
+
+  const { isExporting, progress, startExport } = useExport();
+  const { toast } = useToast();
 
   const handleResourceSelect = (resourceId: string) => {
     setSelectedResources(prev => 
@@ -44,15 +54,51 @@ const Index = () => {
     );
   };
 
-  const handleStartExport = () => {
-    console.log('Starting export...', { selectedResources, selectedFormats });
-    // TODO: Implement actual export logic
+  const handleConnectionChange = (connected: boolean, token?: string, connId?: string) => {
+    setIsConnected(connected);
+    setAccessToken(token || null);
+    setConnectionId(connId || null);
+  };
+
+  const handleStartExport = async () => {
+    if (!isConnected) {
+      toast({
+        title: 'Not Connected',
+        description: 'Please connect to a tenant first',
+        variant: 'destructive',
+      });
+      setActiveTab('auth');
+      return;
+    }
+
+    if (!accessToken) {
+      toast({
+        title: 'Session Expired',
+        description: 'Please reconnect to the tenant',
+        variant: 'destructive',
+      });
+      setActiveTab('auth');
+      return;
+    }
+
+    if (selectedResources.length === 0) {
+      toast({
+        title: 'No Resources Selected',
+        description: 'Please select at least one resource to export',
+        variant: 'destructive',
+      });
+      setActiveTab('resources');
+      return;
+    }
+
+    await startExport(accessToken, selectedResources, selectedFormats, connectionId || undefined);
+    setActiveTab('jobs');
   };
 
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard':
-        return <DashboardView onNavigate={setActiveTab} />;
+        return <DashboardView onNavigate={setActiveTab} isConnected={isConnected} />;
       case 'resources':
         return (
           <ResourcesView 
@@ -68,6 +114,8 @@ const Index = () => {
             selectedFormats={selectedFormats}
             onFormatToggle={handleFormatToggle}
             onStartExport={handleStartExport}
+            isExporting={isExporting}
+            progress={progress}
           />
         );
       case 'jobs':
@@ -75,7 +123,7 @@ const Index = () => {
       case 'git':
         return <GitView />;
       case 'auth':
-        return <AuthView />;
+        return <AuthView onConnectionChange={handleConnectionChange} />;
       case 'settings':
         return (
           <div className="flex items-center justify-center h-full">
@@ -86,13 +134,13 @@ const Index = () => {
           </div>
         );
       default:
-        return <DashboardView onNavigate={setActiveTab} />;
+        return <DashboardView onNavigate={setActiveTab} isConnected={isConnected} />;
     }
   };
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
-      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
+      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} isConnected={isConnected} />
       
       <main className="flex-1 overflow-auto">
         <div className="p-6 lg:p-8 max-w-7xl mx-auto">

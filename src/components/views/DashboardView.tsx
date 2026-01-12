@@ -10,27 +10,32 @@ import {
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
 import { RESOURCE_CATEGORIES } from '@/types/tenant';
 import { getIcon } from '@/lib/icons';
 
-const stats = [
-  { label: 'Resource Categories', value: '8', icon: Server, trend: '+2 new' },
-  { label: 'Export Formats', value: '4', icon: FileJson, trend: 'JSON, TF, Bicep, PS1' },
-  { label: 'Last Export', value: 'Never', icon: Clock, trend: 'No exports yet' },
-  { label: 'Connection', value: 'Offline', icon: AlertCircle, trend: 'Setup required' },
-];
-
-const recentActivity = [
-  { id: 1, action: 'System initialized', time: 'Just now', status: 'success' },
-  { id: 2, action: 'Ready for tenant connection', time: '1m ago', status: 'info' },
-];
-
 interface DashboardViewProps {
   onNavigate: (tab: string) => void;
+  isConnected?: boolean;
 }
 
-export const DashboardView = ({ onNavigate }: DashboardViewProps) => {
+export const DashboardView = ({ onNavigate, isConnected = false }: DashboardViewProps) => {
+  const stats = [
+    { label: 'Resource Categories', value: '8', icon: Server, trend: '+2 new' },
+    { label: 'Export Formats', value: '4', icon: FileJson, trend: 'JSON, TF, Bicep, PS1' },
+    { label: 'Last Export', value: 'Never', icon: Clock, trend: 'No exports yet' },
+    { 
+      label: 'Connection', 
+      value: isConnected ? 'Online' : 'Offline', 
+      icon: isConnected ? CheckCircle2 : AlertCircle, 
+      trend: isConnected ? 'Ready to export' : 'Setup required' 
+    },
+  ];
+
+  const recentActivity = [
+    { id: 1, action: 'System initialized', time: 'Just now', status: 'success' },
+    { id: 2, action: isConnected ? 'Tenant connected' : 'Ready for tenant connection', time: '1m ago', status: 'info' },
+  ];
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -43,7 +48,7 @@ export const DashboardView = ({ onNavigate }: DashboardViewProps) => {
         </div>
         <Button onClick={() => onNavigate('auth')} className="gap-2">
           <Zap className="w-4 h-4" />
-          Connect Tenant
+          {isConnected ? 'Manage Connection' : 'Connect Tenant'}
         </Button>
       </div>
 
@@ -141,10 +146,14 @@ export const DashboardView = ({ onNavigate }: DashboardViewProps) => {
             <CardContent className="space-y-3">
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-sm">
-                  <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-xs font-medium text-primary">
-                    1
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
+                    isConnected ? 'bg-success/20 text-success' : 'bg-primary/20 text-primary'
+                  }`}>
+                    {isConnected ? '✓' : '1'}
                   </div>
-                  <span className="text-muted-foreground">Connect to your M365 tenant</span>
+                  <span className={isConnected ? 'text-success' : 'text-muted-foreground'}>
+                    Connect to your M365 tenant
+                  </span>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
                   <div className="w-6 h-6 rounded-full bg-secondary flex items-center justify-center text-xs font-medium text-muted-foreground">
@@ -165,8 +174,8 @@ export const DashboardView = ({ onNavigate }: DashboardViewProps) => {
                   <span className="text-muted-foreground">Configure Git & CI/CD</span>
                 </div>
               </div>
-              <Button className="w-full mt-4" onClick={() => onNavigate('auth')}>
-                Get Started
+              <Button className="w-full mt-4" onClick={() => onNavigate(isConnected ? 'resources' : 'auth')}>
+                {isConnected ? 'Select Resources' : 'Get Started'}
               </Button>
             </CardContent>
           </Card>

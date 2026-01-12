@@ -46,12 +46,14 @@ export interface TenantConnection {
 }
 
 export interface GitConfig {
+  id?: string;
   enabled: boolean;
   provider: 'github' | 'azure-devops' | 'gitlab';
   repoUrl?: string;
   branch?: string;
   autoCommit: boolean;
   commitMessage?: string;
+  cicdTemplate?: 'github-actions' | 'azure-pipelines' | 'gitlab-ci';
 }
 
 export interface ExportConfig {
