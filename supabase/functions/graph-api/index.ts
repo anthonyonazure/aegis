@@ -1,10 +1,57 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// Input validation schemas
+const AuthRequestSchema = z.object({
+  action: z.enum(['get-token', 'test-connection']),
+  tenantId: z.string().uuid('Invalid tenant ID format'),
+  clientId: z.string().uuid('Invalid client ID format'),
+  clientSecret: z.string().min(1, 'Client secret required').max(1000, 'Client secret too long'),
+});
+
+const ExportRequestSchema = z.object({
+  action: z.literal('export'),
+  accessToken: z.string().min(1, 'Access token required').max(10000, 'Access token too long'),
+  resources: z.array(z.string().regex(/^[a-z-]+\/[a-z0-9-]+$/, 'Invalid resource format')).min(1, 'At least one resource required').max(100, 'Too many resources'),
+  exportJobId: z.string().uuid('Invalid export job ID format'),
+});
+
+// Error sanitization function
+function sanitizeError(error: unknown): string {
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  
+  // Log full error server-side for debugging
+  console.error('Function error (sanitized for client):', errorMessage);
+  
+  // Map specific errors to user-friendly messages
+  if (errorMessage.includes('invalid_client') || errorMessage.includes('AADSTS')) {
+    return 'Authentication failed. Please verify your Microsoft 365 credentials.';
+  }
+  if (errorMessage.includes('invalid_grant')) {
+    return 'Authentication expired. Please re-authenticate.';
+  }
+  if (errorMessage.includes('unauthorized') || errorMessage.includes('403') || errorMessage.includes('Forbidden')) {
+    return 'Access denied. Check your API permissions in Azure AD.';
+  }
+  if (errorMessage.includes('not found') || errorMessage.includes('404')) {
+    return 'Resource not found. The requested data may not exist.';
+  }
+  if (errorMessage.includes('timeout') || errorMessage.includes('ETIMEDOUT')) {
+    return 'Request timed out. Please try again.';
+  }
+  if (errorMessage.includes('rate limit') || errorMessage.includes('429')) {
+    return 'Rate limited. Please wait and try again.';
+  }
+  
+  // Generic fallback
+  return 'An error occurred. Please try again or contact support.';
+}
 
 // Microsoft Graph API endpoints for different resource types
 const GRAPH_ENDPOINTS: Record<string, string> = {
@@ -42,22 +89,6 @@ const GRAPH_ENDPOINTS: Record<string, string> = {
   // Purview
   'purview/sensitivity-labels': '/security/informationProtection/sensitivityLabels',
 };
-
-interface AuthRequest {
-  action: 'get-token' | 'test-connection';
-  tenantId: string;
-  clientId: string;
-  clientSecret: string;
-}
-
-interface ExportRequest {
-  action: 'export';
-  accessToken: string;
-  resources: string[];
-  exportJobId: string;
-}
-
-type RequestBody = AuthRequest | ExportRequest;
 
 async function verifyAuth(req: Request): Promise<{ userId: string } | { error: string; status: number }> {
   const authHeader = req.headers.get('Authorization');
@@ -108,8 +139,9 @@ async function getAccessToken(tenantId: string, clientId: string, clientSecret: 
     const data = await response.json();
     
     if (!response.ok) {
-      console.error('Token error:', data);
-      return { error: data.error_description || data.error || 'Failed to get access token' };
+      console.error('Token error (full details):', JSON.stringify(data));
+      // Return sanitized error
+      return { error: sanitizeError(new Error(data.error_description || data.error || 'Token request failed')) };
     }
 
     return {
@@ -118,8 +150,7 @@ async function getAccessToken(tenantId: string, clientId: string, clientSecret: 
     };
   } catch (error: unknown) {
     console.error('Token fetch error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return { error: `Failed to connect: ${errorMessage}` };
+    return { error: sanitizeError(error) };
   }
 }
 
@@ -146,7 +177,8 @@ async function fetchGraphData(accessToken: string, endpoint: string): Promise<an
 
       if (!betaResponse.ok) {
         const errorData = await betaResponse.json().catch(() => ({}));
-        throw new Error(errorData.error?.message || `API error: ${betaResponse.status}`);
+        console.error('Graph API error (full details):', JSON.stringify(errorData));
+        throw new Error(`API_ERROR_${betaResponse.status}`);
       }
 
       return await betaResponse.json();
@@ -186,6 +218,9 @@ async function getTenantInfo(accessToken: string): Promise<{ displayName: string
   }
 }
 
+// Maximum payload size: 10MB
+const MAX_PAYLOAD_SIZE = 10 * 1024 * 1024;
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -206,62 +241,29 @@ serve(async (req) => {
     const userId = authResult.userId;
     console.log('Authenticated user:', userId);
 
-    const body: RequestBody = await req.json();
-
-    if (body.action === 'get-token' || body.action === 'test-connection') {
-      const authBody = body as AuthRequest;
-      const { tenantId, clientId, clientSecret } = authBody;
-
-      if (!tenantId || !clientId || !clientSecret) {
-        return new Response(
-          JSON.stringify({ error: 'Missing required credentials' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      const tokenResult = await getAccessToken(tenantId, clientId, clientSecret);
-      
-      if ('error' in tokenResult) {
-        return new Response(
-          JSON.stringify({ error: tokenResult.error }),
-          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      // If testing connection, also get tenant info
-      if (body.action === 'test-connection') {
-        const tenantInfo = await getTenantInfo(tokenResult.token);
-        return new Response(
-          JSON.stringify({
-            success: true,
-            tenantName: tenantInfo?.displayName || 'Unknown',
-            tenantId: tenantInfo?.tenantId || tenantId,
-            accessToken: tokenResult.token,
-            expiresIn: tokenResult.expiresIn,
-          }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
+    // Check payload size
+    const contentLength = req.headers.get('content-length');
+    if (contentLength && parseInt(contentLength) > MAX_PAYLOAD_SIZE) {
       return new Response(
-        JSON.stringify({
-          accessToken: tokenResult.token,
-          expiresIn: tokenResult.expiresIn,
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: 'Request payload too large' }),
+        { status: 413, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    if (body.action === 'export') {
-      const exportBody = body as ExportRequest;
-      const { accessToken, resources, exportJobId } = exportBody;
+    const rawBody = await req.json();
 
-      if (!accessToken || !resources || !exportJobId) {
+    // Validate based on action type
+    if (rawBody.action === 'export') {
+      const parseResult = ExportRequestSchema.safeParse(rawBody);
+      if (!parseResult.success) {
+        console.error('Validation error:', parseResult.error.errors);
         return new Response(
-          JSON.stringify({ error: 'Missing required parameters' }),
+          JSON.stringify({ error: 'Invalid request parameters' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
+
+      const { accessToken, resources, exportJobId } = parseResult.data;
 
       // Create Supabase client to update job progress
       const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -278,7 +280,7 @@ serve(async (req) => {
       if (jobError || !jobData || jobData.user_id !== userId) {
         console.error('Export job verification failed:', jobError);
         return new Response(
-          JSON.stringify({ error: 'Unauthorized: Export job not found or access denied' }),
+          JSON.stringify({ error: 'Export job not found or access denied' }),
           { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -292,7 +294,6 @@ serve(async (req) => {
       const results: Array<{
         resource: string;
         success: boolean;
-        data?: any;
         error?: string;
       }> = [];
 
@@ -306,7 +307,7 @@ serve(async (req) => {
           results.push({
             resource,
             success: false,
-            error: `Unknown resource type: ${resource}`,
+            error: 'Unknown resource type',
           });
           completed++;
           continue;
@@ -317,7 +318,6 @@ serve(async (req) => {
           results.push({
             resource,
             success: true,
-            data: data.value || data,
           });
 
           // Store in database
@@ -332,11 +332,10 @@ serve(async (req) => {
             });
 
         } catch (error: unknown) {
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
           results.push({
             resource,
             success: false,
-            error: errorMessage,
+            error: sanitizeError(error),
           });
         }
 
@@ -355,10 +354,10 @@ serve(async (req) => {
       await supabase
         .from('export_jobs')
         .update({
-          status: hasErrors ? 'completed' : 'completed',
+          status: hasErrors ? 'completed_with_errors' : 'completed',
           progress: 100,
           completed_at: new Date().toISOString(),
-          metadata: { results: results.map(r => ({ resource: r.resource, success: r.success, error: r.error })) },
+          metadata: { results },
         })
         .eq('id', exportJobId);
 
@@ -373,16 +372,54 @@ serve(async (req) => {
       );
     }
 
+    // Handle auth actions (get-token, test-connection)
+    const parseResult = AuthRequestSchema.safeParse(rawBody);
+    if (!parseResult.success) {
+      console.error('Validation error:', parseResult.error.errors);
+      return new Response(
+        JSON.stringify({ error: 'Invalid request parameters' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const { action, tenantId, clientId, clientSecret } = parseResult.data;
+
+    const tokenResult = await getAccessToken(tenantId, clientId, clientSecret);
+    
+    if ('error' in tokenResult) {
+      return new Response(
+        JSON.stringify({ error: tokenResult.error }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // If testing connection, also get tenant info
+    if (action === 'test-connection') {
+      const tenantInfo = await getTenantInfo(tokenResult.token);
+      return new Response(
+        JSON.stringify({
+          success: true,
+          tenantName: tenantInfo?.displayName || 'Unknown',
+          tenantId: tenantInfo?.tenantId || tenantId,
+          accessToken: tokenResult.token,
+          expiresIn: tokenResult.expiresIn,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     return new Response(
-      JSON.stringify({ error: 'Invalid action' }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({
+        accessToken: tokenResult.token,
+        expiresIn: tokenResult.expiresIn,
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error: unknown) {
     console.error('Edge function error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Internal server error';
     return new Response(
-      JSON.stringify({ error: errorMessage }),
+      JSON.stringify({ error: sanitizeError(error) }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
