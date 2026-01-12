@@ -9,7 +9,9 @@ import {
   updateTenantConnection,
   createExportJob,
   getActiveTenantConnection,
-  subscribeToExportJob
+  subscribeToExportJob,
+  storeEncryptedCredential,
+  hasStoredCredentials
 } from '@/lib/database';
 import { useToast } from '@/hooks/use-toast';
 
@@ -20,6 +22,7 @@ interface TenantState {
   connectionId: string | null;
   accessToken: string | null;
   tokenExpiry: Date | null;
+  hasStoredCredentials: boolean;
 }
 
 export function useTenantConnection() {
@@ -30,6 +33,7 @@ export function useTenantConnection() {
     connectionId: null,
     accessToken: null,
     tokenExpiry: null,
+    hasStoredCredentials: false,
   });
   const [isConnecting, setIsConnecting] = useState(false);
   const { toast } = useToast();
@@ -63,6 +67,14 @@ export function useTenantConnection() {
         lastSync: new Date(),
       });
 
+      // Store encrypted credentials server-side for future sessions
+      try {
+        await storeEncryptedCredential(connection.id, clientId, clientSecret);
+      } catch (credError) {
+        console.error('Failed to store credentials:', credError);
+        // Continue - credentials storage is optional enhancement
+      }
+
       setState({
         isConnected: true,
         tenantId: result.tenantId || tenantId,
@@ -70,6 +82,7 @@ export function useTenantConnection() {
         connectionId: connection.id,
         accessToken: result.accessToken,
         tokenExpiry: new Date(Date.now() + (result.expiresIn || 3600) * 1000),
+        hasStoredCredentials: true,
       });
 
       toast({
@@ -107,6 +120,7 @@ export function useTenantConnection() {
       connectionId: null,
       accessToken: null,
       tokenExpiry: null,
+      hasStoredCredentials: false,
     });
 
     toast({
@@ -119,13 +133,17 @@ export function useTenantConnection() {
     try {
       const connection = await getActiveTenantConnection();
       if (connection) {
+        // Check if we have stored credentials for this connection
+        const hasCredentials = await hasStoredCredentials(connection.id);
+        
         setState({
           isConnected: true,
           tenantId: connection.tenant_id,
           tenantName: connection.tenant_name,
           connectionId: connection.id,
-          accessToken: null, // Would need to re-authenticate
+          accessToken: null, // Would need to re-authenticate using stored credentials
           tokenExpiry: null,
+          hasStoredCredentials: hasCredentials,
         });
         return connection;
       }

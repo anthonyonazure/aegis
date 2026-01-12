@@ -15,6 +15,12 @@ const AuthRequestSchema = z.object({
   clientSecret: z.string().min(1, 'Client secret required').max(1000, 'Client secret too long'),
 });
 
+// Schema for using stored credentials
+const StoredCredentialRequestSchema = z.object({
+  action: z.enum(['get-token-from-stored', 'refresh-token']),
+  tenantConnectionId: z.string().uuid('Invalid connection ID format'),
+});
+
 const ExportRequestSchema = z.object({
   action: z.literal('export'),
   accessToken: z.string().min(1, 'Access token required').max(10000, 'Access token too long'),
@@ -372,7 +378,60 @@ serve(async (req) => {
       );
     }
 
-    // Handle auth actions (get-token, test-connection)
+    // Handle token refresh using stored credentials (no secret in request)
+    if (rawBody.action === 'get-token-from-stored' || rawBody.action === 'refresh-token') {
+      const parseResult = StoredCredentialRequestSchema.safeParse(rawBody);
+      if (!parseResult.success) {
+        console.error('Validation error:', parseResult.error.errors);
+        return new Response(
+          JSON.stringify({ error: 'Invalid request parameters' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const { tenantConnectionId } = parseResult.data;
+      
+      // Get decrypted credentials from database using service role
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+      const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+      const adminClient = createClient(supabaseUrl, supabaseServiceKey);
+      
+      const { data: credentials, error: credError } = await adminClient
+        .rpc('get_decrypted_credential', {
+          p_tenant_connection_id: tenantConnectionId,
+          p_user_id: userId,
+        });
+
+      if (credError || !credentials || credentials.length === 0) {
+        console.error('Failed to retrieve credentials:', credError);
+        return new Response(
+          JSON.stringify({ error: 'Credentials not found. Please re-authenticate.' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const { client_id, client_secret, tenant_id } = credentials[0];
+      
+      const tokenResult = await getAccessToken(tenant_id, client_id, client_secret);
+      
+      if ('error' in tokenResult) {
+        return new Response(
+          JSON.stringify({ error: tokenResult.error }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({
+          accessToken: tokenResult.token,
+          expiresIn: tokenResult.expiresIn,
+          fromStoredCredentials: true,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Handle auth actions (get-token, test-connection) - initial auth with credentials
     const parseResult = AuthRequestSchema.safeParse(rawBody);
     if (!parseResult.success) {
       console.error('Validation error:', parseResult.error.errors);
