@@ -9,6 +9,7 @@ interface WebhookPayload {
   event: string;
   user_id?: string;
   data: Record<string, unknown>;
+  retry_log_id?: string; // For retry requests
 }
 
 interface WebhookConfig {
@@ -20,6 +21,31 @@ interface WebhookConfig {
   events: string[];
   is_active: boolean;
   failure_count: number;
+}
+
+interface WebhookLog {
+  id: string;
+  webhook_config_id: string;
+  user_id: string;
+  event_type: string;
+  payload: Record<string, unknown>;
+  retry_count: number;
+  max_retries: number;
+  original_log_id: string | null;
+}
+
+const MAX_RETRIES = 3;
+const BASE_DELAY_MS = 1000; // 1 second
+
+// Calculate exponential backoff delay
+function getBackoffDelay(retryCount: number): number {
+  // Exponential backoff: 1s, 2s, 4s, 8s...
+  return BASE_DELAY_MS * Math.pow(2, retryCount);
+}
+
+// Sleep helper
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 Deno.serve(async (req) => {
@@ -34,7 +60,13 @@ Deno.serve(async (req) => {
 
   try {
     const payload: WebhookPayload = await req.json();
-    const { event, user_id, data } = payload;
+    const { event, user_id, data, retry_log_id } = payload;
+
+    // Handle retry request
+    if (retry_log_id) {
+      console.log(`Processing retry for log: ${retry_log_id}`);
+      return await handleRetry(supabase, retry_log_id);
+    }
 
     if (!event) {
       return new Response(
@@ -92,7 +124,7 @@ Deno.serve(async (req) => {
     const results: Array<{ webhook_id: string; success: boolean; status?: number; error?: string }> = [];
 
     for (const webhook of matchingWebhooks) {
-      const result = await sendWebhook(supabase, webhook, event, data, userId);
+      const result = await sendWebhookWithRetry(supabase, webhook, event, data, userId);
       results.push(result);
     }
 
@@ -120,28 +152,131 @@ Deno.serve(async (req) => {
   }
 });
 
-async function sendWebhook(
+async function handleRetry(
+  supabase: any,
+  logId: string
+): Promise<Response> {
+  // Fetch the original log entry
+  const { data: log, error: logError } = await supabase
+    .from("webhook_logs")
+    .select("*, webhook_configs(*)")
+    .eq("id", logId)
+    .single();
+
+  if (logError || !log) {
+    console.error("Error fetching log for retry:", logError);
+    return new Response(
+      JSON.stringify({ error: "Log entry not found" }),
+      { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  const webhook = log.webhook_configs as WebhookConfig;
+  if (!webhook) {
+    return new Response(
+      JSON.stringify({ error: "Webhook configuration not found" }),
+      { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  const currentRetryCount = log.retry_count || 0;
+  const maxRetries = log.max_retries || MAX_RETRIES;
+
+  if (currentRetryCount >= maxRetries) {
+    return new Response(
+      JSON.stringify({ error: "Maximum retries exceeded", retry_count: currentRetryCount }),
+      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  // Get original log ID (for tracking retry chain)
+  const originalLogId = log.original_log_id || log.id;
+
+  // Perform the retry with exponential backoff
+  const result = await sendWebhookAttempt(
+    supabase,
+    webhook,
+    log.event_type,
+    log.payload.data || log.payload,
+    log.user_id,
+    currentRetryCount + 1,
+    originalLogId
+  );
+
+  return new Response(
+    JSON.stringify({
+      message: result.success ? "Retry successful" : "Retry failed",
+      ...result,
+    }),
+    { 
+      status: result.success ? 200 : 502,
+      headers: { ...corsHeaders, "Content-Type": "application/json" } 
+    }
+  );
+}
+
+async function sendWebhookWithRetry(
   supabase: any,
   webhook: WebhookConfig,
   event: string,
   data: Record<string, unknown>,
   userId: string
-): Promise<{ webhook_id: string; success: boolean; status?: number; error?: string }> {
+): Promise<{ webhook_id: string; success: boolean; status?: number; error?: string; retries?: number }> {
+  let lastResult = await sendWebhookAttempt(supabase, webhook, event, data, userId, 0, null);
+  
+  // If successful on first try, return immediately
+  if (lastResult.success) {
+    return { ...lastResult, retries: 0 };
+  }
+
+  // Store the original log ID for retry tracking
+  const originalLogId = lastResult.log_id || null;
+
+  // Attempt retries with exponential backoff
+  for (let retry = 1; retry <= MAX_RETRIES; retry++) {
+    const delay = getBackoffDelay(retry - 1);
+    console.log(`Retry ${retry}/${MAX_RETRIES} for webhook ${webhook.name} after ${delay}ms`);
+    
+    await sleep(delay);
+    
+    lastResult = await sendWebhookAttempt(supabase, webhook, event, data, userId, retry, originalLogId);
+    
+    if (lastResult.success) {
+      console.log(`Webhook ${webhook.name} succeeded on retry ${retry}`);
+      return { ...lastResult, retries: retry };
+    }
+  }
+
+  console.log(`Webhook ${webhook.name} failed after ${MAX_RETRIES} retries`);
+  return { ...lastResult, retries: MAX_RETRIES };
+}
+
+async function sendWebhookAttempt(
+  supabase: any,
+  webhook: WebhookConfig,
+  event: string,
+  data: Record<string, unknown>,
+  userId: string,
+  retryCount: number,
+  originalLogId: string | null
+): Promise<{ webhook_id: string; success: boolean; status?: number; error?: string; log_id?: string }> {
   const webhookPayload = {
     event,
     timestamp: new Date().toISOString(),
     webhook_id: webhook.id,
+    retry_count: retryCount,
     data,
   };
 
   try {
-    console.log(`Sending webhook to ${webhook.name}: ${webhook.url}`);
+    console.log(`Sending webhook to ${webhook.name}: ${webhook.url} (attempt ${retryCount + 1})`);
 
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
       "User-Agent": "M365-Export-Webhook/1.0",
       "X-Webhook-Event": event,
       "X-Webhook-Timestamp": webhookPayload.timestamp,
+      "X-Webhook-Retry-Count": String(retryCount),
     };
 
     // Add HMAC signature if secret is configured
@@ -163,16 +298,25 @@ async function sendWebhook(
 
     console.log(`Webhook ${webhook.name} response: ${response.status}`);
 
+    // Calculate next retry time if failed
+    const nextRetryAt = !response.ok && retryCount < MAX_RETRIES
+      ? new Date(Date.now() + getBackoffDelay(retryCount)).toISOString()
+      : null;
+
     // Log the delivery attempt
-    await supabase.from("webhook_logs").insert({
+    const { data: logEntry } = await supabase.from("webhook_logs").insert({
       webhook_config_id: webhook.id,
       user_id: userId,
       event_type: event,
       payload: webhookPayload,
       response_status: response.status,
-      response_body: responseText.slice(0, 1000), // Limit response body size
+      response_body: responseText.slice(0, 1000),
       success: response.ok,
-    });
+      retry_count: retryCount,
+      max_retries: MAX_RETRIES,
+      next_retry_at: nextRetryAt,
+      original_log_id: originalLogId,
+    }).select("id").single();
 
     // Update webhook stats
     await supabase
@@ -187,20 +331,30 @@ async function sendWebhook(
       webhook_id: webhook.id,
       success: response.ok,
       status: response.status,
+      log_id: logEntry?.id,
     };
   } catch (err: unknown) {
     const errorMessage = err instanceof Error ? err.message : "Unknown error";
     console.error(`Failed to send webhook to ${webhook.name}:`, errorMessage);
 
+    // Calculate next retry time
+    const nextRetryAt = retryCount < MAX_RETRIES
+      ? new Date(Date.now() + getBackoffDelay(retryCount)).toISOString()
+      : null;
+
     // Log the failed delivery
-    await supabase.from("webhook_logs").insert({
+    const { data: logEntry } = await supabase.from("webhook_logs").insert({
       webhook_config_id: webhook.id,
       user_id: userId,
       event_type: event,
       payload: webhookPayload,
       success: false,
       response_body: errorMessage,
-    });
+      retry_count: retryCount,
+      max_retries: MAX_RETRIES,
+      next_retry_at: nextRetryAt,
+      original_log_id: originalLogId,
+    }).select("id").single();
 
     // Increment failure count
     await supabase
@@ -214,6 +368,7 @@ async function sendWebhook(
       webhook_id: webhook.id,
       success: false,
       error: errorMessage,
+      log_id: logEntry?.id,
     };
   }
 }
