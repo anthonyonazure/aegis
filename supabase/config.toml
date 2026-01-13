@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.run-scheduled-export]
 verify_jwt = false
+
+[functions.send-webhook]
+verify_jwt = false

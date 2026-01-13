@@ -35,6 +35,7 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { COMPLIANCE_BASELINES, runComplianceCheck } from '@/lib/complianceRules';
 import { logAuditEvent } from '@/lib/auditLog';
+import { notifyComplianceFailed, notifyComplianceWarning } from '@/lib/webhookNotifications';
 
 interface ExportJob {
   id: string;
@@ -161,7 +162,7 @@ export const ComplianceView = () => {
       // Save results
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        await supabase.from('compliance_results').insert([{
+        const { data: complianceResult } = await supabase.from('compliance_results').insert([{
           user_id: user.id,
           export_job_id: selectedExport,
           baseline_name: selectedBaseline,
@@ -172,7 +173,7 @@ export const ComplianceView = () => {
           failed_count: failed,
           results: JSON.parse(JSON.stringify(checkResults)),
           completed_at: new Date().toISOString(),
-        }]);
+        }]).select().single();
 
         await logAuditEvent({
           action: 'compliance_check',
@@ -180,6 +181,25 @@ export const ComplianceView = () => {
           resourceId: selectedExport,
           details: { baseline: selectedBaseline, passed, failed, warnings },
         });
+
+        // Trigger webhook notifications for failures or warnings
+        if (complianceResult) {
+          if (failed > 0) {
+            await notifyComplianceFailed(
+              complianceResult.id,
+              selectedBaseline,
+              failed,
+              checkResults.length
+            );
+          } else if (warnings > 0) {
+            await notifyComplianceWarning(
+              complianceResult.id,
+              selectedBaseline,
+              warnings,
+              checkResults.length
+            );
+          }
+        }
       }
 
       toast({
