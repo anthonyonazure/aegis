@@ -15,6 +15,8 @@ import {
   EyeOff,
   TestTube,
   RotateCcw,
+  FileCode,
+  Check,
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -76,6 +78,126 @@ const WEBHOOK_EVENTS = [
   { id: 'schedule.run', label: 'Scheduled Export Run', description: 'When a scheduled export runs' },
 ];
 
+const nodeJsExample = `const crypto = require('crypto');
+
+app.post('/webhook', express.raw({ type: 'application/json' }), (req, res) => {
+  const signature = req.headers['x-webhook-signature'];
+  const timestamp = req.headers['x-webhook-timestamp'];
+  const secret = process.env.WEBHOOK_SECRET;
+  
+  // Verify timestamp (prevent replay attacks)
+  const timestampAge = Date.now() - new Date(timestamp).getTime();
+  if (timestampAge > 5 * 60 * 1000) {
+    return res.status(401).send('Timestamp too old');
+  }
+  
+  // Compute expected signature
+  const expectedSignature = 'sha256=' + crypto
+    .createHmac('sha256', secret)
+    .update(req.body)
+    .digest('hex');
+  
+  // Constant-time comparison
+  if (!crypto.timingSafeEqual(
+    Buffer.from(signature),
+    Buffer.from(expectedSignature)
+  )) {
+    return res.status(401).send('Invalid signature');
+  }
+  
+  const payload = JSON.parse(req.body);
+  console.log('Webhook verified:', payload.event);
+  
+  // Process the webhook...
+  res.status(200).send('OK');
+});`;
+
+const pythonExample = `import hmac
+import hashlib
+from flask import Flask, request, abort
+from datetime import datetime, timedelta
+
+app = Flask(__name__)
+
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    signature = request.headers.get('X-Webhook-Signature')
+    timestamp = request.headers.get('X-Webhook-Timestamp')
+    secret = os.environ.get('WEBHOOK_SECRET').encode()
+    
+    # Verify timestamp (prevent replay attacks)
+    webhook_time = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+    if datetime.now(webhook_time.tzinfo) - webhook_time > timedelta(minutes=5):
+        abort(401, 'Timestamp too old')
+    
+    # Compute expected signature
+    expected = 'sha256=' + hmac.new(
+        secret,
+        request.data,
+        hashlib.sha256
+    ).hexdigest()
+    
+    # Constant-time comparison
+    if not hmac.compare_digest(signature, expected):
+        abort(401, 'Invalid signature')
+    
+    payload = request.json
+    print(f"Webhook verified: {payload['event']}")
+    
+    # Process the webhook...
+    return 'OK', 200`;
+
+const csharpExample = `using System.Security.Cryptography;
+using System.Text;
+
+[HttpPost("webhook")]
+public async Task<IActionResult> Webhook()
+{
+    var signature = Request.Headers["X-Webhook-Signature"].ToString();
+    var timestamp = Request.Headers["X-Webhook-Timestamp"].ToString();
+    var secret = Environment.GetEnvironmentVariable("WEBHOOK_SECRET");
+    
+    // Read raw body
+    using var reader = new StreamReader(Request.Body);
+    var body = await reader.ReadToEndAsync();
+    
+    // Verify timestamp (prevent replay attacks)
+    var webhookTime = DateTime.Parse(timestamp);
+    if (DateTime.UtcNow - webhookTime > TimeSpan.FromMinutes(5))
+        return Unauthorized("Timestamp too old");
+    
+    // Compute expected signature
+    using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(secret));
+    var hash = hmac.ComputeHash(Encoding.UTF8.GetBytes(body));
+    var expected = "sha256=" + BitConverter.ToString(hash)
+        .Replace("-", "").ToLower();
+    
+    // Constant-time comparison
+    if (!CryptographicOperations.FixedTimeEquals(
+        Encoding.UTF8.GetBytes(signature),
+        Encoding.UTF8.GetBytes(expected)))
+        return Unauthorized("Invalid signature");
+    
+    var payload = JsonSerializer.Deserialize<WebhookPayload>(body);
+    Console.WriteLine($"Webhook verified: {payload.Event}");
+    
+    // Process the webhook...
+    return Ok();
+}`;
+
+const payloadExample = `{
+  "event": "export.completed",
+  "timestamp": "2024-01-15T10:30:00.000Z",
+  "webhook_id": "abc123-def456-ghi789",
+  "retry_count": 0,
+  "data": {
+    "export_job_id": "job-123",
+    "export_name": "Daily Backup",
+    "resource_count": 42,
+    "completed_at": "2024-01-15T10:30:00.000Z"
+  }
+}`;
+
 export const WebhooksView = () => {
   const { toast } = useToast();
   const [webhooks, setWebhooks] = useState<WebhookConfig[]>([]);
@@ -85,6 +207,7 @@ export const WebhooksView = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
   const [retryingLog, setRetryingLog] = useState<string | null>(null);
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
   
   // Form state
   const [formName, setFormName] = useState('');
@@ -317,6 +440,13 @@ export const WebhooksView = () => {
     toast({ title: 'URL copied to clipboard' });
   };
 
+  const copyCode = (code: string, id: string) => {
+    navigator.clipboard.writeText(code);
+    setCopiedCode(id);
+    toast({ title: 'Code copied to clipboard' });
+    setTimeout(() => setCopiedCode(null), 2000);
+  };
+
   const resetForm = () => {
     setFormName('');
     setFormUrl('');
@@ -495,6 +625,10 @@ export const WebhooksView = () => {
           <TabsTrigger value="logs">
             <Bell className="w-4 h-4 mr-2" />
             Delivery Logs
+          </TabsTrigger>
+          <TabsTrigger value="docs">
+            <FileCode className="w-4 h-4 mr-2" />
+            Documentation
           </TabsTrigger>
         </TabsList>
 
@@ -683,6 +817,142 @@ export const WebhooksView = () => {
                   </div>
                 </ScrollArea>
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="docs">
+          <Card className="glass-panel border-border/50">
+            <CardHeader>
+              <CardTitle>Webhook Signature Verification</CardTitle>
+              <CardDescription>
+                Learn how to verify webhook payloads using HMAC signatures for secure integrations
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Overview */}
+              <div className="space-y-2">
+                <h3 className="font-semibold text-foreground">Overview</h3>
+                <p className="text-sm text-muted-foreground">
+                  When you configure a webhook with a secret, each delivery includes an{' '}
+                  <code className="px-1 py-0.5 bg-muted rounded text-xs">X-Webhook-Signature</code>{' '}
+                  header containing an HMAC-SHA256 signature. Verify this signature to ensure the
+                  payload is authentic and hasn't been tampered with.
+                </p>
+              </div>
+
+              {/* Headers */}
+              <div className="space-y-2">
+                <h3 className="font-semibold text-foreground">Webhook Headers</h3>
+                <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+                  <div className="flex items-start gap-2">
+                    <code className="text-xs bg-background px-2 py-1 rounded">X-Webhook-Event</code>
+                    <span className="text-sm text-muted-foreground">The event type (e.g., export.completed)</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <code className="text-xs bg-background px-2 py-1 rounded">X-Webhook-Timestamp</code>
+                    <span className="text-sm text-muted-foreground">ISO 8601 timestamp of when the webhook was sent</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <code className="text-xs bg-background px-2 py-1 rounded">X-Webhook-Signature</code>
+                    <span className="text-sm text-muted-foreground">HMAC-SHA256 signature prefixed with "sha256="</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <code className="text-xs bg-background px-2 py-1 rounded">X-Webhook-Retry-Count</code>
+                    <span className="text-sm text-muted-foreground">Number of retry attempts (0 for first delivery)</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Node.js Example */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold text-foreground">Node.js / Express Example</h3>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => copyCode(nodeJsExample, 'nodejs')}
+                    className="h-7"
+                  >
+                    {copiedCode === 'nodejs' ? (
+                      <Check className="w-3 h-3 mr-1" />
+                    ) : (
+                      <Copy className="w-3 h-3 mr-1" />
+                    )}
+                    Copy
+                  </Button>
+                </div>
+                <pre className="bg-muted/50 rounded-lg p-4 overflow-x-auto text-xs">
+                  <code className="text-foreground">{nodeJsExample}</code>
+                </pre>
+              </div>
+
+              {/* Python Example */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold text-foreground">Python / Flask Example</h3>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => copyCode(pythonExample, 'python')}
+                    className="h-7"
+                  >
+                    {copiedCode === 'python' ? (
+                      <Check className="w-3 h-3 mr-1" />
+                    ) : (
+                      <Copy className="w-3 h-3 mr-1" />
+                    )}
+                    Copy
+                  </Button>
+                </div>
+                <pre className="bg-muted/50 rounded-lg p-4 overflow-x-auto text-xs">
+                  <code className="text-foreground">{pythonExample}</code>
+                </pre>
+              </div>
+
+              {/* C# Example */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold text-foreground">C# / ASP.NET Example</h3>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => copyCode(csharpExample, 'csharp')}
+                    className="h-7"
+                  >
+                    {copiedCode === 'csharp' ? (
+                      <Check className="w-3 h-3 mr-1" />
+                    ) : (
+                      <Copy className="w-3 h-3 mr-1" />
+                    )}
+                    Copy
+                  </Button>
+                </div>
+                <pre className="bg-muted/50 rounded-lg p-4 overflow-x-auto text-xs">
+                  <code className="text-foreground">{csharpExample}</code>
+                </pre>
+              </div>
+
+              {/* Payload Structure */}
+              <div className="space-y-2">
+                <h3 className="font-semibold text-foreground">Payload Structure</h3>
+                <pre className="bg-muted/50 rounded-lg p-4 overflow-x-auto text-xs">
+                  <code className="text-foreground">{payloadExample}</code>
+                </pre>
+              </div>
+
+              {/* Best Practices */}
+              <div className="space-y-2">
+                <h3 className="font-semibold text-foreground">Best Practices</h3>
+                <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
+                  <li>Always verify the signature before processing the payload</li>
+                  <li>Use constant-time comparison to prevent timing attacks</li>
+                  <li>Validate the timestamp to prevent replay attacks (reject if {'>'} 5 minutes old)</li>
+                  <li>Return a 2xx status code quickly to acknowledge receipt</li>
+                  <li>Process webhooks asynchronously for long-running tasks</li>
+                  <li>Implement idempotency using the webhook_id to handle duplicates</li>
+                </ul>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
