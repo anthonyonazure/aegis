@@ -108,16 +108,24 @@ export const JobsView = () => {
 
   // Auto-refresh when there are pending or running jobs
   useEffect(() => {
-    const hasPendingOrRunning = jobs.some(j => j.status === 'pending' || j.status === 'running');
-    
-    if (hasPendingOrRunning) {
-      const interval = setInterval(() => {
-        fetchJobs();
-      }, 3000); // Refresh every 3 seconds
-      
-      return () => clearInterval(interval);
-    }
+    const hasPendingOrRunning = jobs.some((j) => j.status === 'pending' || j.status === 'running');
+
+    if (!hasPendingOrRunning) return;
+
+    const interval = setInterval(() => {
+      fetchJobs();
+    }, 3000); // Refresh every 3 seconds
+
+    return () => clearInterval(interval);
   }, [jobs, fetchJobs]);
+
+  // Keep the Job Details dialog in sync with refreshed job data
+  useEffect(() => {
+    if (!selectedJob) return;
+
+    const updated = jobs.find((j) => j.id === selectedJob.id);
+    if (updated) setSelectedJob(updated);
+  }, [jobs, selectedJob?.id]);
 
   const handleDownload = async (job: ExportJobRecord) => {
     setDownloading(job.id);
