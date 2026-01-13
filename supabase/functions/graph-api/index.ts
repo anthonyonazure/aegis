@@ -60,40 +60,40 @@ function sanitizeError(error: unknown): string {
 }
 
 // Microsoft Graph API endpoints for different resource types
-const GRAPH_ENDPOINTS: Record<string, string> = {
+const GRAPH_ENDPOINTS: Record<string, { endpoint: string; useBeta?: boolean }> = {
   // Intune
-  'intune/device-configurations': '/deviceManagement/deviceConfigurations',
-  'intune/compliance-policies': '/deviceManagement/deviceCompliancePolicies',
-  'intune/app-configurations': '/deviceManagement/managedAppPolicies',
-  'intune/autopilot': '/deviceManagement/windowsAutopilotDeploymentProfiles',
-  'intune/enrollment-restrictions': '/deviceManagement/deviceEnrollmentConfigurations',
-  'intune/scripts': '/deviceManagement/deviceManagementScripts',
-  'intune/win32-apps': '/deviceAppManagement/mobileApps',
-  'intune/update-rings': '/deviceManagement/deviceConfigurations',
+  'intune/device-configurations': { endpoint: '/deviceManagement/deviceConfigurations' },
+  'intune/compliance-policies': { endpoint: '/deviceManagement/deviceCompliancePolicies' },
+  'intune/app-configurations': { endpoint: '/deviceAppManagement/mobileAppConfigurations', useBeta: true },
+  'intune/autopilot': { endpoint: '/deviceManagement/windowsAutopilotDeploymentProfiles' },
+  'intune/enrollment-restrictions': { endpoint: '/deviceManagement/deviceEnrollmentConfigurations' },
+  'intune/scripts': { endpoint: '/deviceManagement/deviceManagementScripts' },
+  'intune/win32-apps': { endpoint: '/deviceAppManagement/mobileApps' },
+  'intune/update-rings': { endpoint: '/deviceManagement/deviceConfigurations' },
   
   // Conditional Access
-  'conditional-access/ca-policies': '/identity/conditionalAccess/policies',
-  'conditional-access/named-locations': '/identity/conditionalAccess/namedLocations',
-  'conditional-access/auth-contexts': '/identity/conditionalAccess/authenticationContextClassReferences',
-  'conditional-access/auth-strengths': '/identity/conditionalAccess/authenticationStrengths/policies',
+  'conditional-access/ca-policies': { endpoint: '/identity/conditionalAccess/policies' },
+  'conditional-access/named-locations': { endpoint: '/identity/conditionalAccess/namedLocations' },
+  'conditional-access/auth-contexts': { endpoint: '/identity/conditionalAccess/authenticationContextClassReferences' },
+  'conditional-access/auth-strengths': { endpoint: '/identity/conditionalAccess/authenticationStrengths/policies' },
   
   // Entra ID
-  'entra-id/groups': '/groups',
-  'entra-id/app-registrations': '/applications',
-  'entra-id/enterprise-apps': '/servicePrincipals',
-  'entra-id/directory-settings': '/settings',
-  'entra-id/admin-units': '/administrativeUnits',
-  'entra-id/roles': '/directoryRoles',
+  'entra-id/groups': { endpoint: '/groups' },
+  'entra-id/app-registrations': { endpoint: '/applications' },
+  'entra-id/enterprise-apps': { endpoint: '/servicePrincipals' },
+  'entra-id/directory-settings': { endpoint: '/settings' },
+  'entra-id/admin-units': { endpoint: '/administrativeUnits' },
+  'entra-id/roles': { endpoint: '/directoryRoles' },
   
   // Defender
-  'defender/asr-policies': '/deviceManagement/intents',
-  'defender/antivirus-policies': '/deviceManagement/intents',
-  'defender/firewall-policies': '/deviceManagement/intents',
-  'defender/edr-policies': '/deviceManagement/intents',
-  'defender/security-baselines': '/deviceManagement/templates',
+  'defender/asr-policies': { endpoint: '/deviceManagement/intents', useBeta: true },
+  'defender/antivirus-policies': { endpoint: '/deviceManagement/intents', useBeta: true },
+  'defender/firewall-policies': { endpoint: '/deviceManagement/intents', useBeta: true },
+  'defender/edr-policies': { endpoint: '/deviceManagement/intents', useBeta: true },
+  'defender/security-baselines': { endpoint: '/deviceManagement/templates', useBeta: true },
   
   // Purview
-  'purview/sensitivity-labels': '/security/informationProtection/sensitivityLabels',
+  'purview/sensitivity-labels': { endpoint: '/security/informationProtection/sensitivityLabels', useBeta: true },
 };
 
 async function verifyAuth(req: Request): Promise<{ userId: string } | { error: string; status: number }> {
@@ -160,8 +160,9 @@ async function getAccessToken(tenantId: string, clientId: string, clientSecret: 
   }
 }
 
-async function fetchGraphData(accessToken: string, endpoint: string): Promise<any> {
-  const graphUrl = `https://graph.microsoft.com/v1.0${endpoint}`;
+async function fetchGraphData(accessToken: string, endpoint: string, useBeta: boolean = false): Promise<any> {
+  const baseUrl = useBeta ? 'https://graph.microsoft.com/beta' : 'https://graph.microsoft.com/v1.0';
+  const graphUrl = `${baseUrl}${endpoint}`;
   
   try {
     const response = await fetch(graphUrl, {
@@ -172,22 +173,29 @@ async function fetchGraphData(accessToken: string, endpoint: string): Promise<an
     });
 
     if (!response.ok) {
-      // Try beta endpoint if v1.0 fails
-      const betaUrl = `https://graph.microsoft.com/beta${endpoint}`;
-      const betaResponse = await fetch(betaUrl, {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      // Try beta endpoint if v1.0 fails and we didn't already try beta
+      if (!useBeta) {
+        const betaUrl = `https://graph.microsoft.com/beta${endpoint}`;
+        const betaResponse = await fetch(betaUrl, {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+        });
 
-      if (!betaResponse.ok) {
-        const errorData = await betaResponse.json().catch(() => ({}));
-        console.error('Graph API error (full details):', JSON.stringify(errorData));
-        throw new Error(`API_ERROR_${betaResponse.status}`);
+        if (!betaResponse.ok) {
+          const errorData = await betaResponse.json().catch(() => ({}));
+          console.error('Graph API error (full details):', JSON.stringify(errorData));
+          throw new Error(`API_ERROR_${betaResponse.status}`);
+        }
+
+        return await betaResponse.json();
       }
-
-      return await betaResponse.json();
+      
+      // Already tried beta and it failed
+      const errorData = await response.json().catch(() => ({}));
+      console.error('Graph API error (full details):', JSON.stringify(errorData));
+      throw new Error(`API_ERROR_${response.status}`);
     }
 
     return await response.json();
@@ -307,9 +315,9 @@ serve(async (req) => {
       const total = resources.length;
 
       for (const resource of resources) {
-        const endpoint = GRAPH_ENDPOINTS[resource];
+        const endpointConfig = GRAPH_ENDPOINTS[resource];
         
-        if (!endpoint) {
+        if (!endpointConfig) {
           results.push({
             resource,
             success: false,
@@ -320,7 +328,7 @@ serve(async (req) => {
         }
 
         try {
-          const data = await fetchGraphData(accessToken, endpoint);
+          const data = await fetchGraphData(accessToken, endpointConfig.endpoint, endpointConfig.useBeta);
           results.push({
             resource,
             success: true,
