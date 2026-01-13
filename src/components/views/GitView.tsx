@@ -1,23 +1,33 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { 
   GitBranch, 
   Github, 
   Cloud,
-  GitCommit,
   Settings,
   Play,
   FileCode,
-  Check
+  Check,
+  Upload,
+  Loader2,
+  FolderGit2
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
-import { CICD_TEMPLATES } from '@/types/tenant';
+import { saveGitConfig, getGitConfig, getExportJobs } from '@/lib/database';
+import { useTenant } from '@/contexts/TenantContext';
+import { useToast } from '@/hooks/use-toast';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 const cicdTemplates = [
   {
@@ -43,11 +53,105 @@ const cicdTemplates = [
   },
 ];
 
+interface ExportJobRecord {
+  id: string;
+  name: string;
+  status: string;
+  created_at: string;
+  completed_at: string | null;
+}
+
 export const GitView = () => {
+  const [provider, setProvider] = useState<'github' | 'azure-devops' | 'gitlab'>('github');
   const [repoUrl, setRepoUrl] = useState('');
   const [branch, setBranch] = useState('main');
   const [autoCommit, setAutoCommit] = useState(true);
+  const [commitMessage, setCommitMessage] = useState('chore: update M365 export - {{date}}');
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [completedJobs, setCompletedJobs] = useState<ExportJobRecord[]>([]);
+  const [selectedExportJob, setSelectedExportJob] = useState<string>('');
+  
+  const { connectionId } = useTenant();
+  const { toast } = useToast();
+
+  // Load existing config
+  useEffect(() => {
+    const loadConfig = async () => {
+      try {
+        const config = await getGitConfig(connectionId || undefined);
+        if (config) {
+          setProvider(config.provider as 'github' | 'azure-devops' | 'gitlab');
+          setRepoUrl(config.repo_url || '');
+          setBranch(config.branch || 'main');
+          setAutoCommit(config.auto_commit ?? true);
+          setCommitMessage(config.commit_message_template || 'chore: update M365 export - {{date}}');
+          setSelectedTemplate(config.cicd_template || null);
+        }
+      } catch (error) {
+        console.error('Failed to load git config:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadConfig();
+  }, [connectionId]);
+
+  // Load completed export jobs
+  useEffect(() => {
+    const loadJobs = async () => {
+      try {
+        const jobs = await getExportJobs();
+        const completed = (jobs as ExportJobRecord[]).filter(j => j.status === 'completed');
+        setCompletedJobs(completed);
+        if (completed.length > 0 && !selectedExportJob) {
+          setSelectedExportJob(completed[0].id);
+        }
+      } catch (error) {
+        console.error('Failed to load jobs:', error);
+      }
+    };
+    loadJobs();
+  }, [selectedExportJob]);
+
+  const handleSave = useCallback(async () => {
+    setSaving(true);
+    try {
+      await saveGitConfig({
+        enabled: true,
+        provider,
+        repoUrl,
+        branch,
+        autoCommit,
+        commitMessage,
+        cicdTemplate: selectedTemplate as 'github-actions' | 'azure-pipelines' | 'gitlab-ci' | undefined,
+        tenantConnectionId: connectionId || undefined,
+      });
+      toast({
+        title: 'Settings Saved',
+        description: 'Git configuration has been saved',
+      });
+    } catch (error) {
+      console.error('Failed to save config:', error);
+      toast({
+        title: 'Save Failed',
+        description: 'Failed to save Git configuration',
+        variant: 'destructive',
+      });
+    } finally {
+      setSaving(false);
+    }
+  }, [provider, repoUrl, branch, autoCommit, commitMessage, selectedTemplate, connectionId, toast]);
+
+  const handleCopyTemplate = () => {
+    navigator.clipboard.writeText(githubActionsTemplate);
+    toast({
+      title: 'Copied!',
+      description: 'Pipeline template copied to clipboard',
+    });
+  };
 
   const githubActionsTemplate = `name: M365 Tenant Export
 
@@ -90,14 +194,32 @@ jobs:
           git diff --quiet && git diff --staged --quiet || git commit -m "chore: update M365 export"
           git push`;
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-6 h-6 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Git & CI/CD</h1>
-        <p className="text-muted-foreground mt-1">
-          Configure version control and automated pipeline workflows
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Git & CI/CD</h1>
+          <p className="text-muted-foreground mt-1">
+            Configure version control and automated pipeline workflows
+          </p>
+        </div>
+        <Button onClick={handleSave} disabled={saving}>
+          {saving ? (
+            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+          ) : (
+            <Check className="w-4 h-4 mr-2" />
+          )}
+          Save Settings
+        </Button>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -113,6 +235,20 @@ jobs:
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
+            <div className="space-y-2">
+              <Label htmlFor="provider">Git Provider</Label>
+              <Select value={provider} onValueChange={(v) => setProvider(v as typeof provider)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="github">GitHub</SelectItem>
+                  <SelectItem value="azure-devops">Azure DevOps</SelectItem>
+                  <SelectItem value="gitlab">GitLab</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="repo-url">Repository URL</Label>
               <Input
@@ -152,7 +288,8 @@ jobs:
             <div className="space-y-2">
               <Label>Commit Message Template</Label>
               <Input
-                defaultValue="chore: update M365 export - {{date}}"
+                value={commitMessage}
+                onChange={(e) => setCommitMessage(e.target.value)}
                 className="font-mono bg-secondary/50 border-border"
               />
               <p className="text-xs text-muted-foreground">
@@ -216,13 +353,68 @@ jobs:
               );
             })}
 
-            <Button className="w-full" disabled={!selectedTemplate}>
+            <Button className="w-full" disabled={!selectedTemplate} onClick={handleCopyTemplate}>
               <FileCode className="w-4 h-4 mr-2" />
-              Generate Pipeline Config
+              Copy Pipeline Config
             </Button>
           </CardContent>
         </Card>
       </div>
+
+      {/* Push Export to Git */}
+      <Card className="glass-panel">
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <FolderGit2 className="w-5 h-5 text-primary" />
+            Push Export to Repository
+          </CardTitle>
+          <CardDescription>
+            Select a completed export to push to your Git repository
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {completedJobs.length === 0 ? (
+            <p className="text-muted-foreground text-center py-4">
+              No completed exports available. Run an export first.
+            </p>
+          ) : (
+            <>
+              <div className="space-y-2">
+                <Label>Select Export</Label>
+                <Select value={selectedExportJob} onValueChange={setSelectedExportJob}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choose an export..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {completedJobs.map(job => (
+                      <SelectItem key={job.id} value={job.id}>
+                        {job.name} - {new Date(job.created_at).toLocaleDateString()}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex items-center justify-between p-4 bg-secondary/30 rounded-lg">
+                <div>
+                  <p className="font-medium text-foreground">Ready to push</p>
+                  <p className="text-sm text-muted-foreground">
+                    Export files will be committed to {branch} branch
+                  </p>
+                </div>
+                <Button disabled={!repoUrl || !selectedExportJob}>
+                  <Upload className="w-4 h-4 mr-2" />
+                  Push to Git
+                </Button>
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                Note: Git push requires repository access. Configure a personal access token in your CI/CD pipeline for automated pushes.
+              </p>
+            </>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Pipeline Preview */}
       {selectedTemplate === 'github-actions' && (
@@ -239,7 +431,7 @@ jobs:
                     .github/workflows/m365-export.yml
                   </code>
                 </div>
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" onClick={handleCopyTemplate}>
                   Copy to Clipboard
                 </Button>
               </div>
