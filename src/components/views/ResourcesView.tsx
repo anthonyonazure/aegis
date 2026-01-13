@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ChevronRight, 
@@ -8,7 +8,10 @@ import {
   Filter,
   Layers,
   ArrowRight,
-  X
+  X,
+  Plus,
+  Trash2,
+  Save
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -25,6 +28,16 @@ import {
 } from '@/components/ui/popover';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
 // Pre-defined templates for quick resource selection
 const RESOURCE_TEMPLATES = [
@@ -33,6 +46,7 @@ const RESOURCE_TEMPLATES = [
     name: 'All Intune Policies',
     description: 'Device configs, compliance, apps',
     categoryIds: ['intune'],
+    isBuiltIn: true,
   },
   {
     id: 'security-baseline',
@@ -43,18 +57,21 @@ const RESOURCE_TEMPLATES = [
       catId === 'conditional-access' || 
       subId.includes('compliance') || 
       subId.includes('security'),
+    isBuiltIn: true,
   },
   {
     id: 'identity-access',
     name: 'Identity & Access',
     description: 'Users, groups, CA policies, roles',
     categoryIds: ['entra-id', 'conditional-access'],
+    isBuiltIn: true,
   },
   {
     id: 'device-management',
     name: 'Device Management',
     description: 'All device-related configurations',
     categoryIds: ['intune', 'autopilot'],
+    isBuiltIn: true,
   },
   {
     id: 'apps-only',
@@ -63,8 +80,16 @@ const RESOURCE_TEMPLATES = [
     categoryIds: ['intune'],
     subcategoryFilter: (catId: string, subId: string) => 
       subId.includes('app') || subId.includes('script'),
+    isBuiltIn: true,
   },
 ];
+
+interface CustomTemplate {
+  id: string;
+  name: string;
+  description: string | null;
+  resource_ids: string[];
+}
 
 interface ResourcesViewProps {
   selectedResources: string[];
@@ -89,6 +114,106 @@ export const ResourcesView = ({
   const [filterFormats, setFilterFormats] = useState<string[]>([]);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  
+  // Custom templates state
+  const [customTemplates, setCustomTemplates] = useState<CustomTemplate[]>([]);
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [newTemplateName, setNewTemplateName] = useState('');
+  const [newTemplateDescription, setNewTemplateDescription] = useState('');
+  const [savingTemplate, setSavingTemplate] = useState(false);
+  
+  const { toast } = useToast();
+
+  // Load custom templates on mount
+  useEffect(() => {
+    loadCustomTemplates();
+  }, []);
+
+  const loadCustomTemplates = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('resource_templates')
+        .select('id, name, description, resource_ids')
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      setCustomTemplates(data || []);
+    } catch (error) {
+      console.error('Failed to load custom templates:', error);
+    }
+  };
+
+  const handleSaveTemplate = async () => {
+    if (!newTemplateName.trim() || selectedResources.length === 0) return;
+    
+    setSavingTemplate(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const { error } = await supabase
+        .from('resource_templates')
+        .insert({
+          user_id: user.id,
+          name: newTemplateName.trim(),
+          description: newTemplateDescription.trim() || null,
+          resource_ids: selectedResources,
+        });
+      
+      if (error) throw error;
+      
+      toast({
+        title: 'Template Saved',
+        description: `"${newTemplateName}" has been saved with ${selectedResources.length} resources`,
+      });
+      
+      setNewTemplateName('');
+      setNewTemplateDescription('');
+      setSaveDialogOpen(false);
+      loadCustomTemplates();
+    } catch (error) {
+      console.error('Failed to save template:', error);
+      toast({
+        title: 'Save Failed',
+        description: 'Failed to save template. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setSavingTemplate(false);
+    }
+  };
+
+  const handleDeleteCustomTemplate = async (templateId: string, templateName: string) => {
+    try {
+      const { error } = await supabase
+        .from('resource_templates')
+        .delete()
+        .eq('id', templateId);
+      
+      if (error) throw error;
+      
+      toast({
+        title: 'Template Deleted',
+        description: `"${templateName}" has been deleted`,
+      });
+      
+      loadCustomTemplates();
+    } catch (error) {
+      console.error('Failed to delete template:', error);
+      toast({
+        title: 'Delete Failed',
+        description: 'Failed to delete template. Please try again.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleApplyCustomTemplate = (template: CustomTemplate) => {
+    if (onSetResources) {
+      onSetResources(template.resource_ids);
+      setTemplatesOpen(false);
+    }
+  };
 
   const toggleCategory = (categoryId: string) => {
     setExpandedCategories(prev => 
@@ -340,15 +465,72 @@ export const ResourcesView = ({
             <Button variant="outline" className="gap-2">
               <Layers className="w-4 h-4" />
               Templates
+              {customTemplates.length > 0 && (
+                <Badge variant="secondary" className="ml-1 h-5 w-5 p-0 flex items-center justify-center text-xs">
+                  {customTemplates.length}
+                </Badge>
+              )}
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-80" align="end">
-            <div className="space-y-3">
-              <h4 className="font-medium text-foreground">Quick Select Templates</h4>
-              <p className="text-xs text-muted-foreground">
-                Apply a pre-defined selection of resources
-              </p>
+            <div className="space-y-4 max-h-96 overflow-y-auto">
+              {/* Save current selection as template */}
+              {selectedResources.length > 0 && onSetResources && (
+                <Button 
+                  variant="outline" 
+                  className="w-full gap-2" 
+                  onClick={() => {
+                    setTemplatesOpen(false);
+                    setSaveDialogOpen(true);
+                  }}
+                >
+                  <Save className="w-4 h-4" />
+                  Save Current Selection ({selectedResources.length})
+                </Button>
+              )}
+
+              {/* Custom Templates */}
+              {customTemplates.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-medium text-foreground text-sm">My Templates</h4>
+                  </div>
+                  {customTemplates.map(template => (
+                    <div
+                      key={template.id}
+                      className="flex items-center gap-2 p-3 rounded-lg border border-border hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
+                    >
+                      <button
+                        onClick={() => handleApplyCustomTemplate(template)}
+                        className="flex-1 text-left"
+                      >
+                        <div className="font-medium text-sm text-foreground">{template.name}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {template.description || `${template.resource_ids.length} resources`}
+                        </div>
+                      </button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive hover:bg-destructive/10"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteCustomTemplate(template.id, template.name);
+                        }}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Built-in Templates */}
               <div className="space-y-2">
+                <h4 className="font-medium text-foreground text-sm">Built-in Templates</h4>
+                <p className="text-xs text-muted-foreground">
+                  Pre-defined resource selections
+                </p>
                 {RESOURCE_TEMPLATES.map(template => (
                   <button
                     key={template.id}
@@ -364,6 +546,49 @@ export const ResourcesView = ({
           </PopoverContent>
         </Popover>
       </div>
+
+      {/* Save Template Dialog */}
+      <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Save as Template</DialogTitle>
+            <DialogDescription>
+              Save your current selection of {selectedResources.length} resources as a reusable template.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="template-name">Template Name</Label>
+              <Input
+                id="template-name"
+                placeholder="e.g., My Security Baseline"
+                value={newTemplateName}
+                onChange={(e) => setNewTemplateName(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="template-description">Description (optional)</Label>
+              <Input
+                id="template-description"
+                placeholder="e.g., All security-related policies"
+                value={newTemplateDescription}
+                onChange={(e) => setNewTemplateDescription(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSaveDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleSaveTemplate} 
+              disabled={!newTemplateName.trim() || savingTemplate}
+            >
+              {savingTemplate ? 'Saving...' : 'Save Template'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Resource Tree */}
       <Card className="glass-panel">
