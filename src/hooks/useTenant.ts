@@ -376,7 +376,36 @@ export function useExport() {
           variant: 'destructive',
         });
         setIsExporting(false);
+        unsubscribe();
         return null;
+      }
+
+      // Export function completed - update state directly since subscription may not fire
+      // The edge function has finished processing, so mark export as complete
+      setProgress(100);
+      setIsExporting(false);
+      unsubscribe();
+
+      // Show appropriate toast based on results
+      const failedCount = result.results?.filter(r => !r.success).length || 0;
+      const successCount = result.results?.filter(r => r.success).length || 0;
+      
+      if (failedCount > 0 && successCount > 0) {
+        toast({
+          title: 'Export Complete (with errors)',
+          description: `Exported ${successCount} resources, ${failedCount} failed`,
+        });
+      } else if (failedCount > 0) {
+        toast({
+          title: 'Export Failed',
+          description: `All ${failedCount} resources failed to export`,
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: 'Export Complete',
+          description: `Successfully exported ${successCount} resources`,
+        });
       }
 
       return job.id;
