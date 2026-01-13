@@ -9,6 +9,9 @@ import { GitView } from '@/components/views/GitView';
 import { JobsView } from '@/components/views/JobsView';
 import { ImportView } from '@/components/views/ImportView';
 import { ValidationView } from '@/components/views/ValidationView';
+import { DriftDetectionView } from '@/components/views/DriftDetectionView';
+import { ComplianceView } from '@/components/views/ComplianceView';
+import { AuditView } from '@/components/views/AuditView';
 import { PreflightCheckDialog } from '@/components/PreflightCheckDialog';
 import { RESOURCE_CATEGORIES, ExportFormat } from '@/types/tenant';
 import { filterSupportedResourceIds } from '@/lib/resourceSupport';
@@ -225,6 +228,12 @@ const Index = () => {
         return <ImportView />;
       case 'validation':
         return <ValidationView />;
+      case 'drift':
+        return <DriftDetectionView />;
+      case 'compliance':
+        return <ComplianceView />;
+      case 'audit':
+        return <AuditView />;
       case 'git':
         return <GitView />;
       case 'auth':
