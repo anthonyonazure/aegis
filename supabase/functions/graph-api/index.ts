@@ -42,19 +42,27 @@ function sanitizeError(error: unknown): string {
   if (errorMessage.includes('invalid_grant')) {
     return 'Authentication expired. Please re-authenticate.';
   }
-  if (errorMessage.includes('unauthorized') || errorMessage.includes('403') || errorMessage.includes('Forbidden')) {
+
+  // API status codes (we throw errors like "API_ERROR_403")
+  if (errorMessage.includes('API_ERROR_400') || errorMessage.includes('BadRequest')) {
+    return 'Bad request. This resource may not be supported by the API or requires different parameters.';
+  }
+  if (errorMessage.includes('API_ERROR_401') || errorMessage.toLowerCase().includes('unauthorized')) {
+    return 'Unauthorized. Please refresh your session and try again.';
+  }
+  if (errorMessage.includes('API_ERROR_403') || errorMessage.includes('403') || errorMessage.includes('Forbidden')) {
     return 'Access denied. Check your API permissions in Azure AD.';
   }
-  if (errorMessage.includes('not found') || errorMessage.includes('404')) {
+  if (errorMessage.includes('API_ERROR_404') || errorMessage.includes('not found') || errorMessage.includes('404')) {
     return 'Resource not found. The requested data may not exist.';
   }
   if (errorMessage.includes('timeout') || errorMessage.includes('ETIMEDOUT')) {
     return 'Request timed out. Please try again.';
   }
-  if (errorMessage.includes('rate limit') || errorMessage.includes('429')) {
+  if (errorMessage.includes('API_ERROR_429') || errorMessage.includes('rate limit') || errorMessage.includes('429')) {
     return 'Rate limited. Please wait and try again.';
   }
-  
+
   // Generic fallback
   return 'An error occurred. Please try again or contact support.';
 }

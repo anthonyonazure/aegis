@@ -9,6 +9,7 @@ import { GitView } from '@/components/views/GitView';
 import { JobsView } from '@/components/views/JobsView';
 import { PreflightCheckDialog } from '@/components/PreflightCheckDialog';
 import { RESOURCE_CATEGORIES, ExportFormat } from '@/types/tenant';
+import { filterSupportedResourceIds } from '@/lib/resourceSupport';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useExport } from '@/hooks/useTenant';
 import { useTenant } from '@/contexts/TenantContext';
@@ -25,6 +26,7 @@ const Index = () => {
   const [selectedFormats, setSelectedFormats] = useState<ExportFormat['id'][]>(['json']);
   const [showPreflightCheck, setShowPreflightCheck] = useState(false);
   const [preflightToken, setPreflightToken] = useState<string | null>(null);
+  const [preflightResources, setPreflightResources] = useState<string[]>([]);
   
   // Use shared tenant context
   const { 
@@ -115,17 +117,29 @@ const Index = () => {
       return;
     }
 
-    if (selectedResources.length === 0) {
+    const { supported, unsupported } = filterSupportedResourceIds(selectedResources);
+
+    // If user had previously selected "Coming Soon" resources, remove them now so exports don't fail.
+    if (unsupported.length > 0) {
+      setSelectedResources(supported);
       toast({
-        title: 'No Resources Selected',
-        description: 'Please select at least one resource to export',
+        title: 'Some resources skipped',
+        description: `${unsupported.length} unsupported resources were removed from this export (Coming Soon).`,
+      });
+    }
+
+    if (supported.length === 0) {
+      toast({
+        title: 'No Supported Resources',
+        description: 'Please select at least one supported (Graph API) resource to export.',
         variant: 'destructive',
       });
       setActiveTab('resources');
       return;
     }
 
-    // Show preflight check dialog
+    // Show preflight check dialog (only supported resources)
+    setPreflightResources(supported);
     setPreflightToken(validToken);
     setShowPreflightCheck(true);
   };
@@ -133,7 +147,7 @@ const Index = () => {
   const handlePreflightProceed = async () => {
     setShowPreflightCheck(false);
     if (preflightToken) {
-      await startExport(preflightToken, selectedResources, selectedFormats, connectionId || undefined);
+      await startExport(preflightToken, preflightResources, selectedFormats, connectionId || undefined);
       setActiveTab('jobs');
     }
   };
@@ -141,6 +155,7 @@ const Index = () => {
   const handlePreflightCancel = () => {
     setShowPreflightCheck(false);
     setPreflightToken(null);
+    setPreflightResources([]);
   };
 
   const handleSignOut = async () => {
@@ -243,7 +258,7 @@ const Index = () => {
         open={showPreflightCheck}
         onOpenChange={setShowPreflightCheck}
         accessToken={preflightToken}
-        selectedResources={selectedResources}
+        selectedResources={preflightResources}
         onProceed={handlePreflightProceed}
         onCancel={handlePreflightCancel}
         onRefreshToken={refreshToken}
