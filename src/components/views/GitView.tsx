@@ -10,7 +10,13 @@ import {
   Check,
   Upload,
   Loader2,
-  FolderGit2
+  FolderGit2,
+  HelpCircle,
+  ChevronDown,
+  BookOpen,
+  Key,
+  Workflow,
+  AlertTriangle
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -19,6 +25,12 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { saveGitConfig, getGitConfig, getExportJobs } from '@/lib/database';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion';
 import { useTenant } from '@/contexts/TenantContext';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -467,6 +479,199 @@ jobs:
               </div>
             ))}
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Help Section */}
+      <Card className="glass-panel">
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <HelpCircle className="w-5 h-5 text-primary" />
+            How to Use Git & CI/CD
+          </CardTitle>
+          <CardDescription>
+            Step-by-step guide to configure version control and automated exports
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Accordion type="single" collapsible className="w-full">
+            <AccordionItem value="getting-started">
+              <AccordionTrigger className="hover:no-underline">
+                <div className="flex items-center gap-2">
+                  <BookOpen className="w-4 h-4 text-primary" />
+                  <span>Getting Started</span>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="text-muted-foreground space-y-3">
+                <p>
+                  The Git & CI/CD integration allows you to store your M365 tenant configuration exports
+                  in a Git repository and automate regular backups using CI/CD pipelines.
+                </p>
+                <div className="space-y-2">
+                  <p className="font-medium text-foreground">Benefits:</p>
+                  <ul className="list-disc list-inside space-y-1 ml-2">
+                    <li>Version history of all configuration changes</li>
+                    <li>Easy comparison between export snapshots</li>
+                    <li>Automated daily/weekly backups</li>
+                    <li>Disaster recovery capability</li>
+                    <li>Configuration drift detection</li>
+                  </ul>
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+
+            <AccordionItem value="repository-setup">
+              <AccordionTrigger className="hover:no-underline">
+                <div className="flex items-center gap-2">
+                  <GitBranch className="w-4 h-4 text-primary" />
+                  <span>Setting Up Your Repository</span>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="text-muted-foreground space-y-3">
+                <ol className="list-decimal list-inside space-y-3 ml-2">
+                  <li>
+                    <span className="font-medium text-foreground">Create a new repository</span> in your Git provider
+                    (GitHub, Azure DevOps, or GitLab)
+                  </li>
+                  <li>
+                    <span className="font-medium text-foreground">Select your provider</span> from the dropdown
+                    in Repository Settings
+                  </li>
+                  <li>
+                    <span className="font-medium text-foreground">Enter the repository URL</span> (e.g.,
+                    <code className="mx-1 px-1 py-0.5 bg-secondary rounded text-xs">https://github.com/org/m365-backup</code>)
+                  </li>
+                  <li>
+                    <span className="font-medium text-foreground">Specify your branch</span> (default: main)
+                  </li>
+                  <li>
+                    <span className="font-medium text-foreground">Enable Auto-commit</span> to automatically push
+                    exports after completion
+                  </li>
+                </ol>
+              </AccordionContent>
+            </AccordionItem>
+
+            <AccordionItem value="cicd-setup">
+              <AccordionTrigger className="hover:no-underline">
+                <div className="flex items-center gap-2">
+                  <Workflow className="w-4 h-4 text-primary" />
+                  <span>Configuring CI/CD Pipelines</span>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="text-muted-foreground space-y-3">
+                <p>
+                  CI/CD pipelines automate the export process on a schedule. Here's how to set them up:
+                </p>
+                <div className="space-y-4">
+                  <div>
+                    <p className="font-medium text-foreground mb-2">For GitHub Actions:</p>
+                    <ol className="list-decimal list-inside space-y-1 ml-2 text-sm">
+                      <li>Select "GitHub Actions" from Pipeline Templates</li>
+                      <li>Click "Copy Pipeline Config"</li>
+                      <li>Create <code className="px-1 py-0.5 bg-secondary rounded text-xs">.github/workflows/m365-export.yml</code> in your repo</li>
+                      <li>Paste the template content</li>
+                      <li>Configure secrets in your repository settings</li>
+                    </ol>
+                  </div>
+                  <div>
+                    <p className="font-medium text-foreground mb-2">For Azure Pipelines:</p>
+                    <ol className="list-decimal list-inside space-y-1 ml-2 text-sm">
+                      <li>Select "Azure Pipelines" from Pipeline Templates</li>
+                      <li>Create <code className="px-1 py-0.5 bg-secondary rounded text-xs">azure-pipelines.yml</code> in your repo</li>
+                      <li>Add variables in Azure DevOps Pipeline settings</li>
+                    </ol>
+                  </div>
+                  <div>
+                    <p className="font-medium text-foreground mb-2">For GitLab CI/CD:</p>
+                    <ol className="list-decimal list-inside space-y-1 ml-2 text-sm">
+                      <li>Select "GitLab CI/CD" from Pipeline Templates</li>
+                      <li>Create <code className="px-1 py-0.5 bg-secondary rounded text-xs">.gitlab-ci.yml</code> in your repo</li>
+                      <li>Add CI/CD variables in GitLab project settings</li>
+                    </ol>
+                  </div>
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+
+            <AccordionItem value="secrets-setup">
+              <AccordionTrigger className="hover:no-underline">
+                <div className="flex items-center gap-2">
+                  <Key className="w-4 h-4 text-primary" />
+                  <span>Configuring Secrets</span>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="text-muted-foreground space-y-3">
+                <p>
+                  Your CI/CD pipeline needs Azure AD credentials to authenticate with Microsoft Graph API.
+                  These must be stored as secrets in your CI/CD platform:
+                </p>
+                <div className="space-y-3">
+                  <div className="p-3 rounded-lg bg-secondary/30">
+                    <code className="text-primary font-mono text-sm">AZURE_TENANT_ID</code>
+                    <p className="text-sm mt-1">Your Azure AD tenant ID (GUID format)</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-secondary/30">
+                    <code className="text-primary font-mono text-sm">AZURE_CLIENT_ID</code>
+                    <p className="text-sm mt-1">Application (client) ID from your App Registration</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-secondary/30">
+                    <code className="text-primary font-mono text-sm">AZURE_CLIENT_SECRET</code>
+                    <p className="text-sm mt-1">Client secret from your App Registration</p>
+                  </div>
+                </div>
+                <p className="text-sm">
+                  <span className="font-medium text-foreground">Where to add secrets:</span>
+                </p>
+                <ul className="list-disc list-inside space-y-1 ml-2 text-sm">
+                  <li><strong>GitHub:</strong> Settings → Secrets and variables → Actions</li>
+                  <li><strong>Azure DevOps:</strong> Pipelines → Library → Variable groups</li>
+                  <li><strong>GitLab:</strong> Settings → CI/CD → Variables</li>
+                </ul>
+              </AccordionContent>
+            </AccordionItem>
+
+            <AccordionItem value="troubleshooting">
+              <AccordionTrigger className="hover:no-underline">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-primary" />
+                  <span>Troubleshooting</span>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="text-muted-foreground space-y-3">
+                <div className="space-y-4">
+                  <div>
+                    <p className="font-medium text-foreground">Pipeline fails with authentication error</p>
+                    <p className="text-sm ml-2">
+                      Verify your Azure AD credentials are correct and the App Registration has the required
+                      Microsoft Graph permissions (e.g., DeviceManagementConfiguration.Read.All)
+                    </p>
+                  </div>
+                  <div>
+                    <p className="font-medium text-foreground">Push to repository fails</p>
+                    <p className="text-sm ml-2">
+                      Ensure the pipeline has write access to the repository. For GitHub, use a
+                      Personal Access Token with repo scope.
+                    </p>
+                  </div>
+                  <div>
+                    <p className="font-medium text-foreground">Export produces empty results</p>
+                    <p className="text-sm ml-2">
+                      Check that your App Registration has admin consent for all required permissions
+                      in Azure AD.
+                    </p>
+                  </div>
+                  <div>
+                    <p className="font-medium text-foreground">Scheduled pipeline doesn't run</p>
+                    <p className="text-sm ml-2">
+                      Verify the cron expression is correct. Note that GitHub Actions schedules
+                      are in UTC timezone.
+                    </p>
+                  </div>
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
         </CardContent>
       </Card>
     </div>
