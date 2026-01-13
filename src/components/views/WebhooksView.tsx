@@ -14,6 +14,7 @@ import {
   Eye,
   EyeOff,
   TestTube,
+  RotateCcw,
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -58,6 +59,10 @@ interface WebhookLog {
   response_status: number | null;
   success: boolean;
   created_at: string;
+  retry_count: number;
+  max_retries: number;
+  next_retry_at: string | null;
+  original_log_id: string | null;
 }
 
 const WEBHOOK_EVENTS = [
@@ -79,6 +84,7 @@ export const WebhooksView = () => {
   const [isCreating, setIsCreating] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
+  const [retryingLog, setRetryingLog] = useState<string | null>(null);
   
   // Form state
   const [formName, setFormName] = useState('');
@@ -259,6 +265,50 @@ export const WebhooksView = () => {
       });
     } finally {
       setTestingWebhook(null);
+    }
+  };
+
+  const retryWebhook = async (log: WebhookLog) => {
+    // Can only retry failed deliveries that haven't exceeded max retries
+    if (log.success || log.retry_count >= log.max_retries) {
+      toast({
+        title: 'Cannot Retry',
+        description: log.success 
+          ? 'This delivery was successful' 
+          : 'Maximum retries exceeded',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setRetryingLog(log.id);
+    try {
+      const { data, error } = await supabase.functions.invoke('send-webhook', {
+        body: {
+          retry_log_id: log.id,
+        },
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: data.success ? 'Retry Successful' : 'Retry Failed',
+        description: data.success 
+          ? 'Webhook delivered successfully on retry'
+          : `Retry failed with status ${data.status || 'unknown'}`,
+        variant: data.success ? 'default' : 'destructive',
+      });
+
+      await loadData();
+    } catch (error) {
+      console.error('Failed to retry webhook:', error);
+      toast({
+        title: 'Retry Failed',
+        description: error instanceof Error ? error.message : 'Failed to retry webhook',
+        variant: 'destructive',
+      });
+    } finally {
+      setRetryingLog(null);
     }
   };
 
@@ -578,7 +628,7 @@ export const WebhooksView = () => {
                         )}
                       >
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             {log.success ? (
                               <CheckCircle2 className="w-4 h-4 text-green-400" />
                             ) : (
@@ -595,10 +645,38 @@ export const WebhooksView = () => {
                                 HTTP {log.response_status}
                               </span>
                             )}
+                            {log.retry_count > 0 && (
+                              <Badge variant="secondary" className="text-xs">
+                                Retry {log.retry_count}/{log.max_retries}
+                              </Badge>
+                            )}
+                            {log.original_log_id && (
+                              <Badge variant="outline" className="text-xs text-muted-foreground">
+                                Retry attempt
+                              </Badge>
+                            )}
                           </div>
-                          <span className="text-xs text-muted-foreground">
-                            {format(new Date(log.created_at), 'MMM d, HH:mm:ss')}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            {!log.success && log.retry_count < log.max_retries && !log.original_log_id && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => retryWebhook(log)}
+                                disabled={retryingLog === log.id}
+                                className="h-7 px-2"
+                              >
+                                {retryingLog === log.id ? (
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                ) : (
+                                  <RotateCcw className="w-3 h-3" />
+                                )}
+                                <span className="ml-1 text-xs">Retry</span>
+                              </Button>
+                            )}
+                            <span className="text-xs text-muted-foreground">
+                              {format(new Date(log.created_at), 'MMM d, HH:mm:ss')}
+                            </span>
+                          </div>
                         </div>
                       </motion.div>
                     ))}

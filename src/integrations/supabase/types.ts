@@ -660,9 +660,13 @@ export type Database = {
           created_at: string
           event_type: string
           id: string
+          max_retries: number
+          next_retry_at: string | null
+          original_log_id: string | null
           payload: Json
           response_body: string | null
           response_status: number | null
+          retry_count: number
           success: boolean
           user_id: string
           webhook_config_id: string | null
@@ -671,9 +675,13 @@ export type Database = {
           created_at?: string
           event_type: string
           id?: string
+          max_retries?: number
+          next_retry_at?: string | null
+          original_log_id?: string | null
           payload?: Json
           response_body?: string | null
           response_status?: number | null
+          retry_count?: number
           success?: boolean
           user_id: string
           webhook_config_id?: string | null
@@ -682,14 +690,25 @@ export type Database = {
           created_at?: string
           event_type?: string
           id?: string
+          max_retries?: number
+          next_retry_at?: string | null
+          original_log_id?: string | null
           payload?: Json
           response_body?: string | null
           response_status?: number | null
+          retry_count?: number
           success?: boolean
           user_id?: string
           webhook_config_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "webhook_logs_original_log_id_fkey"
+            columns: ["original_log_id"]
+            isOneToOne: false
+            referencedRelation: "webhook_logs"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "webhook_logs_webhook_config_id_fkey"
             columns: ["webhook_config_id"]
