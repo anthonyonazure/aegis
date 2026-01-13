@@ -150,7 +150,8 @@ export const PERMISSION_REQUIREMENTS: PermissionRequirement[] = [
   {
     resourceId: 'purview/sensitivity-labels',
     resourceName: 'Sensitivity Labels',
-    requiredPermissions: ['InformationProtectionPolicy.Read'],
+    requiredPermissions: ['InformationProtectionPolicy.Read.All'],
+    alternativePermissions: ['InformationProtectionPolicy.Read'],
   },
 ];
 
