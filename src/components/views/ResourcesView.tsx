@@ -22,6 +22,7 @@ interface ResourcesViewProps {
   selectedResources: string[];
   onResourceSelect: (resourceId: string) => void;
   onSelectAll: (categoryId: string) => void;
+  onSelectAllResources?: () => void;
   onNavigateToExport?: () => void;
 }
 
@@ -29,6 +30,7 @@ export const ResourcesView = ({
   selectedResources, 
   onResourceSelect, 
   onSelectAll,
+  onSelectAllResources,
   onNavigateToExport
 }: ResourcesViewProps) => {
   const [expandedCategories, setExpandedCategories] = useState<string[]>(['intune']);
@@ -90,6 +92,8 @@ export const ResourcesView = ({
     acc + cat.subcategories.filter(sub => sub.supported !== false && (sub.supported === true || sub.graphEndpoint)).length, 0
   );
   const selectedCount = selectedResources.length;
+  const allSelected = selectedCount === totalResources && totalResources > 0;
+  const someSelected = selectedCount > 0 && selectedCount < totalResources;
 
   return (
     <div className="space-y-6">
@@ -125,6 +129,26 @@ export const ResourcesView = ({
             className="pl-10 bg-card border-border"
           />
         </div>
+        {onSelectAllResources && (
+          <Button 
+            variant={allSelected ? "default" : "outline"} 
+            className="gap-2"
+            onClick={onSelectAllResources}
+          >
+            <div className={cn(
+              "w-4 h-4 rounded border flex items-center justify-center",
+              allSelected 
+                ? "bg-primary-foreground border-primary-foreground" 
+                : someSelected 
+                  ? "border-primary bg-primary/20" 
+                  : "border-current"
+            )}>
+              {allSelected && <Check className="w-3 h-3 text-primary" />}
+              {someSelected && !allSelected && <div className="w-2 h-2 bg-primary rounded-sm" />}
+            </div>
+            {allSelected ? 'Deselect All' : 'Select All'}
+          </Button>
+        )}
         <Button variant="outline" className="gap-2">
           <Filter className="w-4 h-4" />
           Filters

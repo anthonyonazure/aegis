@@ -86,6 +86,27 @@ const Index = () => {
     }
   };
 
+  const handleSelectAllResources = () => {
+    // Get all supported resource IDs across all categories
+    const allSupportedResources = RESOURCE_CATEGORIES.flatMap(category =>
+      category.subcategories
+        .filter(sub => {
+          if (sub.supported === false) return false;
+          if (sub.supported === true) return true;
+          return !!sub.graphEndpoint;
+        })
+        .map(sub => `${category.id}/${sub.id}`)
+    );
+
+    const allSelected = allSupportedResources.every(r => selectedResources.includes(r));
+
+    if (allSelected) {
+      setSelectedResources([]);
+    } else {
+      setSelectedResources(allSupportedResources);
+    }
+  };
+
   const handleFormatToggle = (format: ExportFormat['id']) => {
     setSelectedFormats(prev =>
       prev.includes(format)
@@ -173,6 +194,7 @@ const Index = () => {
             selectedResources={selectedResources}
             onResourceSelect={handleResourceSelect}
             onSelectAll={handleSelectAll}
+            onSelectAllResources={handleSelectAllResources}
             onNavigateToExport={() => setActiveTab('export')}
           />
         );
