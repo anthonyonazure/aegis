@@ -42,6 +42,7 @@ import { format } from 'date-fns';
 import { compareExports, DriftResult } from '@/lib/driftDetection';
 import { logAuditEvent } from '@/lib/auditLog';
 import { DiffViewer } from '@/components/DiffViewer';
+import { notifyDriftDetected } from '@/lib/webhookNotifications';
 
 interface ExportedResource {
   id: string;
@@ -197,7 +198,7 @@ export const DriftDetectionView = () => {
       if (user) {
         const status = added === 0 && removed === 0 && modified === 0 ? 'no_drift' : 'drift_detected';
         
-        await supabase.from('drift_detections').insert([{
+        const { data: driftDetection } = await supabase.from('drift_detections').insert([{
           user_id: user.id,
           baseline_export_id: baselineExport,
           status,
@@ -208,7 +209,7 @@ export const DriftDetectionView = () => {
           modified_count: modified,
           drift_details: JSON.parse(JSON.stringify(driftResults)),
           completed_at: new Date().toISOString(),
-        }]);
+        }]).select().single();
 
         await logAuditEvent({
           action: 'drift_detection',
@@ -216,6 +217,15 @@ export const DriftDetectionView = () => {
           resourceId: baselineExport,
           details: { compareExport, unchanged, added, removed, modified },
         });
+
+        // Trigger webhook notification if drift was detected
+        if (driftDetection && (added > 0 || removed > 0 || modified > 0)) {
+          await notifyDriftDetected(
+            driftDetection.id,
+            baselineExport,
+            { added, removed, modified }
+          );
+        }
       }
 
       toast({
