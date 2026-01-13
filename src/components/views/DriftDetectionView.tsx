@@ -11,7 +11,9 @@ import {
   Edit3,
   Loader2,
   RefreshCw,
-  History
+  History,
+  Eye,
+  Code,
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -25,6 +27,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useTenant } from '@/contexts/TenantContext';
@@ -32,6 +41,16 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { compareExports, DriftResult } from '@/lib/driftDetection';
 import { logAuditEvent } from '@/lib/auditLog';
+import { DiffViewer } from '@/components/DiffViewer';
+
+interface ExportedResource {
+  id: string;
+  resource_id: string | null;
+  resource_name: string | null;
+  resource_type: string;
+  category: string;
+  data: Record<string, unknown>;
+}
 
 interface ExportJob {
   id: string;
@@ -62,6 +81,12 @@ export const DriftDetectionView = () => {
   const [isComparing, setIsComparing] = useState(false);
   const [results, setResults] = useState<DriftResult[]>([]);
   const [history, setHistory] = useState<DriftHistory[]>([]);
+  
+  // State for visual diff dialog
+  const [diffDialogOpen, setDiffDialogOpen] = useState(false);
+  const [selectedDiffResult, setSelectedDiffResult] = useState<DriftResult | null>(null);
+  const [baselineResources, setBaselineResources] = useState<ExportedResource[]>([]);
+  const [compareResources, setCompareResources] = useState<ExportedResource[]>([]);
 
   useEffect(() => {
     loadData();
@@ -146,6 +171,16 @@ export const DriftDetectionView = () => {
         });
         return;
       }
+
+      // Store resources for diff viewing
+      setBaselineResources(baselineRes.data.map(r => ({
+        ...r,
+        data: r.data as Record<string, unknown>,
+      })));
+      setCompareResources(compareRes.data.map(r => ({
+        ...r,
+        data: r.data as Record<string, unknown>,
+      })));
 
       // Compare the exports
       const driftResults = compareExports(baselineRes.data, compareRes.data);
@@ -363,7 +398,22 @@ export const DriftDetectionView = () => {
                               <p className="text-xs text-muted-foreground">{result.resourceType}</p>
                             </div>
                           </div>
-                          {getStatusBadge(result.status)}
+                          <div className="flex items-center gap-2">
+                            {result.status === 'modified' && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedDiffResult(result);
+                                  setDiffDialogOpen(true);
+                                }}
+                              >
+                                <Code className="w-4 h-4 mr-1" />
+                                View Diff
+                              </Button>
+                            )}
+                            {getStatusBadge(result.status)}
+                          </div>
                         </div>
                         {result.changes && result.changes.length > 0 && (
                           <div className="mt-3 pl-7 space-y-1">
@@ -379,9 +429,17 @@ export const DriftDetectionView = () => {
                               </div>
                             ))}
                             {result.changes.length > 5 && (
-                              <p className="text-xs text-muted-foreground">
-                                +{result.changes.length - 5} more changes
-                              </p>
+                              <Button
+                                variant="link"
+                                size="sm"
+                                className="text-xs p-0 h-auto text-muted-foreground hover:text-foreground"
+                                onClick={() => {
+                                  setSelectedDiffResult(result);
+                                  setDiffDialogOpen(true);
+                                }}
+                              >
+                                +{result.changes.length - 5} more changes - View full diff
+                              </Button>
                             )}
                           </div>
                         )}
@@ -431,6 +489,67 @@ export const DriftDetectionView = () => {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Visual Diff Dialog */}
+      <Dialog open={diffDialogOpen} onOpenChange={setDiffDialogOpen}>
+        <DialogContent className="max-w-5xl max-h-[85vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Code className="w-5 h-5 text-primary" />
+              Configuration Diff: {selectedDiffResult?.resourceName}
+            </DialogTitle>
+            <DialogDescription>
+              Side-by-side comparison of {selectedDiffResult?.resourceType}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="flex-1 overflow-auto">
+            {selectedDiffResult && (() => {
+              // Find the baseline and current resource data
+              const baselineResource = baselineResources.find(
+                r => r.resource_id === selectedDiffResult.resourceId || 
+                     r.resource_name === selectedDiffResult.resourceName
+              );
+              const currentResource = compareResources.find(
+                r => r.resource_id === selectedDiffResult.resourceId || 
+                     r.resource_name === selectedDiffResult.resourceName
+              );
+              
+              if (!baselineResource?.data || !currentResource?.data) {
+                return (
+                  <div className="text-center py-8 text-muted-foreground">
+                    Resource data not available for comparison
+                  </div>
+                );
+              }
+              
+              return (
+                <DiffViewer
+                  baseline={baselineResource.data}
+                  current={currentResource.data}
+                  className="h-[500px]"
+                />
+              );
+            })()}
+          </div>
+          
+          {/* Change summary */}
+          {selectedDiffResult?.changes && selectedDiffResult.changes.length > 0 && (
+            <div className="border-t border-border pt-4 mt-4">
+              <p className="text-sm font-medium mb-2">
+                {selectedDiffResult.changes.length} field{selectedDiffResult.changes.length !== 1 ? 's' : ''} modified:
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {selectedDiffResult.changes.map((change, idx) => (
+                  <Badge key={idx} variant="outline" className="text-xs">
+                    {change.field}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
