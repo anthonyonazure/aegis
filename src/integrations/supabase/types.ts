@@ -170,6 +170,72 @@ export type Database = {
           },
         ]
       }
+      import_jobs: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          errors: Json | null
+          id: string
+          metadata: Json | null
+          name: string
+          resources_failed: number
+          resources_imported: number
+          resources_total: number
+          source_export_job_id: string | null
+          source_type: string
+          status: string
+          tenant_connection_id: string | null
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          errors?: Json | null
+          id?: string
+          metadata?: Json | null
+          name: string
+          resources_failed?: number
+          resources_imported?: number
+          resources_total?: number
+          source_export_job_id?: string | null
+          source_type?: string
+          status?: string
+          tenant_connection_id?: string | null
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          errors?: Json | null
+          id?: string
+          metadata?: Json | null
+          name?: string
+          resources_failed?: number
+          resources_imported?: number
+          resources_total?: number
+          source_export_job_id?: string | null
+          source_type?: string
+          status?: string
+          tenant_connection_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "import_jobs_source_export_job_id_fkey"
+            columns: ["source_export_job_id"]
+            isOneToOne: false
+            referencedRelation: "export_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "import_jobs_tenant_connection_id_fkey"
+            columns: ["tenant_connection_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       resource_templates: {
         Row: {
           created_at: string
@@ -279,6 +345,56 @@ export type Database = {
             columns: ["tenant_connection_id"]
             isOneToOne: true
             referencedRelation: "tenant_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      validation_results: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          error_count: number
+          export_job_id: string | null
+          id: string
+          passed_count: number
+          status: string
+          total_resources: number
+          user_id: string
+          validation_details: Json | null
+          warning_count: number
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          error_count?: number
+          export_job_id?: string | null
+          id?: string
+          passed_count?: number
+          status?: string
+          total_resources?: number
+          user_id: string
+          validation_details?: Json | null
+          warning_count?: number
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          error_count?: number
+          export_job_id?: string | null
+          id?: string
+          passed_count?: number
+          status?: string
+          total_resources?: number
+          user_id?: string
+          validation_details?: Json | null
+          warning_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "validation_results_export_job_id_fkey"
+            columns: ["export_job_id"]
+            isOneToOne: false
+            referencedRelation: "export_jobs"
             referencedColumns: ["id"]
           },
         ]
