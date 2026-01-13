@@ -64,13 +64,23 @@ const Index = () => {
     const category = RESOURCE_CATEGORIES.find(c => c.id === categoryId);
     if (!category) return;
 
-    const categoryResources = category.subcategories.map(sub => `${categoryId}/${sub.id}`);
-    const allSelected = categoryResources.every(r => selectedResources.includes(r));
+    // Only select supported resources (has graphEndpoint or explicit supported: true)
+    const supportedResources = category.subcategories
+      .filter(sub => {
+        if (sub.supported === false) return false;
+        if (sub.supported === true) return true;
+        return !!sub.graphEndpoint;
+      })
+      .map(sub => `${categoryId}/${sub.id}`);
+
+    if (supportedResources.length === 0) return;
+
+    const allSelected = supportedResources.every(r => selectedResources.includes(r));
 
     if (allSelected) {
-      setSelectedResources(prev => prev.filter(r => !categoryResources.includes(r)));
+      setSelectedResources(prev => prev.filter(r => !supportedResources.includes(r)));
     } else {
-      setSelectedResources(prev => [...new Set([...prev, ...categoryResources])]);
+      setSelectedResources(prev => [...new Set([...prev, ...supportedResources])]);
     }
   };
 

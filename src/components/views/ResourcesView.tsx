@@ -39,17 +39,39 @@ export const ResourcesView = ({
     );
   };
 
+  // Check if resource is supported (has graphEndpoint OR explicit supported: true)
+  const isResourceSupported = (categoryId: string, subId: string) => {
+    const category = RESOURCE_CATEGORIES.find(c => c.id === categoryId);
+    const sub = category?.subcategories.find(s => s.id === subId);
+    if (!sub) return false;
+    // Explicit supported flag takes priority, otherwise check for graphEndpoint
+    if (sub.supported === false) return false;
+    if (sub.supported === true) return true;
+    return !!sub.graphEndpoint;
+  };
+
+  const getSupportedSubcategories = (category: ResourceCategory) => {
+    return category.subcategories.filter(sub => {
+      if (sub.supported === false) return false;
+      if (sub.supported === true) return true;
+      return !!sub.graphEndpoint;
+    });
+  };
+
   const isCategorySelected = (category: ResourceCategory) => {
-    return category.subcategories.every(sub => 
+    const supported = getSupportedSubcategories(category);
+    if (supported.length === 0) return false;
+    return supported.every(sub => 
       selectedResources.includes(`${category.id}/${sub.id}`)
     );
   };
 
   const isCategoryPartiallySelected = (category: ResourceCategory) => {
-    const selectedCount = category.subcategories.filter(sub => 
+    const supported = getSupportedSubcategories(category);
+    const selectedCount = supported.filter(sub => 
       selectedResources.includes(`${category.id}/${sub.id}`)
     ).length;
-    return selectedCount > 0 && selectedCount < category.subcategories.length;
+    return selectedCount > 0 && selectedCount < supported.length;
   };
 
   const filteredCategories = RESOURCE_CATEGORIES.filter(category => {
@@ -61,7 +83,9 @@ export const ResourcesView = ({
     );
   });
 
-  const totalResources = RESOURCE_CATEGORIES.reduce((acc, cat) => acc + cat.subcategories.length, 0);
+  const totalResources = RESOURCE_CATEGORIES.reduce((acc, cat) => 
+    acc + cat.subcategories.filter(sub => sub.supported !== false && (sub.supported === true || sub.graphEndpoint)).length, 0
+  );
   const selectedCount = selectedResources.length;
 
   return (
@@ -197,31 +221,40 @@ export const ResourcesView = ({
                           {category.subcategories.map((sub) => {
                             const resourceId = `${category.id}/${sub.id}`;
                             const isSubSelected = selectedResources.includes(resourceId);
+                            const isSupported = isResourceSupported(category.id, sub.id);
 
                             return (
                               <div
                                 key={sub.id}
                                 className={cn(
-                                  "flex items-center gap-3 px-6 py-2 pl-14 cursor-pointer transition-colors",
-                                  "hover:bg-secondary/30",
-                                  isSubSelected && "bg-primary/5"
+                                  "flex items-center gap-3 px-6 py-2 pl-14 transition-colors",
+                                  isSupported ? "cursor-pointer hover:bg-secondary/30" : "cursor-not-allowed opacity-60",
+                                  isSubSelected && isSupported && "bg-primary/5"
                                 )}
-                                onClick={() => onResourceSelect(resourceId)}
+                                onClick={() => isSupported && onResourceSelect(resourceId)}
                               >
                                 <Checkbox 
                                   checked={isSubSelected}
+                                  disabled={!isSupported}
                                   className="border-muted-foreground data-[state=checked]:bg-primary data-[state=checked]:border-primary"
                                 />
-                                <span className="text-sm text-foreground">{sub.name}</span>
-                                {sub.graphEndpoint && (
+                                <span className={cn("text-sm", isSupported ? "text-foreground" : "text-muted-foreground")}>
+                                  {sub.name}
+                                </span>
+                                {isSupported && sub.graphEndpoint && (
                                   <code className="text-xs text-muted-foreground font-mono bg-secondary/50 px-2 py-0.5 rounded">
                                     Graph API
                                   </code>
                                 )}
-                                {sub.powershellModule && (
-                                  <code className="text-xs text-muted-foreground font-mono bg-secondary/50 px-2 py-0.5 rounded">
-                                    {sub.powershellModule}
-                                  </code>
+                                {!isSupported && (
+                                  <Badge variant="outline" className="text-xs text-warning border-warning/50 bg-warning/10">
+                                    Coming Soon
+                                  </Badge>
+                                )}
+                                {!isSupported && sub.comingSoonReason && (
+                                  <span className="text-xs text-muted-foreground">
+                                    ({sub.comingSoonReason})
+                                  </span>
                                 )}
                               </div>
                             );
