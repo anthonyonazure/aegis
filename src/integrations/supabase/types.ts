@@ -170,6 +170,36 @@ export type Database = {
           },
         ]
       }
+      resource_templates: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          resource_ids: string[]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          resource_ids?: string[]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          resource_ids?: string[]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       tenant_connections: {
         Row: {
           auth_method: string
