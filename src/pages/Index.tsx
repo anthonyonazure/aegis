@@ -31,7 +31,8 @@ const Index = () => {
     isConnected, 
     connectionId,
     checkExistingConnection,
-    getValidToken 
+    getValidToken,
+    refreshToken
   } = useTenant();
 
   const { isExporting, progress, startExport } = useExport();
@@ -235,6 +236,7 @@ const Index = () => {
         selectedResources={selectedResources}
         onProceed={handlePreflightProceed}
         onCancel={handlePreflightCancel}
+        onRefreshToken={refreshToken}
       />
     </div>
   );
