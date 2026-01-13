@@ -28,6 +28,18 @@ const ExportRequestSchema = z.object({
   exportJobId: z.string().uuid('Invalid export job ID format'),
 });
 
+// Schema for import requests
+const ImportRequestSchema = z.object({
+  action: z.literal('import'),
+  accessToken: z.string().min(1, 'Access token required').max(10000, 'Access token too long'),
+  importJobId: z.string().uuid('Invalid import job ID format'),
+  resources: z.array(z.object({
+    resourceType: z.string().min(1),
+    resourceName: z.string().optional(),
+    data: z.record(z.any()),
+  })).min(1, 'At least one resource required').max(100, 'Too many resources'),
+});
+
 // Error sanitization function
 function sanitizeError(error: unknown): string {
   const errorMessage = error instanceof Error ? error.message : String(error);
@@ -68,63 +80,137 @@ function sanitizeError(error: unknown): string {
 }
 
 // Microsoft Graph API endpoints for different resource types
-const GRAPH_ENDPOINTS: Record<string, { endpoint: string; useBeta?: boolean }> = {
+// Each includes endpoints for reading (GET) and creating (POST)
+const GRAPH_ENDPOINTS: Record<string, { endpoint: string; useBeta?: boolean; createEndpoint?: string; method?: 'POST' | 'PUT' | 'PATCH'; supportsImport?: boolean }> = {
   // Intune
-  'intune/device-configurations': { endpoint: '/deviceManagement/deviceConfigurations' },
-  'intune/compliance-policies': { endpoint: '/deviceManagement/deviceCompliancePolicies' },
-  'intune/app-configurations': { endpoint: '/deviceAppManagement/mobileAppConfigurations', useBeta: true },
-  'intune/autopilot': { endpoint: '/deviceManagement/windowsAutopilotDeploymentProfiles' },
-  'intune/enrollment-restrictions': { endpoint: '/deviceManagement/deviceEnrollmentConfigurations' },
-  'intune/scripts': { endpoint: '/deviceManagement/deviceManagementScripts' },
-  'intune/win32-apps': { endpoint: '/deviceAppManagement/mobileApps' },
-  'intune/update-rings': { endpoint: '/deviceManagement/deviceConfigurations' },
+  'intune/device-configurations': { endpoint: '/deviceManagement/deviceConfigurations', createEndpoint: '/deviceManagement/deviceConfigurations', supportsImport: true },
+  'intune/compliance-policies': { endpoint: '/deviceManagement/deviceCompliancePolicies', createEndpoint: '/deviceManagement/deviceCompliancePolicies', supportsImport: true },
+  'intune/app-configurations': { endpoint: '/deviceAppManagement/mobileAppConfigurations', useBeta: true, supportsImport: false },
+  'intune/autopilot': { endpoint: '/deviceManagement/windowsAutopilotDeploymentProfiles', createEndpoint: '/deviceManagement/windowsAutopilotDeploymentProfiles', supportsImport: true },
+  'intune/enrollment-restrictions': { endpoint: '/deviceManagement/deviceEnrollmentConfigurations', supportsImport: false },
+  'intune/scripts': { endpoint: '/deviceManagement/deviceManagementScripts', createEndpoint: '/deviceManagement/deviceManagementScripts', supportsImport: true },
+  'intune/win32-apps': { endpoint: '/deviceAppManagement/mobileApps', supportsImport: false },
+  'intune/update-rings': { endpoint: '/deviceManagement/deviceConfigurations', supportsImport: false },
 
   // Conditional Access
-  'conditional-access/ca-policies': { endpoint: '/identity/conditionalAccess/policies' },
-  'conditional-access/named-locations': { endpoint: '/identity/conditionalAccess/namedLocations' },
-  'conditional-access/auth-contexts': { endpoint: '/identity/conditionalAccess/authenticationContextClassReferences' },
-  'conditional-access/auth-strengths': { endpoint: '/identity/conditionalAccess/authenticationStrengths/policies' },
+  'conditional-access/ca-policies': { endpoint: '/identity/conditionalAccess/policies', createEndpoint: '/identity/conditionalAccess/policies', supportsImport: true },
+  'conditional-access/named-locations': { endpoint: '/identity/conditionalAccess/namedLocations', createEndpoint: '/identity/conditionalAccess/namedLocations', supportsImport: true },
+  'conditional-access/auth-contexts': { endpoint: '/identity/conditionalAccess/authenticationContextClassReferences', supportsImport: false },
+  'conditional-access/auth-strengths': { endpoint: '/identity/conditionalAccess/authenticationStrengths/policies', supportsImport: false },
 
   // Entra ID
-  'entra-id/groups': { endpoint: '/groups' },
-  'entra-id/app-registrations': { endpoint: '/applications' },
-  'entra-id/enterprise-apps': { endpoint: '/servicePrincipals' },
-  'entra-id/directory-settings': { endpoint: '/settings' },
-  'entra-id/admin-units': { endpoint: '/administrativeUnits' },
-  'entra-id/roles': { endpoint: '/directoryRoles' },
+  'entra-id/groups': { endpoint: '/groups', createEndpoint: '/groups', supportsImport: true },
+  'entra-id/app-registrations': { endpoint: '/applications', createEndpoint: '/applications', supportsImport: true },
+  'entra-id/enterprise-apps': { endpoint: '/servicePrincipals', supportsImport: false },
+  'entra-id/directory-settings': { endpoint: '/settings', supportsImport: false },
+  'entra-id/admin-units': { endpoint: '/administrativeUnits', createEndpoint: '/administrativeUnits', supportsImport: true },
+  'entra-id/roles': { endpoint: '/directoryRoles', supportsImport: false },
 
   // Defender
-  'defender/asr-policies': { endpoint: '/deviceManagement/intents', useBeta: true },
-  'defender/antivirus-policies': { endpoint: '/deviceManagement/intents', useBeta: true },
-  'defender/firewall-policies': { endpoint: '/deviceManagement/intents', useBeta: true },
-  'defender/edr-policies': { endpoint: '/deviceManagement/intents', useBeta: true },
-  'defender/security-baselines': { endpoint: '/deviceManagement/templates', useBeta: true },
+  'defender/asr-policies': { endpoint: '/deviceManagement/intents', useBeta: true, supportsImport: false },
+  'defender/antivirus-policies': { endpoint: '/deviceManagement/intents', useBeta: true, supportsImport: false },
+  'defender/firewall-policies': { endpoint: '/deviceManagement/intents', useBeta: true, supportsImport: false },
+  'defender/edr-policies': { endpoint: '/deviceManagement/intents', useBeta: true, supportsImport: false },
+  'defender/security-baselines': { endpoint: '/deviceManagement/templates', useBeta: true, supportsImport: false },
 
   // Purview / Information Protection
-  'purview/sensitivity-labels': { endpoint: '/security/informationProtection/sensitivityLabels', useBeta: true },
-  'purview/retention-policies': { endpoint: '/security/labels/retentionLabels', useBeta: true },
+  'purview/sensitivity-labels': { endpoint: '/security/informationProtection/sensitivityLabels', useBeta: true, supportsImport: false },
+  'purview/retention-policies': { endpoint: '/security/labels/retentionLabels', useBeta: true, supportsImport: false },
 
   // Exchange Online - using available Graph endpoints
-  'exchange/transport-rules': { endpoint: '/security/attackSimulation/simulationAutomations', useBeta: true }, // placeholder - transport rules not in Graph
-  'exchange/connectors': { endpoint: '/organization', useBeta: false }, // placeholder
-  'exchange/accepted-domains': { endpoint: '/domains' },
-  'exchange/mailbox-policies': { endpoint: '/policies/mobileDeviceManagementPolicies', useBeta: true },
-  'exchange/anti-spam': { endpoint: '/security/threatIntelligence/hostComponents', useBeta: true }, // placeholder
-  'exchange/dlp-policies': { endpoint: '/security/informationProtection/sensitivityLabels', useBeta: true },
+  'exchange/transport-rules': { endpoint: '/security/attackSimulation/simulationAutomations', useBeta: true, supportsImport: false },
+  'exchange/connectors': { endpoint: '/organization', useBeta: false, supportsImport: false },
+  'exchange/accepted-domains': { endpoint: '/domains', supportsImport: false },
+  'exchange/mailbox-policies': { endpoint: '/policies/mobileDeviceManagementPolicies', useBeta: true, supportsImport: false },
+  'exchange/anti-spam': { endpoint: '/security/threatIntelligence/hostComponents', useBeta: true, supportsImport: false },
+  'exchange/dlp-policies': { endpoint: '/security/informationProtection/sensitivityLabels', useBeta: true, supportsImport: false },
 
   // SharePoint & OneDrive - using available Graph endpoints
-  'sharepoint/tenant-settings': { endpoint: '/sites/root', useBeta: false },
-  'sharepoint/sharing-policies': { endpoint: '/sites/root/permissions', useBeta: false },
-  'sharepoint/site-templates': { endpoint: '/sites?search=*&$select=id,displayName,webUrl', useBeta: false },
-  'sharepoint/hub-sites': { endpoint: '/sites?$filter=isHubSite eq true', useBeta: true },
+  'sharepoint/tenant-settings': { endpoint: '/sites/root', useBeta: false, supportsImport: false },
+  'sharepoint/sharing-policies': { endpoint: '/sites/root/permissions', useBeta: false, supportsImport: false },
+  'sharepoint/site-templates': { endpoint: '/sites?search=*&$select=id,displayName,webUrl', useBeta: false, supportsImport: false },
+  'sharepoint/hub-sites': { endpoint: '/sites?$filter=isHubSite eq true', useBeta: true, supportsImport: false },
 
   // Teams - using available Graph endpoints
-  'teams/messaging-policies': { endpoint: '/teams', useBeta: false },
-  'teams/meeting-policies': { endpoint: '/solutions/virtualEvents/webinars', useBeta: true },
-  'teams/app-policies': { endpoint: '/appCatalogs/teamsApps', useBeta: false },
-  'teams/calling-policies': { endpoint: '/communications/callRecords', useBeta: true },
-  'teams/live-event-policies': { endpoint: '/solutions/virtualEvents/townhalls', useBeta: true },
+  'teams/messaging-policies': { endpoint: '/teams', useBeta: false, supportsImport: false },
+  'teams/meeting-policies': { endpoint: '/solutions/virtualEvents/webinars', useBeta: true, supportsImport: false },
+  'teams/app-policies': { endpoint: '/appCatalogs/teamsApps', useBeta: false, supportsImport: false },
+  'teams/calling-policies': { endpoint: '/communications/callRecords', useBeta: true, supportsImport: false },
+  'teams/live-event-policies': { endpoint: '/solutions/virtualEvents/townhalls', useBeta: true, supportsImport: false },
 };
+
+// Prepare resource data for import by removing read-only properties
+function prepareResourceForImport(resourceType: string, data: Record<string, any>): Record<string, any> {
+  // Common read-only properties to remove
+  const readOnlyProps = [
+    'id', 
+    'createdDateTime', 
+    'modifiedDateTime', 
+    'lastModifiedDateTime',
+    'createdBy',
+    'lastModifiedBy',
+    'version',
+    '@odata.context',
+    '@odata.type',
+    '@odata.id',
+  ];
+
+  const cleaned: Record<string, any> = {};
+  
+  for (const [key, value] of Object.entries(data)) {
+    // Skip read-only properties
+    if (readOnlyProps.includes(key)) continue;
+    // Skip null values
+    if (value === null) continue;
+    // Keep the property
+    cleaned[key] = value;
+  }
+
+  // Add @odata.type back for certain resource types that require it
+  if (resourceType.includes('conditional-access') || resourceType.includes('intune')) {
+    if (data['@odata.type']) {
+      cleaned['@odata.type'] = data['@odata.type'];
+    }
+  }
+
+  return cleaned;
+}
+
+// Create a resource via Graph API
+async function createGraphResource(
+  accessToken: string, 
+  endpoint: string, 
+  data: Record<string, any>,
+  useBeta: boolean = false
+): Promise<{ success: boolean; data?: any; error?: string }> {
+  const baseUrl = useBeta ? 'https://graph.microsoft.com/beta' : 'https://graph.microsoft.com/v1.0';
+  const graphUrl = `${baseUrl}${endpoint}`;
+
+  try {
+    console.log(`Creating resource at ${graphUrl}`);
+    const response = await fetch(graphUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+
+    const responseData = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      console.error('Graph API create error:', JSON.stringify(responseData));
+      const errorMessage = responseData.error?.message || `API_ERROR_${response.status}`;
+      return { success: false, error: errorMessage };
+    }
+
+    return { success: true, data: responseData };
+  } catch (error) {
+    console.error(`Error creating resource at ${endpoint}:`, error);
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
 
 async function verifyAuth(req: Request): Promise<{ userId: string } | { error: string; status: number }> {
   const authHeader = req.headers.get('Authorization');
@@ -426,6 +512,156 @@ serve(async (req) => {
           results,
           completed,
           total,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Handle import action - create/update resources via Graph API
+    if (rawBody.action === 'import') {
+      const parseResult = ImportRequestSchema.safeParse(rawBody);
+      if (!parseResult.success) {
+        console.error('Validation error:', parseResult.error.errors);
+        return new Response(
+          JSON.stringify({ error: 'Invalid request parameters' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const { accessToken, importJobId, resources } = parseResult.data;
+
+      // Create Supabase client to update job progress
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+      const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+      const supabase = createClient(supabaseUrl, supabaseKey);
+
+      // Verify the import job belongs to the authenticated user
+      const { data: jobData, error: jobError } = await supabase
+        .from('import_jobs')
+        .select('user_id')
+        .eq('id', importJobId)
+        .single();
+
+      if (jobError || !jobData || jobData.user_id !== userId) {
+        console.error('Import job verification failed:', jobError);
+        return new Response(
+          JSON.stringify({ error: 'Import job not found or access denied' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const results: Array<{
+        resource: string;
+        resourceName: string;
+        success: boolean;
+        error?: string;
+        createdId?: string;
+      }> = [];
+
+      const errors: Array<{ resource: string; error: string }> = [];
+      let imported = 0;
+      const total = resources.length;
+
+      for (let i = 0; i < resources.length; i++) {
+        const resource = resources[i];
+        const resourceKey = resource.resourceType;
+        const resourceName = resource.resourceName || 'Unknown';
+        const endpointConfig = GRAPH_ENDPOINTS[resourceKey];
+
+        // Check if import is supported for this resource type
+        if (!endpointConfig) {
+          const errorMsg = `Unknown resource type: ${resourceKey}`;
+          results.push({ resource: resourceKey, resourceName, success: false, error: errorMsg });
+          errors.push({ resource: `${resourceKey}/${resourceName}`, error: errorMsg });
+          continue;
+        }
+
+        if (!endpointConfig.supportsImport || !endpointConfig.createEndpoint) {
+          const errorMsg = `Import not supported for resource type: ${resourceKey}`;
+          results.push({ resource: resourceKey, resourceName, success: false, error: errorMsg });
+          errors.push({ resource: `${resourceKey}/${resourceName}`, error: errorMsg });
+          continue;
+        }
+
+        try {
+          // Prepare the data by removing read-only properties
+          const cleanedData = prepareResourceForImport(resourceKey, resource.data);
+          
+          console.log(`Importing ${resourceKey}/${resourceName}...`);
+          
+          // Create the resource via Graph API
+          const createResult = await createGraphResource(
+            accessToken,
+            endpointConfig.createEndpoint,
+            cleanedData,
+            endpointConfig.useBeta
+          );
+
+          if (createResult.success) {
+            imported++;
+            results.push({
+              resource: resourceKey,
+              resourceName,
+              success: true,
+              createdId: createResult.data?.id,
+            });
+            console.log(`Successfully created ${resourceKey}/${resourceName}, ID: ${createResult.data?.id}`);
+          } else {
+            const errorMsg = createResult.error || 'Unknown error';
+            results.push({ resource: resourceKey, resourceName, success: false, error: errorMsg });
+            errors.push({ resource: `${resourceKey}/${resourceName}`, error: errorMsg });
+            console.error(`Failed to create ${resourceKey}/${resourceName}: ${errorMsg}`);
+          }
+        } catch (error: unknown) {
+          const errorMsg = sanitizeError(error);
+          results.push({ resource: resourceKey, resourceName, success: false, error: errorMsg });
+          errors.push({ resource: `${resourceKey}/${resourceName}`, error: errorMsg });
+          console.error(`Exception importing ${resourceKey}/${resourceName}:`, error);
+        }
+
+        // Update progress every resource
+        const progress = Math.round(((i + 1) / total) * 100);
+        await supabase
+          .from('import_jobs')
+          .update({ 
+            resources_imported: imported,
+            resources_failed: errors.length,
+          })
+          .eq('id', importJobId);
+      }
+
+      // Determine final status
+      let status = 'completed';
+      if (errors.length === total) {
+        status = 'failed';
+      } else if (errors.length > 0) {
+        status = 'partial';
+      }
+
+      // Update job with final status
+      const { error: updateError } = await supabase
+        .from('import_jobs')
+        .update({
+          status,
+          resources_imported: imported,
+          resources_failed: errors.length,
+          errors: errors,
+          completed_at: new Date().toISOString(),
+        })
+        .eq('id', importJobId);
+
+      if (updateError) {
+        console.error('Failed to update import job:', updateError);
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          results,
+          imported,
+          failed: errors.length,
+          total,
+          status,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );

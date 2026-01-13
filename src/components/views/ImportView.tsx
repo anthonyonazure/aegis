@@ -49,6 +49,36 @@ import { useToast } from '@/hooks/use-toast';
 import { useTenant } from '@/contexts/TenantContext';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
+import { RESOURCE_CATEGORIES } from '@/types/tenant';
+
+// Map category/subcategory to resource type key
+function getResourceTypeKey(category: string, resourceType: string): string {
+  return `${category}/${resourceType}`;
+}
+
+// Get supported import resource types
+function getSupportedImportTypes(): Set<string> {
+  const supported = new Set<string>();
+  // These match the supportsImport: true endpoints in the edge function
+  const importable = [
+    'intune/device-configurations',
+    'intune/compliance-policies',
+    'intune/autopilot',
+    'intune/scripts',
+    'conditional-access/ca-policies',
+    'conditional-access/named-locations',
+    'entra-id/groups',
+    'entra-id/app-registrations',
+    'entra-id/admin-units',
+  ];
+  importable.forEach(t => supported.add(t));
+  return supported;
+}
+
+// Check if a resource type supports import
+function supportsImport(resourceType: string): boolean {
+  return getSupportedImportTypes().has(resourceType);
+}
 
 interface ImportJob {
   id: string;
@@ -248,6 +278,26 @@ export const ImportView = () => {
       return;
     }
 
+    // Check for unsupported resources
+    const unsupportedResources = parsedResources.filter(r => !supportsImport(r.resourceType));
+    const supportedResources = parsedResources.filter(r => supportsImport(r.resourceType));
+
+    if (supportedResources.length === 0) {
+      toast({
+        title: 'No Importable Resources',
+        description: 'None of the selected resources support Graph API import. Only Intune, Conditional Access, and Entra ID resources can be imported.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (unsupportedResources.length > 0) {
+      toast({
+        title: 'Warning',
+        description: `${unsupportedResources.length} resource(s) will be skipped as they don't support Graph API import.`,
+      });
+    }
+
     setIsImporting(true);
     setImportProgress(0);
 
@@ -265,7 +315,7 @@ export const ImportView = () => {
           name: uploadedFile?.name || `Import from Export ${selectedExportJob?.slice(0, 8)}`,
           source_type: uploadedFile ? 'file' : 'export_job',
           source_export_job_id: selectedExportJob || null,
-          resources_total: parsedResources.length,
+          resources_total: supportedResources.length,
           status: 'running',
         })
         .select()
@@ -273,45 +323,59 @@ export const ImportView = () => {
 
       if (jobError) throw jobError;
 
-      // Simulate import progress (actual Graph API import would go here)
-      const errors: Array<{ resource: string; error: string }> = [];
-      let imported = 0;
+      // Prepare resources for import
+      const resourcesToImport = supportedResources.map(r => ({
+        resourceType: r.resourceType,
+        resourceName: r.resourceName,
+        data: r.data,
+      }));
 
-      for (let i = 0; i < parsedResources.length; i++) {
-        const resource = parsedResources[i];
-        await new Promise(resolve => setTimeout(resolve, 500)); // Simulated delay
-        
-        // In a real implementation, this would call the Graph API to create/update the resource
-        // For now, we'll simulate success with occasional failures
-        if (Math.random() > 0.1) {
-          imported++;
-        } else {
-          errors.push({
-            resource: `${resource.resourceType}/${resource.resourceName}`,
-            error: 'Simulated import failure - Graph API import not yet implemented',
-          });
-        }
+      // Call the import edge function
+      const { data: importResult, error: importError } = await supabase.functions.invoke('graph-api', {
+        body: {
+          action: 'import',
+          accessToken: token,
+          importJobId: job.id,
+          resources: resourcesToImport,
+        },
+      });
 
-        setImportProgress(Math.round(((i + 1) / parsedResources.length) * 100));
+      if (importError) {
+        console.error('Import edge function error:', importError);
+        throw new Error('Import failed. Please try again.');
       }
 
-      // Update job status
-      await supabase
-        .from('import_jobs')
-        .update({
-          status: errors.length === 0 ? 'completed' : errors.length === parsedResources.length ? 'failed' : 'partial',
-          resources_imported: imported,
-          resources_failed: errors.length,
-          errors: errors,
-          completed_at: new Date().toISOString(),
-        })
-        .eq('id', job.id);
+      const result = importResult as {
+        success: boolean;
+        imported: number;
+        failed: number;
+        total: number;
+        status: string;
+        results?: Array<{ resource: string; resourceName: string; success: boolean; error?: string }>;
+      };
 
-      toast({
-        title: 'Import Complete',
-        description: `Imported ${imported}/${parsedResources.length} resources`,
-        variant: errors.length === 0 ? 'default' : 'destructive',
-      });
+      // Update progress to 100%
+      setImportProgress(100);
+
+      // Show toast with results
+      if (result.status === 'completed') {
+        toast({
+          title: 'Import Successful',
+          description: `Successfully imported ${result.imported} resource(s) to your tenant.`,
+        });
+      } else if (result.status === 'partial') {
+        toast({
+          title: 'Import Partially Completed',
+          description: `Imported ${result.imported}/${result.total} resources. ${result.failed} failed.`,
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: 'Import Failed',
+          description: `Failed to import resources. ${result.failed} error(s).`,
+          variant: 'destructive',
+        });
+      }
 
       // Reset state and reload
       setShowPreview(false);
@@ -572,26 +636,64 @@ export const ImportView = () => {
             <>
               <ScrollArea className="h-[300px] border rounded-lg p-4">
                 <div className="space-y-2">
-                  {parsedResources.map((resource, idx) => (
-                    <div 
-                      key={idx}
-                      className="flex items-center justify-between p-2 rounded bg-muted/30"
-                    >
-                      <div>
-                        <p className="font-medium text-sm text-foreground">{resource.resourceName}</p>
-                        <p className="text-xs text-muted-foreground">{resource.resourceType}</p>
+                  {parsedResources.map((resource, idx) => {
+                    const isSupported = supportsImport(resource.resourceType);
+                    return (
+                      <div 
+                        key={idx}
+                        className={cn(
+                          "flex items-center justify-between p-2 rounded",
+                          isSupported ? "bg-muted/30" : "bg-red-500/10 border border-red-500/20"
+                        )}
+                      >
+                        <div>
+                          <p className="font-medium text-sm text-foreground">{resource.resourceName}</p>
+                          <p className="text-xs text-muted-foreground">{resource.resourceType}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {isSupported ? (
+                            <Badge className="bg-green-500/20 text-green-400">
+                              <CheckCircle2 className="w-3 h-3 mr-1" />
+                              Importable
+                            </Badge>
+                          ) : (
+                            <Badge className="bg-red-500/20 text-red-400">
+                              <XCircle className="w-3 h-3 mr-1" />
+                              Not Supported
+                            </Badge>
+                          )}
+                        </div>
                       </div>
-                      <Badge variant="outline">{resource.resourceType.split('/').pop()}</Badge>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </ScrollArea>
               
+              {/* Summary of importable resources */}
+              {(() => {
+                const supportedCount = parsedResources.filter(r => supportsImport(r.resourceType)).length;
+                const unsupportedCount = parsedResources.length - supportedCount;
+                return (
+                  <div className="flex gap-4 text-sm">
+                    <span className="text-green-400">
+                      <CheckCircle2 className="w-4 h-4 inline mr-1" />
+                      {supportedCount} importable
+                    </span>
+                    {unsupportedCount > 0 && (
+                      <span className="text-red-400">
+                        <XCircle className="w-4 h-4 inline mr-1" />
+                        {unsupportedCount} will be skipped
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
+              
               <div className="flex items-center gap-2 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
-                <AlertTriangle className="w-5 h-5 text-yellow-500" />
+                <AlertTriangle className="w-5 h-5 text-yellow-500 flex-shrink-0" />
                 <p className="text-sm text-yellow-200">
-                  <strong>Warning:</strong> This will create or update {parsedResources.length} resources in your tenant.
-                  Existing resources with matching IDs may be overwritten.
+                  <strong>Warning:</strong> This will create resources in your tenant via Graph API.
+                  Only supported resource types (Intune, Conditional Access, Entra ID) will be imported.
                 </p>
               </div>
             </>
