@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import {
   CheckCircle2,
@@ -38,6 +38,7 @@ interface PreflightCheckDialogProps {
   selectedResources: string[];
   onProceed: () => void;
   onCancel: () => void;
+  onRefreshToken?: () => Promise<string | null>;
 }
 
 export function PreflightCheckDialog({
@@ -47,23 +48,72 @@ export function PreflightCheckDialog({
   selectedResources,
   onProceed,
   onCancel,
+  onRefreshToken,
 }: PreflightCheckDialogProps) {
   const [checking, setChecking] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [result, setResult] = useState<PreflightCheckResult | null>(null);
   const [showGrantedPermissions, setShowGrantedPermissions] = useState(false);
+  const [currentToken, setCurrentToken] = useState<string | null>(accessToken);
   const { toast } = useToast();
 
-  useEffect(() => {
-    if (open && accessToken && selectedResources.length > 0) {
+  // Run preflight check
+  const runPreflightCheck = useCallback((token: string | null) => {
+    if (token && selectedResources.length > 0) {
       setChecking(true);
-      // Small delay to show loading state
       setTimeout(() => {
-        const checkResult = performPreflightCheck(accessToken, selectedResources);
+        const checkResult = performPreflightCheck(token, selectedResources);
         setResult(checkResult);
         setChecking(false);
       }, 500);
     }
-  }, [open, accessToken, selectedResources]);
+  }, [selectedResources]);
+
+  useEffect(() => {
+    if (open && accessToken && selectedResources.length > 0) {
+      setCurrentToken(accessToken);
+      runPreflightCheck(accessToken);
+    }
+  }, [open, accessToken, selectedResources, runPreflightCheck]);
+
+  // Handle refresh permissions button
+  const handleRefreshPermissions = async () => {
+    if (!onRefreshToken) {
+      toast({
+        title: 'Cannot Refresh',
+        description: 'No stored credentials available. Please disconnect and reconnect.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setRefreshing(true);
+    try {
+      const newToken = await onRefreshToken();
+      if (newToken) {
+        setCurrentToken(newToken);
+        runPreflightCheck(newToken);
+        toast({
+          title: 'Permissions Refreshed',
+          description: 'Token refreshed. Checking permissions with new token...',
+        });
+      } else {
+        toast({
+          title: 'Refresh Failed',
+          description: 'Could not get a new token. Please disconnect and reconnect.',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      toast({
+        title: 'Refresh Error',
+        description: 'An error occurred while refreshing permissions.',
+        variant: 'destructive',
+      });
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const handleCopyMissingPermissions = () => {
     if (!result) return;
@@ -150,7 +200,7 @@ export function PreflightCheckDialog({
                   <p className="text-sm text-muted-foreground mt-1">
                     Add the missing permissions in Azure AD and grant admin consent, or proceed with partial export.
                   </p>
-                  <div className="flex items-center gap-2 mt-3">
+                <div className="flex items-center gap-2 mt-3 flex-wrap">
                     <Button 
                       variant="outline" 
                       size="sm"
@@ -172,6 +222,24 @@ export function PreflightCheckDialog({
                         <ExternalLink className="w-3 h-3 mr-1" />
                         Open Azure AD
                       </a>
+                    </Button>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={handleRefreshPermissions}
+                      disabled={refreshing}
+                    >
+                      {refreshing ? (
+                        <>
+                          <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                          Refreshing...
+                        </>
+                      ) : (
+                        <>
+                          <Shield className="w-3 h-3 mr-1" />
+                          Refresh Permissions
+                        </>
+                      )}
                     </Button>
                   </div>
                 </div>
