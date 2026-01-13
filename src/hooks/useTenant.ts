@@ -339,15 +339,23 @@ export function useExport() {
       // Subscribe to job updates
       const unsubscribe = subscribeToExportJob(job.id, (updatedJob: { progress?: number; status?: string; error?: string }) => {
         if (updatedJob.progress !== undefined) setProgress(updatedJob.progress);
+
         if (updatedJob.status === 'completed' || updatedJob.status === 'failed') {
           setIsExporting(false);
           unsubscribe();
-          
+
           if (updatedJob.status === 'completed') {
-            toast({
-              title: 'Export Complete',
-              description: `Successfully exported ${resources.length} resources`,
-            });
+            if (updatedJob.error) {
+              toast({
+                title: 'Export Complete (with errors)',
+                description: updatedJob.error,
+              });
+            } else {
+              toast({
+                title: 'Export Complete',
+                description: `Successfully exported ${resources.length} resources`,
+              });
+            }
           } else {
             toast({
               title: 'Export Failed',
