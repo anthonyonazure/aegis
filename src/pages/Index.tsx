@@ -7,6 +7,7 @@ import { ExportView } from '@/components/views/ExportView';
 import { AuthView } from '@/components/views/AuthView';
 import { GitView } from '@/components/views/GitView';
 import { JobsView } from '@/components/views/JobsView';
+import { PreflightCheckDialog } from '@/components/PreflightCheckDialog';
 import { RESOURCE_CATEGORIES, ExportFormat } from '@/types/tenant';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useExport } from '@/hooks/useTenant';
@@ -22,6 +23,8 @@ const Index = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [selectedResources, setSelectedResources] = useState<string[]>([]);
   const [selectedFormats, setSelectedFormats] = useState<ExportFormat['id'][]>(['json']);
+  const [showPreflightCheck, setShowPreflightCheck] = useState(false);
+  const [preflightToken, setPreflightToken] = useState<string | null>(null);
   
   // Use shared tenant context
   const { 
@@ -111,8 +114,22 @@ const Index = () => {
       return;
     }
 
-    await startExport(validToken, selectedResources, selectedFormats, connectionId || undefined);
-    setActiveTab('jobs');
+    // Show preflight check dialog
+    setPreflightToken(validToken);
+    setShowPreflightCheck(true);
+  };
+
+  const handlePreflightProceed = async () => {
+    setShowPreflightCheck(false);
+    if (preflightToken) {
+      await startExport(preflightToken, selectedResources, selectedFormats, connectionId || undefined);
+      setActiveTab('jobs');
+    }
+  };
+
+  const handlePreflightCancel = () => {
+    setShowPreflightCheck(false);
+    setPreflightToken(null);
   };
 
   const handleSignOut = async () => {
@@ -209,6 +226,16 @@ const Index = () => {
           </AnimatePresence>
         </div>
       </main>
+
+      {/* Preflight Check Dialog */}
+      <PreflightCheckDialog
+        open={showPreflightCheck}
+        onOpenChange={setShowPreflightCheck}
+        accessToken={preflightToken}
+        selectedResources={selectedResources}
+        onProceed={handlePreflightProceed}
+        onCancel={handlePreflightCancel}
+      />
     </div>
   );
 };
