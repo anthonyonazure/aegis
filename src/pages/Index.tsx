@@ -10,6 +10,7 @@ import { JobsView } from '@/components/views/JobsView';
 import { RESOURCE_CATEGORIES, ExportFormat } from '@/types/tenant';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useExport } from '@/hooks/useTenant';
+import { useTenant } from '@/contexts/TenantContext';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
@@ -22,10 +23,13 @@ const Index = () => {
   const [selectedResources, setSelectedResources] = useState<string[]>([]);
   const [selectedFormats, setSelectedFormats] = useState<ExportFormat['id'][]>(['json']);
   
-  // Connection state
-  const [isConnected, setIsConnected] = useState(false);
-  const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [connectionId, setConnectionId] = useState<string | null>(null);
+  // Use shared tenant context
+  const { 
+    isConnected, 
+    connectionId,
+    checkExistingConnection,
+    getValidToken 
+  } = useTenant();
 
   const { isExporting, progress, startExport } = useExport();
   const { toast } = useToast();
@@ -36,6 +40,13 @@ const Index = () => {
       navigate('/login');
     }
   }, [authLoading, isAuthenticated, navigate]);
+
+  // Check for existing connection on mount
+  useEffect(() => {
+    if (isAuthenticated) {
+      checkExistingConnection();
+    }
+  }, [isAuthenticated, checkExistingConnection]);
 
   const handleResourceSelect = (resourceId: string) => {
     setSelectedResources(prev => 
@@ -67,12 +78,6 @@ const Index = () => {
     );
   };
 
-  const handleConnectionChange = (connected: boolean, token?: string, connId?: string) => {
-    setIsConnected(connected);
-    setAccessToken(token || null);
-    setConnectionId(connId || null);
-  };
-
   const handleStartExport = async () => {
     if (!isConnected) {
       toast({
@@ -84,7 +89,9 @@ const Index = () => {
       return;
     }
 
-    if (!accessToken) {
+    // Get a valid token (will refresh if needed)
+    const validToken = await getValidToken();
+    if (!validToken) {
       toast({
         title: 'Session Expired',
         description: 'Please reconnect to the tenant',
@@ -104,7 +111,7 @@ const Index = () => {
       return;
     }
 
-    await startExport(accessToken, selectedResources, selectedFormats, connectionId || undefined);
+    await startExport(validToken, selectedResources, selectedFormats, connectionId || undefined);
     setActiveTab('jobs');
   };
 
@@ -141,7 +148,7 @@ const Index = () => {
       case 'git':
         return <GitView />;
       case 'auth':
-        return <AuthView onConnectionChange={handleConnectionChange} />;
+        return <AuthView />;
       case 'settings':
         return (
           <div className="flex items-center justify-center h-full">
