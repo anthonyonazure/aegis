@@ -108,6 +108,14 @@ interface ParsedResource {
   data: Record<string, unknown>;
 }
 
+interface ValidationResult {
+  resource: string;
+  resourceName: string;
+  success: boolean;
+  error?: string;
+  validationErrors?: string[];
+}
+
 export const ImportView = () => {
   const { toast } = useToast();
   const { isConnected, getValidToken, connectionId } = useTenant();
@@ -120,8 +128,11 @@ export const ImportView = () => {
   const [parsedResources, setParsedResources] = useState<ParsedResource[]>([]);
   const [showPreview, setShowPreview] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [isValidating, setIsValidating] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
   const [deleteJobId, setDeleteJobId] = useState<string | null>(null);
+  const [validationResults, setValidationResults] = useState<ValidationResult[] | null>(null);
+  const [showValidationResults, setShowValidationResults] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -396,6 +407,130 @@ export const ImportView = () => {
     }
   };
 
+  const runDryRun = async () => {
+    if (!isConnected) {
+      toast({
+        title: 'Not Connected',
+        description: 'Please connect to a tenant first',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const token = await getValidToken();
+    if (!token) {
+      toast({
+        title: 'Session Expired',
+        description: 'Please reconnect to the tenant',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Filter to supported resources only
+    const supportedResources = parsedResources.filter(r => supportsImport(r.resourceType));
+
+    if (supportedResources.length === 0) {
+      toast({
+        title: 'No Importable Resources',
+        description: 'None of the selected resources support Graph API import.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsValidating(true);
+    setValidationResults(null);
+
+    try {
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      // Create temporary import job for dry run
+      const { data: job, error: jobError } = await supabase
+        .from('import_jobs')
+        .insert({
+          user_id: user.id,
+          tenant_connection_id: connectionId,
+          name: `[DRY RUN] ${uploadedFile?.name || 'Validation'}`,
+          source_type: uploadedFile ? 'file' : 'export_job',
+          source_export_job_id: selectedExportJob || null,
+          resources_total: supportedResources.length,
+          status: 'running',
+        })
+        .select()
+        .single();
+
+      if (jobError) throw jobError;
+
+      // Prepare resources for validation
+      const resourcesToValidate = supportedResources.map(r => ({
+        resourceType: r.resourceType,
+        resourceName: r.resourceName,
+        data: r.data,
+      }));
+
+      // Call the import edge function with dryRun=true
+      const { data: validationResult, error: validationError } = await supabase.functions.invoke('graph-api', {
+        body: {
+          action: 'import',
+          accessToken: token,
+          importJobId: job.id,
+          dryRun: true,
+          resources: resourcesToValidate,
+        },
+      });
+
+      if (validationError) {
+        console.error('Validation edge function error:', validationError);
+        throw new Error('Validation failed. Please try again.');
+      }
+
+      const result = validationResult as {
+        success: boolean;
+        dryRun: boolean;
+        validated: number;
+        failed: number;
+        total: number;
+        status: string;
+        results: ValidationResult[];
+      };
+
+      setValidationResults(result.results);
+      setShowValidationResults(true);
+
+      // Show toast with results
+      if (result.status === 'valid') {
+        toast({
+          title: 'Validation Passed',
+          description: `All ${result.validated} resource(s) passed validation and are ready for import.`,
+        });
+      } else if (result.status === 'partial') {
+        toast({
+          title: 'Validation Completed with Warnings',
+          description: `${result.validated} passed, ${result.failed} failed validation.`,
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: 'Validation Failed',
+          description: `${result.failed} resource(s) failed validation.`,
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Validation failed:', error);
+      toast({
+        title: 'Validation Failed',
+        description: error instanceof Error ? error.message : 'Unknown error',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
   const handleDeleteJob = async () => {
     if (!deleteJobId) return;
 
@@ -621,17 +756,103 @@ export const ImportView = () => {
             </DialogDescription>
           </DialogHeader>
           
-          {isImporting ? (
+          {isImporting || isValidating ? (
             <div className="space-y-4 py-4">
               <div className="text-center">
                 <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2 text-primary" />
-                <p className="text-sm text-muted-foreground">Importing resources...</p>
+                <p className="text-sm text-muted-foreground">
+                  {isValidating ? 'Validating resources...' : 'Importing resources...'}
+                </p>
               </div>
-              <Progress value={importProgress} />
-              <p className="text-center text-sm text-muted-foreground">
-                {importProgress}% complete
-              </p>
+              {isImporting && (
+                <>
+                  <Progress value={importProgress} />
+                  <p className="text-center text-sm text-muted-foreground">
+                    {importProgress}% complete
+                  </p>
+                </>
+              )}
             </div>
+          ) : showValidationResults && validationResults ? (
+            <>
+              <div className="flex items-center gap-2 mb-4">
+                <Badge className="bg-blue-500/20 text-blue-400">
+                  Dry Run Results
+                </Badge>
+                <span className="text-sm text-muted-foreground">
+                  No changes were made to your tenant
+                </span>
+              </div>
+              <ScrollArea className="h-[300px] border rounded-lg p-4">
+                <div className="space-y-2">
+                  {validationResults.map((result, idx) => (
+                    <div 
+                      key={idx}
+                      className={cn(
+                        "p-3 rounded",
+                        result.success ? "bg-green-500/10 border border-green-500/20" : "bg-red-500/10 border border-red-500/20"
+                      )}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-medium text-sm text-foreground">{result.resourceName}</p>
+                          <p className="text-xs text-muted-foreground">{result.resource}</p>
+                        </div>
+                        {result.success ? (
+                          <Badge className="bg-green-500/20 text-green-400">
+                            <CheckCircle2 className="w-3 h-3 mr-1" />
+                            Valid
+                          </Badge>
+                        ) : (
+                          <Badge className="bg-red-500/20 text-red-400">
+                            <XCircle className="w-3 h-3 mr-1" />
+                            Invalid
+                          </Badge>
+                        )}
+                      </div>
+                      {result.error && (
+                        <p className="text-xs text-red-400 mt-2">{result.error}</p>
+                      )}
+                      {result.validationErrors && result.validationErrors.length > 0 && (
+                        <ul className="text-xs text-red-400 mt-2 list-disc list-inside">
+                          {result.validationErrors.map((err, i) => (
+                            <li key={i}>{err}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+              
+              {/* Validation Summary */}
+              {(() => {
+                const passed = validationResults.filter(r => r.success).length;
+                const failed = validationResults.length - passed;
+                return (
+                  <div className="flex gap-4 text-sm">
+                    <span className="text-green-400">
+                      <CheckCircle2 className="w-4 h-4 inline mr-1" />
+                      {passed} passed
+                    </span>
+                    {failed > 0 && (
+                      <span className="text-red-400">
+                        <XCircle className="w-4 h-4 inline mr-1" />
+                        {failed} failed
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
+              
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-blue-500/10 border border-blue-500/30">
+                <AlertTriangle className="w-5 h-5 text-blue-500 flex-shrink-0" />
+                <p className="text-sm text-blue-200">
+                  <strong>Dry Run Complete:</strong> Review the validation results above. 
+                  Resources marked as "Valid" are ready for import.
+                </p>
+              </div>
+            </>
           ) : (
             <>
               <ScrollArea className="h-[300px] border rounded-lg p-4">
@@ -693,17 +914,57 @@ export const ImportView = () => {
                 <AlertTriangle className="w-5 h-5 text-yellow-500 flex-shrink-0" />
                 <p className="text-sm text-yellow-200">
                   <strong>Warning:</strong> This will create resources in your tenant via Graph API.
-                  Only supported resource types (Intune, Conditional Access, Entra ID) will be imported.
+                  Use "Dry Run" to validate first without making changes.
                 </p>
               </div>
             </>
           )}
           
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowPreview(false)} disabled={isImporting}>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setShowPreview(false);
+                setShowValidationResults(false);
+                setValidationResults(null);
+              }} 
+              disabled={isImporting || isValidating}
+            >
               Cancel
             </Button>
-            <Button onClick={startImport} disabled={isImporting || !isConnected}>
+            {showValidationResults ? (
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setShowValidationResults(false);
+                  setValidationResults(null);
+                }}
+              >
+                Back to Preview
+              </Button>
+            ) : (
+              <Button 
+                variant="secondary" 
+                onClick={runDryRun} 
+                disabled={isImporting || isValidating || !isConnected}
+              >
+                {isValidating ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Validating...
+                  </>
+                ) : (
+                  <>
+                    <AlertTriangle className="w-4 h-4 mr-2" />
+                    Dry Run
+                  </>
+                )}
+              </Button>
+            )}
+            <Button 
+              onClick={startImport} 
+              disabled={isImporting || isValidating || !isConnected}
+            >
               {isImporting ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />

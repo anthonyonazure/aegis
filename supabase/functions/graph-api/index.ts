@@ -33,6 +33,7 @@ const ImportRequestSchema = z.object({
   action: z.literal('import'),
   accessToken: z.string().min(1, 'Access token required').max(10000, 'Access token too long'),
   importJobId: z.string().uuid('Invalid import job ID format'),
+  dryRun: z.boolean().optional().default(false),
   resources: z.array(z.object({
     resourceType: z.string().min(1),
     resourceName: z.string().optional(),
@@ -528,7 +529,9 @@ serve(async (req) => {
         );
       }
 
-      const { accessToken, importJobId, resources } = parseResult.data;
+      const { accessToken, importJobId, resources, dryRun } = parseResult.data;
+
+      console.log(`Import request: ${resources.length} resources, dryRun=${dryRun}`);
 
       // Create Supabase client to update job progress
       const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -556,10 +559,13 @@ serve(async (req) => {
         success: boolean;
         error?: string;
         createdId?: string;
+        validationErrors?: string[];
+        dryRun?: boolean;
       }> = [];
 
       const errors: Array<{ resource: string; error: string }> = [];
       let imported = 0;
+      let validated = 0;
       const total = resources.length;
 
       for (let i = 0; i < resources.length; i++) {
@@ -571,14 +577,14 @@ serve(async (req) => {
         // Check if import is supported for this resource type
         if (!endpointConfig) {
           const errorMsg = `Unknown resource type: ${resourceKey}`;
-          results.push({ resource: resourceKey, resourceName, success: false, error: errorMsg });
+          results.push({ resource: resourceKey, resourceName, success: false, error: errorMsg, dryRun });
           errors.push({ resource: `${resourceKey}/${resourceName}`, error: errorMsg });
           continue;
         }
 
         if (!endpointConfig.supportsImport || !endpointConfig.createEndpoint) {
           const errorMsg = `Import not supported for resource type: ${resourceKey}`;
-          results.push({ resource: resourceKey, resourceName, success: false, error: errorMsg });
+          results.push({ resource: resourceKey, resourceName, success: false, error: errorMsg, dryRun });
           errors.push({ resource: `${resourceKey}/${resourceName}`, error: errorMsg });
           continue;
         }
@@ -587,47 +593,126 @@ serve(async (req) => {
           // Prepare the data by removing read-only properties
           const cleanedData = prepareResourceForImport(resourceKey, resource.data);
           
-          console.log(`Importing ${resourceKey}/${resourceName}...`);
+          // Validate the data structure
+          const validationErrors: string[] = [];
           
-          // Create the resource via Graph API
-          const createResult = await createGraphResource(
-            accessToken,
-            endpointConfig.createEndpoint,
-            cleanedData,
-            endpointConfig.useBeta
-          );
+          // Basic validation checks
+          if (Object.keys(cleanedData).length === 0) {
+            validationErrors.push('Resource data is empty after cleaning read-only properties');
+          }
+          
+          // Check for required fields based on resource type
+          if (resourceKey.includes('conditional-access/ca-policies')) {
+            if (!cleanedData.displayName) validationErrors.push('displayName is required');
+            if (!cleanedData.state) validationErrors.push('state is required (enabled/disabled/enabledForReportingButNotEnforced)');
+            if (!cleanedData.conditions) validationErrors.push('conditions object is required');
+          } else if (resourceKey.includes('entra-id/groups')) {
+            if (!cleanedData.displayName) validationErrors.push('displayName is required');
+            if (!cleanedData.mailNickname) validationErrors.push('mailNickname is required');
+            if (cleanedData.mailEnabled === undefined) validationErrors.push('mailEnabled is required');
+            if (cleanedData.securityEnabled === undefined) validationErrors.push('securityEnabled is required');
+          } else if (resourceKey.includes('entra-id/app-registrations')) {
+            if (!cleanedData.displayName) validationErrors.push('displayName is required');
+          } else if (resourceKey.includes('intune/device-configurations') || resourceKey.includes('intune/compliance-policies')) {
+            if (!cleanedData.displayName) validationErrors.push('displayName is required');
+            if (!cleanedData['@odata.type']) validationErrors.push('@odata.type is required for Intune policies');
+          }
 
-          if (createResult.success) {
-            imported++;
-            results.push({
-              resource: resourceKey,
-              resourceName,
-              success: true,
-              createdId: createResult.data?.id,
-            });
-            console.log(`Successfully created ${resourceKey}/${resourceName}, ID: ${createResult.data?.id}`);
+          if (dryRun) {
+            // Dry run mode - just validate, don't create
+            if (validationErrors.length > 0) {
+              results.push({
+                resource: resourceKey,
+                resourceName,
+                success: false,
+                error: 'Validation failed',
+                validationErrors,
+                dryRun: true,
+              });
+              errors.push({ resource: `${resourceKey}/${resourceName}`, error: validationErrors.join('; ') });
+            } else {
+              validated++;
+              results.push({
+                resource: resourceKey,
+                resourceName,
+                success: true,
+                dryRun: true,
+              });
+              console.log(`[DRY RUN] Validated ${resourceKey}/${resourceName} - ready for import`);
+            }
           } else {
-            const errorMsg = createResult.error || 'Unknown error';
-            results.push({ resource: resourceKey, resourceName, success: false, error: errorMsg });
-            errors.push({ resource: `${resourceKey}/${resourceName}`, error: errorMsg });
-            console.error(`Failed to create ${resourceKey}/${resourceName}: ${errorMsg}`);
+            // Actual import mode
+            if (validationErrors.length > 0) {
+              // Still try to import but log the warnings
+              console.warn(`Validation warnings for ${resourceKey}/${resourceName}:`, validationErrors);
+            }
+            
+            console.log(`Importing ${resourceKey}/${resourceName}...`);
+            
+            // Create the resource via Graph API
+            const createResult = await createGraphResource(
+              accessToken,
+              endpointConfig.createEndpoint,
+              cleanedData,
+              endpointConfig.useBeta
+            );
+
+            if (createResult.success) {
+              imported++;
+              results.push({
+                resource: resourceKey,
+                resourceName,
+                success: true,
+                createdId: createResult.data?.id,
+                dryRun: false,
+              });
+              console.log(`Successfully created ${resourceKey}/${resourceName}, ID: ${createResult.data?.id}`);
+            } else {
+              const errorMsg = createResult.error || 'Unknown error';
+              results.push({ resource: resourceKey, resourceName, success: false, error: errorMsg, dryRun: false });
+              errors.push({ resource: `${resourceKey}/${resourceName}`, error: errorMsg });
+              console.error(`Failed to create ${resourceKey}/${resourceName}: ${errorMsg}`);
+            }
           }
         } catch (error: unknown) {
           const errorMsg = sanitizeError(error);
-          results.push({ resource: resourceKey, resourceName, success: false, error: errorMsg });
+          results.push({ resource: resourceKey, resourceName, success: false, error: errorMsg, dryRun });
           errors.push({ resource: `${resourceKey}/${resourceName}`, error: errorMsg });
-          console.error(`Exception importing ${resourceKey}/${resourceName}:`, error);
+          console.error(`Exception ${dryRun ? 'validating' : 'importing'} ${resourceKey}/${resourceName}:`, error);
         }
 
-        // Update progress every resource
-        const progress = Math.round(((i + 1) / total) * 100);
+        // Update progress every resource (only for actual imports)
+        if (!dryRun) {
+          await supabase
+            .from('import_jobs')
+            .update({ 
+              resources_imported: imported,
+              resources_failed: errors.length,
+            })
+            .eq('id', importJobId);
+        }
+      }
+
+      // For dry run, don't update the job status permanently
+      if (dryRun) {
+        // Delete the dry-run job since it was just for validation
         await supabase
           .from('import_jobs')
-          .update({ 
-            resources_imported: imported,
-            resources_failed: errors.length,
-          })
+          .delete()
           .eq('id', importJobId);
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            dryRun: true,
+            results,
+            validated,
+            failed: errors.length,
+            total,
+            status: errors.length === 0 ? 'valid' : errors.length === total ? 'invalid' : 'partial',
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
 
       // Determine final status
@@ -657,6 +742,7 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({
           success: true,
+          dryRun: false,
           results,
           imported,
           failed: errors.length,
