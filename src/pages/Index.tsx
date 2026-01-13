@@ -7,6 +7,8 @@ import { ExportView } from '@/components/views/ExportView';
 import { AuthView } from '@/components/views/AuthView';
 import { GitView } from '@/components/views/GitView';
 import { JobsView } from '@/components/views/JobsView';
+import { ImportView } from '@/components/views/ImportView';
+import { ValidationView } from '@/components/views/ValidationView';
 import { PreflightCheckDialog } from '@/components/PreflightCheckDialog';
 import { RESOURCE_CATEGORIES, ExportFormat } from '@/types/tenant';
 import { filterSupportedResourceIds } from '@/lib/resourceSupport';
@@ -219,6 +221,10 @@ const Index = () => {
         );
       case 'jobs':
         return <JobsView />;
+      case 'import':
+        return <ImportView />;
+      case 'validation':
+        return <ValidationView />;
       case 'git':
         return <GitView />;
       case 'auth':

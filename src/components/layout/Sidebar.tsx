@@ -9,7 +9,9 @@ import {
   Key,
   ChevronLeft,
   ChevronRight,
-  Shield
+  Shield,
+  Upload,
+  ShieldCheck
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -24,6 +26,8 @@ const navItems: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'resources', label: 'Resources', icon: FolderTree },
   { id: 'export', label: 'Export', icon: Download },
+  { id: 'import', label: 'Import / Restore', icon: Upload },
+  { id: 'validation', label: 'Validation', icon: ShieldCheck },
   { id: 'jobs', label: 'Export Jobs', icon: History },
   { id: 'git', label: 'Git & CI/CD', icon: GitBranch },
   { id: 'auth', label: 'Authentication', icon: Key },
