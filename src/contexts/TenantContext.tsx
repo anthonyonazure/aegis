@@ -127,7 +127,10 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
 
   // Get a valid token, refreshing if needed
   const getValidToken = useCallback(async (): Promise<string | null> => {
-    if (!state.connectionId) return null;
+    if (!state.connectionId) {
+      console.log('getValidToken: No connection ID');
+      return null;
+    }
 
     // Check if current token is still valid
     if (state.accessToken && state.tokenExpiry) {
@@ -140,13 +143,21 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    // Token is missing or about to expire, refresh it
+    // Token is missing or about to expire, try to refresh it
     if (state.hasStoredCredentials) {
+      console.log('getValidToken: Refreshing token with stored credentials...');
       return await refreshToken();
     }
 
+    // No stored credentials - user needs to reconnect
+    console.warn('getValidToken: No stored credentials available, user must reconnect');
+    toast({
+      title: 'Credentials Required',
+      description: 'Your session has expired. Please disconnect and reconnect with your credentials.',
+      variant: 'destructive',
+    });
     return null;
-  }, [state.accessToken, state.tokenExpiry, state.connectionId, state.hasStoredCredentials, refreshToken]);
+  }, [state.accessToken, state.tokenExpiry, state.connectionId, state.hasStoredCredentials, refreshToken, toast]);
 
   const connect = useCallback(async (
     tenantId: string,
@@ -178,11 +189,27 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
       });
 
       // Store encrypted credentials server-side for future sessions
+      // This is required for token refresh to work
       try {
         await storeEncryptedCredential(connection.id, clientId, clientSecret);
       } catch (credError) {
         console.error('Failed to store credentials:', credError);
-        // Continue - credentials storage is optional enhancement
+        toast({
+          title: 'Warning',
+          description: 'Credentials could not be stored. You may need to reconnect after the session expires.',
+          variant: 'destructive',
+        });
+        // Continue but mark as no stored credentials
+        setState({
+          isConnected: true,
+          tenantId: result.tenantId || tenantId,
+          tenantName: result.tenantName || null,
+          connectionId: connection.id,
+          accessToken: result.accessToken,
+          tokenExpiry: new Date(Date.now() + (result.expiresIn || 3600) * 1000),
+          hasStoredCredentials: false,
+        });
+        return result;
       }
 
       const tokenExpiry = new Date(Date.now() + (result.expiresIn || 3600) * 1000);
