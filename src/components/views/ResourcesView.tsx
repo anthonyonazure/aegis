@@ -6,7 +6,8 @@ import {
   Check, 
   Search,
   Filter,
-  Layers
+  Layers,
+  ArrowRight
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -21,12 +22,14 @@ interface ResourcesViewProps {
   selectedResources: string[];
   onResourceSelect: (resourceId: string) => void;
   onSelectAll: (categoryId: string) => void;
+  onNavigateToExport?: () => void;
 }
 
 export const ResourcesView = ({ 
   selectedResources, 
   onResourceSelect, 
-  onSelectAll 
+  onSelectAll,
+  onNavigateToExport
 }: ResourcesViewProps) => {
   const [expandedCategories, setExpandedCategories] = useState<string[]>(['intune']);
   const [searchQuery, setSearchQuery] = useState('');
@@ -98,10 +101,16 @@ export const ResourcesView = ({
             Select the resources you want to export from your M365 tenant
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <Badge variant="outline" className="px-3 py-1">
             {selectedCount} / {totalResources} selected
           </Badge>
+          {selectedCount > 0 && onNavigateToExport && (
+            <Button onClick={onNavigateToExport} className="gap-2">
+              Next: Export
+              <ArrowRight className="w-4 h-4" />
+            </Button>
+          )}
         </div>
       </div>
 

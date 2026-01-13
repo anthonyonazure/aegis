@@ -173,6 +173,7 @@ const Index = () => {
             selectedResources={selectedResources}
             onResourceSelect={handleResourceSelect}
             onSelectAll={handleSelectAll}
+            onNavigateToExport={() => setActiveTab('export')}
           />
         );
       case 'export':
