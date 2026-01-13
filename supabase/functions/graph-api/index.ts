@@ -355,17 +355,32 @@ serve(async (req) => {
           .eq('id', exportJobId);
       }
 
-      // Mark job as completed
+      // Mark job as completed (status values must match DB constraint)
       const hasErrors = results.some(r => !r.success);
-      await supabase
+
+      const completionUpdate = {
+        status: 'completed',
+        progress: 100,
+        completed_at: new Date().toISOString(),
+        metadata: { results },
+        error: hasErrors ? 'Completed with errors. See results in metadata.' : null,
+      };
+
+      const { error: completionError } = await supabase
         .from('export_jobs')
-        .update({
-          status: hasErrors ? 'completed_with_errors' : 'completed',
-          progress: 100,
-          completed_at: new Date().toISOString(),
-          metadata: { results },
-        })
+        .update(completionUpdate)
         .eq('id', exportJobId);
+
+      if (completionError) {
+        console.error('Failed to finalize export job:', completionError);
+        await supabase
+          .from('export_jobs')
+          .update({
+            status: 'failed',
+            error: 'Failed to finalize export job. Please try again.',
+          })
+          .eq('id', exportJobId);
+      }
 
       return new Response(
         JSON.stringify({
