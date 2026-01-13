@@ -282,9 +282,13 @@ export function PreflightCheckDialog({
                           <Badge variant="outline" className="text-destructive border-destructive/30 text-xs">
                             Missing Permission
                           </Badge>
-                          <p className="text-xs text-destructive font-mono">
-                            {res.missingPermissions.join(', ')}
-                          </p>
+                          <div className="flex flex-col gap-0.5">
+                            {res.missingPermissions.map((perm) => (
+                              <code key={perm} className="text-xs text-destructive font-mono bg-destructive/10 px-1.5 py-0.5 rounded">
+                                {perm}
+                              </code>
+                            ))}
+                          </div>
                         </div>
                       )}
                     </div>
