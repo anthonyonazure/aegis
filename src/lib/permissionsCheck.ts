@@ -153,6 +153,101 @@ export const PERMISSION_REQUIREMENTS: PermissionRequirement[] = [
     requiredPermissions: ['InformationProtectionPolicy.Read.All'],
     alternativePermissions: ['InformationProtectionPolicy.Read'],
   },
+  
+  // Exchange Online
+  {
+    resourceId: 'exchange/transport-rules',
+    resourceName: 'Transport Rules',
+    requiredPermissions: ['Mail.Read'],
+    alternativePermissions: ['Mail.ReadWrite', 'MailboxSettings.Read'],
+  },
+  {
+    resourceId: 'exchange/connectors',
+    resourceName: 'Connectors',
+    requiredPermissions: ['Mail.Read'],
+    alternativePermissions: ['Mail.ReadWrite'],
+  },
+  {
+    resourceId: 'exchange/accepted-domains',
+    resourceName: 'Accepted Domains',
+    requiredPermissions: ['Domain.Read.All'],
+    alternativePermissions: ['Directory.Read.All'],
+  },
+  {
+    resourceId: 'exchange/mailbox-policies',
+    resourceName: 'Mailbox Policies',
+    requiredPermissions: ['MailboxSettings.Read'],
+    alternativePermissions: ['MailboxSettings.ReadWrite'],
+  },
+  {
+    resourceId: 'exchange/anti-spam',
+    resourceName: 'Anti-Spam Policies',
+    requiredPermissions: ['SecurityEvents.Read.All'],
+    alternativePermissions: ['SecurityEvents.ReadWrite.All'],
+  },
+  {
+    resourceId: 'exchange/dlp-policies',
+    resourceName: 'DLP Policies',
+    requiredPermissions: ['InformationProtectionPolicy.Read.All'],
+    alternativePermissions: ['InformationProtectionPolicy.Read'],
+  },
+  
+  // SharePoint
+  {
+    resourceId: 'sharepoint/tenant-settings',
+    resourceName: 'Tenant Settings',
+    requiredPermissions: ['Sites.Read.All'],
+    alternativePermissions: ['Sites.ReadWrite.All'],
+  },
+  {
+    resourceId: 'sharepoint/sharing-policies',
+    resourceName: 'Sharing Policies',
+    requiredPermissions: ['Sites.Read.All'],
+    alternativePermissions: ['Sites.ReadWrite.All'],
+  },
+  {
+    resourceId: 'sharepoint/site-templates',
+    resourceName: 'Site Templates',
+    requiredPermissions: ['Sites.Read.All'],
+    alternativePermissions: ['Sites.ReadWrite.All'],
+  },
+  {
+    resourceId: 'sharepoint/hub-sites',
+    resourceName: 'Hub Sites',
+    requiredPermissions: ['Sites.Read.All'],
+    alternativePermissions: ['Sites.ReadWrite.All'],
+  },
+  
+  // Teams
+  {
+    resourceId: 'teams/messaging-policies',
+    resourceName: 'Messaging Policies',
+    requiredPermissions: ['TeamSettings.Read.All'],
+    alternativePermissions: ['TeamSettings.ReadWrite.All'],
+  },
+  {
+    resourceId: 'teams/meeting-policies',
+    resourceName: 'Meeting Policies',
+    requiredPermissions: ['TeamSettings.Read.All'],
+    alternativePermissions: ['TeamSettings.ReadWrite.All'],
+  },
+  {
+    resourceId: 'teams/app-policies',
+    resourceName: 'App Permission Policies',
+    requiredPermissions: ['AppCatalog.Read.All'],
+    alternativePermissions: ['AppCatalog.ReadWrite.All'],
+  },
+  {
+    resourceId: 'teams/calling-policies',
+    resourceName: 'Calling Policies',
+    requiredPermissions: ['CallRecords.Read.All'],
+  },
+  {
+    resourceId: 'teams/live-event-policies',
+    resourceName: 'Live Event Policies',
+    requiredPermissions: ['TeamSettings.Read.All'],
+    alternativePermissions: ['TeamSettings.ReadWrite.All'],
+  },
 ];
 
 export interface PreflightResult {

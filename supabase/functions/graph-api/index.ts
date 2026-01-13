@@ -94,6 +94,27 @@ const GRAPH_ENDPOINTS: Record<string, { endpoint: string; useBeta?: boolean }> =
   
   // Purview
   'purview/sensitivity-labels': { endpoint: '/security/informationProtection/sensitivityLabels', useBeta: true },
+  
+  // Exchange Online (via Graph API where available)
+  'exchange/transport-rules': { endpoint: '/admin/exchange/transportRules', useBeta: true },
+  'exchange/connectors': { endpoint: '/admin/exchange/connectors', useBeta: true },
+  'exchange/accepted-domains': { endpoint: '/domains' },
+  'exchange/mailbox-policies': { endpoint: '/admin/exchange/mailboxSettings', useBeta: true },
+  'exchange/anti-spam': { endpoint: '/admin/exchange/hostedContentFilterPolicy', useBeta: true },
+  'exchange/dlp-policies': { endpoint: '/security/dataLossPreventionPolicies', useBeta: true },
+  
+  // SharePoint & OneDrive
+  'sharepoint/tenant-settings': { endpoint: '/admin/sharepoint/settings', useBeta: true },
+  'sharepoint/sharing-policies': { endpoint: '/admin/sharepoint/settings', useBeta: true },
+  'sharepoint/site-templates': { endpoint: '/sites?search=*&$select=id,displayName,webUrl,siteCollection', useBeta: false },
+  'sharepoint/hub-sites': { endpoint: '/sites?$filter=isHubSite eq true', useBeta: true },
+  
+  // Teams
+  'teams/messaging-policies': { endpoint: '/teamwork/teamTemplates', useBeta: true },
+  'teams/meeting-policies': { endpoint: '/teamwork/teamTemplates', useBeta: true },
+  'teams/app-policies': { endpoint: '/appCatalogs/teamsApps', useBeta: false },
+  'teams/calling-policies': { endpoint: '/communications/callRecords', useBeta: true },
+  'teams/live-event-policies': { endpoint: '/teamwork/teamTemplates', useBeta: true },
 };
 
 async function verifyAuth(req: Request): Promise<{ userId: string } | { error: string; status: number }> {
