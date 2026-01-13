@@ -14,7 +14,10 @@ import {
   ShieldCheck,
   GitCompare,
   FileText,
-  AlertTriangle
+  AlertTriangle,
+  Calendar,
+  Webhook,
+  BarChart3,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -33,7 +36,10 @@ const navItems: NavItem[] = [
   { id: 'validation', label: 'Validation', icon: ShieldCheck },
   { id: 'drift', label: 'Drift Detection', icon: GitCompare },
   { id: 'compliance', label: 'Compliance', icon: AlertTriangle },
+  { id: 'compliance-dashboard', label: 'Compliance Dashboard', icon: BarChart3 },
   { id: 'audit', label: 'Audit Trail', icon: FileText },
+  { id: 'schedules', label: 'Scheduled Exports', icon: Calendar },
+  { id: 'webhooks', label: 'Webhooks', icon: Webhook },
   { id: 'jobs', label: 'Export Jobs', icon: History },
   { id: 'git', label: 'Git & CI/CD', icon: GitBranch },
   { id: 'auth', label: 'Authentication', icon: Key },

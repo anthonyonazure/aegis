@@ -11,7 +11,10 @@ import { ImportView } from '@/components/views/ImportView';
 import { ValidationView } from '@/components/views/ValidationView';
 import { DriftDetectionView } from '@/components/views/DriftDetectionView';
 import { ComplianceView } from '@/components/views/ComplianceView';
+import { ComplianceDashboardView } from '@/components/views/ComplianceDashboardView';
 import { AuditView } from '@/components/views/AuditView';
+import { ScheduledExportsView } from '@/components/views/ScheduledExportsView';
+import { WebhooksView } from '@/components/views/WebhooksView';
 import { PreflightCheckDialog } from '@/components/PreflightCheckDialog';
 import { RESOURCE_CATEGORIES, ExportFormat } from '@/types/tenant';
 import { filterSupportedResourceIds } from '@/lib/resourceSupport';
@@ -232,8 +235,14 @@ const Index = () => {
         return <DriftDetectionView />;
       case 'compliance':
         return <ComplianceView />;
+      case 'compliance-dashboard':
+        return <ComplianceDashboardView />;
       case 'audit':
         return <AuditView />;
+      case 'schedules':
+        return <ScheduledExportsView />;
+      case 'webhooks':
+        return <WebhooksView />;
       case 'git':
         return <GitView />;
       case 'auth':
