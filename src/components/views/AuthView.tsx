@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { 
   Key, 
@@ -46,8 +46,14 @@ export const AuthView = ({ onConnectionChange }: AuthViewProps) => {
     tenantId: connectedTenantId,
     isConnecting, 
     connect, 
-    disconnect 
+    disconnect,
+    checkExistingConnection 
   } = useTenantConnection();
+
+  // Check for existing connection on mount
+  useEffect(() => {
+    checkExistingConnection();
+  }, [checkExistingConnection]);
 
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
