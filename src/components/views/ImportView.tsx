@@ -80,6 +80,13 @@ function supportsImport(resourceType: string): boolean {
   return getSupportedImportTypes().has(resourceType);
 }
 
+interface ImportJobMetadata {
+  createdResources?: Array<{ resourceType: string; resourceId: string; resourceName: string }>;
+  canRollback?: boolean;
+  rollbackResults?: Array<{ resourceType: string; resourceId: string; resourceName: string; success: boolean; error?: string }>;
+  rollbackCompletedAt?: string;
+}
+
 interface ImportJob {
   id: string;
   name: string;
@@ -92,6 +99,7 @@ interface ImportJob {
   errors: Array<{ resource: string; error: string }>;
   created_at: string;
   completed_at: string | null;
+  metadata?: ImportJobMetadata;
 }
 
 interface ExportJob {
@@ -133,6 +141,8 @@ export const ImportView = () => {
   const [deleteJobId, setDeleteJobId] = useState<string | null>(null);
   const [validationResults, setValidationResults] = useState<ValidationResult[] | null>(null);
   const [showValidationResults, setShowValidationResults] = useState(false);
+  const [rollbackJobId, setRollbackJobId] = useState<string | null>(null);
+  const [isRollingBack, setIsRollingBack] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -158,7 +168,8 @@ export const ImportView = () => {
 
       setImportJobs((importRes.data || []).map(job => ({
         ...job,
-        errors: Array.isArray(job.errors) ? job.errors as unknown as Array<{ resource: string; error: string }> : []
+        errors: Array.isArray(job.errors) ? job.errors as unknown as Array<{ resource: string; error: string }> : [],
+        metadata: job.metadata as ImportJobMetadata | undefined,
       })));
       setExportJobs(exportRes.data || []);
     } catch (error) {
@@ -559,6 +570,69 @@ export const ImportView = () => {
     }
   };
 
+  const handleRollback = async () => {
+    if (!rollbackJobId || !isConnected) return;
+
+    const token = await getValidToken();
+    if (!token) {
+      toast({
+        title: 'Session Expired',
+        description: 'Please reconnect to the tenant',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsRollingBack(true);
+
+    try {
+      const { data: rollbackResult, error: rollbackError } = await supabase.functions.invoke('graph-api', {
+        body: {
+          action: 'rollback',
+          accessToken: token,
+          importJobId: rollbackJobId,
+        },
+      });
+
+      if (rollbackError) {
+        throw new Error('Rollback failed. Please try again.');
+      }
+
+      const result = rollbackResult as {
+        success: boolean;
+        deleted: number;
+        failed: number;
+        total: number;
+        status: string;
+      };
+
+      if (result.status === 'rolled_back') {
+        toast({
+          title: 'Rollback Complete',
+          description: `Successfully deleted ${result.deleted} resource(s) from your tenant.`,
+        });
+      } else {
+        toast({
+          title: 'Rollback Partially Completed',
+          description: `Deleted ${result.deleted}/${result.total} resources. ${result.failed} failed.`,
+          variant: 'destructive',
+        });
+      }
+
+      setRollbackJobId(null);
+      await loadData();
+    } catch (error) {
+      console.error('Rollback failed:', error);
+      toast({
+        title: 'Rollback Failed',
+        description: error instanceof Error ? error.message : 'Unknown error',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsRollingBack(false);
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'completed':
@@ -569,6 +643,10 @@ export const ImportView = () => {
         return <Badge className="bg-red-500/20 text-red-400"><XCircle className="w-3 h-3 mr-1" /> Failed</Badge>;
       case 'partial':
         return <Badge className="bg-yellow-500/20 text-yellow-400"><AlertTriangle className="w-3 h-3 mr-1" /> Partial</Badge>;
+      case 'rolled_back':
+        return <Badge className="bg-purple-500/20 text-purple-400"><RefreshCw className="w-3 h-3 mr-1" /> Rolled Back</Badge>;
+      case 'rollback_partial':
+        return <Badge className="bg-orange-500/20 text-orange-400"><AlertTriangle className="w-3 h-3 mr-1" /> Rollback Partial</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
@@ -714,12 +792,18 @@ export const ImportView = () => {
                         animate={{ opacity: 1, y: 0 }}
                         className="flex items-center justify-between p-4 rounded-lg bg-muted/30 border border-border/50"
                       >
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
+                        <div className="space-y-1 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-medium text-foreground">{job.name}</span>
                             {getStatusBadge(job.status)}
+                            {job.metadata?.canRollback && (
+                              <Badge className="bg-orange-500/20 text-orange-400">
+                                <RefreshCw className="w-3 h-3 mr-1" />
+                                Can Rollback
+                              </Badge>
+                            )}
                           </div>
-                          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                          <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
                             <span>{format(new Date(job.created_at), 'MMM d, yyyy HH:mm')}</span>
                             <span>
                               {job.resources_imported}/{job.resources_total} imported
@@ -727,15 +811,33 @@ export const ImportView = () => {
                             {job.resources_failed > 0 && (
                               <span className="text-red-400">{job.resources_failed} failed</span>
                             )}
+                            {job.metadata?.createdResources && job.metadata.createdResources.length > 0 && (
+                              <span className="text-muted-foreground">
+                                {job.metadata.createdResources.length} created
+                              </span>
+                            )}
                           </div>
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => setDeleteJobId(job.id)}
-                        >
-                          <Trash2 className="w-4 h-4 text-muted-foreground hover:text-destructive" />
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          {job.metadata?.canRollback && isConnected && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setRollbackJobId(job.id)}
+                              className="text-orange-400 border-orange-500/50 hover:bg-orange-500/10"
+                            >
+                              <RefreshCw className="w-4 h-4 mr-2" />
+                              Rollback
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setDeleteJobId(job.id)}
+                          >
+                            <Trash2 className="w-4 h-4 text-muted-foreground hover:text-destructive" />
+                          </Button>
+                        </div>
                       </motion.div>
                     ))}
                   </div>
@@ -993,6 +1095,43 @@ export const ImportView = () => {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleDeleteJob}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Rollback Confirmation */}
+      <AlertDialog open={!!rollbackJobId} onOpenChange={() => !isRollingBack && setRollbackJobId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Rollback Import</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <p>
+                This will <strong>permanently delete</strong> all resources that were created during this import from your Microsoft 365 tenant.
+              </p>
+              <p className="text-yellow-400">
+                ⚠️ This action cannot be undone. Make sure you want to remove these resources before proceeding.
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isRollingBack}>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleRollback}
+              disabled={isRollingBack}
+              className="bg-orange-600 hover:bg-orange-700"
+            >
+              {isRollingBack ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Rolling Back...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Rollback
+                </>
+              )}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

@@ -41,6 +41,13 @@ const ImportRequestSchema = z.object({
   })).min(1, 'At least one resource required').max(100, 'Too many resources'),
 });
 
+// Schema for rollback requests
+const RollbackRequestSchema = z.object({
+  action: z.literal('rollback'),
+  accessToken: z.string().min(1, 'Access token required').max(10000, 'Access token too long'),
+  importJobId: z.string().uuid('Invalid import job ID format'),
+});
+
 // Error sanitization function
 function sanitizeError(error: unknown): string {
   const errorMessage = error instanceof Error ? error.message : String(error);
@@ -209,6 +216,41 @@ async function createGraphResource(
     return { success: true, data: responseData };
   } catch (error) {
     console.error(`Error creating resource at ${endpoint}:`, error);
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
+
+// Delete a resource via Graph API
+async function deleteGraphResource(
+  accessToken: string, 
+  endpoint: string, 
+  resourceId: string,
+  useBeta: boolean = false
+): Promise<{ success: boolean; error?: string }> {
+  const baseUrl = useBeta ? 'https://graph.microsoft.com/beta' : 'https://graph.microsoft.com/v1.0';
+  const graphUrl = `${baseUrl}${endpoint}/${resourceId}`;
+
+  try {
+    console.log(`Deleting resource at ${graphUrl}`);
+    const response = await fetch(graphUrl, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    // 204 No Content is success for DELETE
+    if (response.status === 204 || response.ok) {
+      return { success: true };
+    }
+
+    const responseData = await response.json().catch(() => ({}));
+    console.error('Graph API delete error:', JSON.stringify(responseData));
+    const errorMessage = responseData.error?.message || `API_ERROR_${response.status}`;
+    return { success: false, error: errorMessage };
+  } catch (error) {
+    console.error(`Error deleting resource at ${endpoint}/${resourceId}:`, error);
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
 }
@@ -723,7 +765,16 @@ serve(async (req) => {
         status = 'partial';
       }
 
-      // Update job with final status
+      // Collect created resource IDs for potential rollback
+      const createdResources = results
+        .filter(r => r.success && r.createdId && !r.dryRun)
+        .map(r => ({
+          resourceType: r.resource,
+          resourceId: r.createdId,
+          resourceName: r.resourceName,
+        }));
+
+      // Update job with final status and store created resources for rollback
       const { error: updateError } = await supabase
         .from('import_jobs')
         .update({
@@ -732,6 +783,10 @@ serve(async (req) => {
           resources_failed: errors.length,
           errors: errors,
           completed_at: new Date().toISOString(),
+          metadata: { 
+            createdResources,
+            canRollback: createdResources.length > 0,
+          },
         })
         .eq('id', importJobId);
 
@@ -748,6 +803,146 @@ serve(async (req) => {
           failed: errors.length,
           total,
           status,
+          canRollback: createdResources.length > 0,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Handle rollback action - delete resources created during import
+    if (rawBody.action === 'rollback') {
+      const parseResult = RollbackRequestSchema.safeParse(rawBody);
+      if (!parseResult.success) {
+        console.error('Validation error:', parseResult.error.errors);
+        return new Response(
+          JSON.stringify({ error: 'Invalid request parameters' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const { accessToken, importJobId } = parseResult.data;
+
+      // Create Supabase client
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+      const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+      const supabase = createClient(supabaseUrl, supabaseKey);
+
+      // Get import job with metadata
+      const { data: jobData, error: jobError } = await supabase
+        .from('import_jobs')
+        .select('user_id, metadata, status')
+        .eq('id', importJobId)
+        .single();
+
+      if (jobError || !jobData) {
+        console.error('Import job not found:', jobError);
+        return new Response(
+          JSON.stringify({ error: 'Import job not found' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      if (jobData.user_id !== userId) {
+        return new Response(
+          JSON.stringify({ error: 'Access denied' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const metadata = jobData.metadata as { 
+        createdResources?: Array<{ resourceType: string; resourceId: string; resourceName: string }>;
+        canRollback?: boolean;
+      } | null;
+
+      if (!metadata?.createdResources || metadata.createdResources.length === 0) {
+        return new Response(
+          JSON.stringify({ error: 'No resources to rollback', canRollback: false }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      console.log(`Rolling back ${metadata.createdResources.length} resources...`);
+
+      const rollbackResults: Array<{
+        resourceType: string;
+        resourceId: string;
+        resourceName: string;
+        success: boolean;
+        error?: string;
+      }> = [];
+
+      let deleted = 0;
+      const total = metadata.createdResources.length;
+
+      for (const resource of metadata.createdResources) {
+        const endpointConfig = GRAPH_ENDPOINTS[resource.resourceType];
+        
+        if (!endpointConfig || !endpointConfig.createEndpoint) {
+          rollbackResults.push({
+            ...resource,
+            success: false,
+            error: 'Unknown resource type or no delete endpoint',
+          });
+          continue;
+        }
+
+        try {
+          const deleteResult = await deleteGraphResource(
+            accessToken,
+            endpointConfig.createEndpoint,
+            resource.resourceId,
+            endpointConfig.useBeta
+          );
+
+          if (deleteResult.success) {
+            deleted++;
+            rollbackResults.push({
+              ...resource,
+              success: true,
+            });
+            console.log(`Deleted ${resource.resourceType}/${resource.resourceName} (${resource.resourceId})`);
+          } else {
+            rollbackResults.push({
+              ...resource,
+              success: false,
+              error: deleteResult.error,
+            });
+            console.error(`Failed to delete ${resource.resourceType}/${resource.resourceName}: ${deleteResult.error}`);
+          }
+        } catch (error: unknown) {
+          const errorMsg = sanitizeError(error);
+          rollbackResults.push({
+            ...resource,
+            success: false,
+            error: errorMsg,
+          });
+          console.error(`Exception deleting ${resource.resourceType}/${resource.resourceName}:`, error);
+        }
+      }
+
+      // Update job status to rolled back
+      const rollbackStatus = deleted === total ? 'rolled_back' : 'rollback_partial';
+      await supabase
+        .from('import_jobs')
+        .update({
+          status: rollbackStatus,
+          metadata: {
+            ...metadata,
+            rollbackResults,
+            rollbackCompletedAt: new Date().toISOString(),
+            canRollback: false,
+          },
+        })
+        .eq('id', importJobId);
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          deleted,
+          failed: total - deleted,
+          total,
+          results: rollbackResults,
+          status: rollbackStatus,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
