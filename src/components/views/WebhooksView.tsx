@@ -221,14 +221,45 @@ export const WebhooksView = () => {
     }
   };
 
+  const [testingWebhook, setTestingWebhook] = useState<string | null>(null);
+
   const testWebhook = async (webhook: WebhookConfig) => {
-    toast({
-      title: 'Test Sent',
-      description: 'A test payload has been queued for delivery',
-    });
-    
-    // In a real implementation, this would call an edge function
-    // that sends a test payload to the webhook URL
+    setTestingWebhook(webhook.id);
+    try {
+      const testEvent = webhook.events[0] || 'export.completed';
+      
+      const { data, error } = await supabase.functions.invoke('send-webhook', {
+        body: {
+          event: testEvent,
+          data: {
+            test: true,
+            webhook_id: webhook.id,
+            webhook_name: webhook.name,
+            message: 'This is a test webhook delivery from M365 Config Manager',
+            timestamp: new Date().toISOString(),
+          },
+        },
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: 'Test Delivered',
+        description: `Test payload sent successfully to ${webhook.name}`,
+      });
+
+      // Refresh logs to show the test delivery
+      await loadData();
+    } catch (error) {
+      console.error('Failed to send test webhook:', error);
+      toast({
+        title: 'Test Failed',
+        description: error instanceof Error ? error.message : 'Failed to send test webhook',
+        variant: 'destructive',
+      });
+    } finally {
+      setTestingWebhook(null);
+    }
   };
 
   const copyUrl = (url: string) => {
@@ -487,9 +518,14 @@ export const WebhooksView = () => {
                               variant="ghost"
                               size="icon"
                               onClick={() => testWebhook(webhook)}
-                              title="Send test"
+                              disabled={testingWebhook === webhook.id}
+                              title="Send test payload"
                             >
-                              <TestTube className="w-4 h-4" />
+                              {testingWebhook === webhook.id ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <TestTube className="w-4 h-4" />
+                              )}
                             </Button>
                             <Switch
                               checked={webhook.is_active}
