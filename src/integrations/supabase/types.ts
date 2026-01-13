@@ -14,6 +14,158 @@ export type Database = {
   }
   public: {
     Tables: {
+      audit_logs: {
+        Row: {
+          action: string
+          created_at: string
+          details: Json | null
+          id: string
+          ip_address: string | null
+          resource_id: string | null
+          resource_type: string | null
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+          ip_address?: string | null
+          resource_id?: string | null
+          resource_type?: string | null
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+          ip_address?: string | null
+          resource_id?: string | null
+          resource_type?: string | null
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      compliance_results: {
+        Row: {
+          baseline_name: string
+          completed_at: string | null
+          created_at: string
+          export_job_id: string | null
+          failed_count: number
+          id: string
+          passed_count: number
+          results: Json | null
+          status: string
+          total_checks: number
+          user_id: string
+          warning_count: number
+        }
+        Insert: {
+          baseline_name: string
+          completed_at?: string | null
+          created_at?: string
+          export_job_id?: string | null
+          failed_count?: number
+          id?: string
+          passed_count?: number
+          results?: Json | null
+          status?: string
+          total_checks?: number
+          user_id: string
+          warning_count?: number
+        }
+        Update: {
+          baseline_name?: string
+          completed_at?: string | null
+          created_at?: string
+          export_job_id?: string | null
+          failed_count?: number
+          id?: string
+          passed_count?: number
+          results?: Json | null
+          status?: string
+          total_checks?: number
+          user_id?: string
+          warning_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "compliance_results_export_job_id_fkey"
+            columns: ["export_job_id"]
+            isOneToOne: false
+            referencedRelation: "export_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      drift_detections: {
+        Row: {
+          added_count: number
+          baseline_export_id: string | null
+          completed_at: string | null
+          created_at: string
+          drift_details: Json | null
+          id: string
+          modified_count: number
+          removed_count: number
+          status: string
+          tenant_connection_id: string | null
+          total_resources: number
+          unchanged_count: number
+          user_id: string
+        }
+        Insert: {
+          added_count?: number
+          baseline_export_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          drift_details?: Json | null
+          id?: string
+          modified_count?: number
+          removed_count?: number
+          status?: string
+          tenant_connection_id?: string | null
+          total_resources?: number
+          unchanged_count?: number
+          user_id: string
+        }
+        Update: {
+          added_count?: number
+          baseline_export_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          drift_details?: Json | null
+          id?: string
+          modified_count?: number
+          removed_count?: number
+          status?: string
+          tenant_connection_id?: string | null
+          total_resources?: number
+          unchanged_count?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "drift_detections_baseline_export_id_fkey"
+            columns: ["baseline_export_id"]
+            isOneToOne: false
+            referencedRelation: "export_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "drift_detections_tenant_connection_id_fkey"
+            columns: ["tenant_connection_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       export_jobs: {
         Row: {
           categories: string[]

@@ -11,7 +11,10 @@ import {
   ChevronRight,
   Shield,
   Upload,
-  ShieldCheck
+  ShieldCheck,
+  GitCompare,
+  FileText,
+  AlertTriangle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -28,6 +31,9 @@ const navItems: NavItem[] = [
   { id: 'export', label: 'Export', icon: Download },
   { id: 'import', label: 'Import / Restore', icon: Upload },
   { id: 'validation', label: 'Validation', icon: ShieldCheck },
+  { id: 'drift', label: 'Drift Detection', icon: GitCompare },
+  { id: 'compliance', label: 'Compliance', icon: AlertTriangle },
+  { id: 'audit', label: 'Audit Trail', icon: FileText },
   { id: 'jobs', label: 'Export Jobs', icon: History },
   { id: 'git', label: 'Git & CI/CD', icon: GitBranch },
   { id: 'auth', label: 'Authentication', icon: Key },
