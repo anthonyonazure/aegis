@@ -16,9 +16,21 @@ import { getIcon } from '@/lib/icons';
 interface DashboardViewProps {
   onNavigate: (tab: string) => void;
   isConnected?: boolean;
+  selectedResourcesCount?: number;
+  selectedFormatsCount?: number;
+  hasGitConfig?: boolean;
 }
 
-export const DashboardView = ({ onNavigate, isConnected = false }: DashboardViewProps) => {
+export const DashboardView = ({ 
+  onNavigate, 
+  isConnected = false,
+  selectedResourcesCount = 0,
+  selectedFormatsCount = 0,
+  hasGitConfig = false
+}: DashboardViewProps) => {
+  const step2Complete = selectedResourcesCount > 0;
+  const step3Complete = selectedFormatsCount > 0;
+  const step4Complete = hasGitConfig;
   const stats = [
     { label: 'Resource Categories', value: '8', icon: Server, trend: '+2 new' },
     { label: 'Export Formats', value: '4', icon: FileJson, trend: 'JSON, TF, Bicep, PS1' },
@@ -145,34 +157,64 @@ export const DashboardView = ({ onNavigate, isConnected = false }: DashboardView
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="space-y-2">
-                <div className="flex items-center gap-2 text-sm">
+                <button
+                  onClick={() => onNavigate('auth')}
+                  className="w-full flex items-center gap-2 text-sm p-2 rounded-lg hover:bg-secondary/50 transition-colors text-left"
+                >
                   <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
                     isConnected ? 'bg-success/20 text-success' : 'bg-primary/20 text-primary'
                   }`}>
                     {isConnected ? '✓' : '1'}
                   </div>
-                  <span className={isConnected ? 'text-success' : 'text-muted-foreground'}>
+                  <span className={isConnected ? 'text-success' : 'text-foreground'}>
                     Connect to your M365 tenant
                   </span>
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <div className="w-6 h-6 rounded-full bg-secondary flex items-center justify-center text-xs font-medium text-muted-foreground">
-                    2
+                  <ArrowRight className="w-4 h-4 ml-auto text-muted-foreground" />
+                </button>
+                <button
+                  onClick={() => onNavigate('resources')}
+                  className="w-full flex items-center gap-2 text-sm p-2 rounded-lg hover:bg-secondary/50 transition-colors text-left"
+                >
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
+                    step2Complete ? 'bg-success/20 text-success' : 'bg-secondary text-muted-foreground'
+                  }`}>
+                    {step2Complete ? '✓' : '2'}
                   </div>
-                  <span className="text-muted-foreground">Select resources to export</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <div className="w-6 h-6 rounded-full bg-secondary flex items-center justify-center text-xs font-medium text-muted-foreground">
-                    3
+                  <span className={step2Complete ? 'text-success' : 'text-foreground'}>
+                    Select resources to export
+                    {step2Complete && <span className="text-muted-foreground ml-1">({selectedResourcesCount})</span>}
+                  </span>
+                  <ArrowRight className="w-4 h-4 ml-auto text-muted-foreground" />
+                </button>
+                <button
+                  onClick={() => onNavigate('export')}
+                  className="w-full flex items-center gap-2 text-sm p-2 rounded-lg hover:bg-secondary/50 transition-colors text-left"
+                >
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
+                    step3Complete ? 'bg-success/20 text-success' : 'bg-secondary text-muted-foreground'
+                  }`}>
+                    {step3Complete ? '✓' : '3'}
                   </div>
-                  <span className="text-muted-foreground">Choose export formats</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <div className="w-6 h-6 rounded-full bg-secondary flex items-center justify-center text-xs font-medium text-muted-foreground">
-                    4
+                  <span className={step3Complete ? 'text-success' : 'text-foreground'}>
+                    Choose export formats
+                    {step3Complete && <span className="text-muted-foreground ml-1">({selectedFormatsCount})</span>}
+                  </span>
+                  <ArrowRight className="w-4 h-4 ml-auto text-muted-foreground" />
+                </button>
+                <button
+                  onClick={() => onNavigate('git')}
+                  className="w-full flex items-center gap-2 text-sm p-2 rounded-lg hover:bg-secondary/50 transition-colors text-left"
+                >
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
+                    step4Complete ? 'bg-success/20 text-success' : 'bg-secondary text-muted-foreground'
+                  }`}>
+                    {step4Complete ? '✓' : '4'}
                   </div>
-                  <span className="text-muted-foreground">Configure Git & CI/CD</span>
-                </div>
+                  <span className={step4Complete ? 'text-success' : 'text-foreground'}>
+                    Configure Git & CI/CD
+                  </span>
+                  <ArrowRight className="w-4 h-4 ml-auto text-muted-foreground" />
+                </button>
               </div>
               <Button className="w-full mt-4" onClick={() => onNavigate(isConnected ? 'resources' : 'auth')}>
                 {isConnected ? 'Select Resources' : 'Get Started'}

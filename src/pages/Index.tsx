@@ -187,7 +187,14 @@ const Index = () => {
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard':
-        return <DashboardView onNavigate={setActiveTab} isConnected={isConnected} />;
+        return (
+          <DashboardView 
+            onNavigate={setActiveTab} 
+            isConnected={isConnected}
+            selectedResourcesCount={selectedResources.length}
+            selectedFormatsCount={selectedFormats.length}
+          />
+        );
       case 'resources':
         return (
           <ResourcesView 
@@ -225,7 +232,14 @@ const Index = () => {
           </div>
         );
       default:
-        return <DashboardView onNavigate={setActiveTab} isConnected={isConnected} />;
+        return (
+          <DashboardView 
+            onNavigate={setActiveTab} 
+            isConnected={isConnected}
+            selectedResourcesCount={selectedResources.length}
+            selectedFormatsCount={selectedFormats.length}
+          />
+        );
     }
   };
 
