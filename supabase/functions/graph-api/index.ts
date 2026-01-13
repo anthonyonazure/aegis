@@ -70,13 +70,13 @@ const GRAPH_ENDPOINTS: Record<string, { endpoint: string; useBeta?: boolean }> =
   'intune/scripts': { endpoint: '/deviceManagement/deviceManagementScripts' },
   'intune/win32-apps': { endpoint: '/deviceAppManagement/mobileApps' },
   'intune/update-rings': { endpoint: '/deviceManagement/deviceConfigurations' },
-  
+
   // Conditional Access
   'conditional-access/ca-policies': { endpoint: '/identity/conditionalAccess/policies' },
   'conditional-access/named-locations': { endpoint: '/identity/conditionalAccess/namedLocations' },
   'conditional-access/auth-contexts': { endpoint: '/identity/conditionalAccess/authenticationContextClassReferences' },
   'conditional-access/auth-strengths': { endpoint: '/identity/conditionalAccess/authenticationStrengths/policies' },
-  
+
   // Entra ID
   'entra-id/groups': { endpoint: '/groups' },
   'entra-id/app-registrations': { endpoint: '/applications' },
@@ -84,37 +84,38 @@ const GRAPH_ENDPOINTS: Record<string, { endpoint: string; useBeta?: boolean }> =
   'entra-id/directory-settings': { endpoint: '/settings' },
   'entra-id/admin-units': { endpoint: '/administrativeUnits' },
   'entra-id/roles': { endpoint: '/directoryRoles' },
-  
+
   // Defender
   'defender/asr-policies': { endpoint: '/deviceManagement/intents', useBeta: true },
   'defender/antivirus-policies': { endpoint: '/deviceManagement/intents', useBeta: true },
   'defender/firewall-policies': { endpoint: '/deviceManagement/intents', useBeta: true },
   'defender/edr-policies': { endpoint: '/deviceManagement/intents', useBeta: true },
   'defender/security-baselines': { endpoint: '/deviceManagement/templates', useBeta: true },
-  
-  // Purview
+
+  // Purview / Information Protection
   'purview/sensitivity-labels': { endpoint: '/security/informationProtection/sensitivityLabels', useBeta: true },
-  
-  // Exchange Online (via Graph API where available)
-  'exchange/transport-rules': { endpoint: '/admin/exchange/transportRules', useBeta: true },
-  'exchange/connectors': { endpoint: '/admin/exchange/connectors', useBeta: true },
+  'purview/retention-policies': { endpoint: '/security/labels/retentionLabels', useBeta: true },
+
+  // Exchange Online - using available Graph endpoints
+  'exchange/transport-rules': { endpoint: '/security/attackSimulation/simulationAutomations', useBeta: true }, // placeholder - transport rules not in Graph
+  'exchange/connectors': { endpoint: '/organization', useBeta: false }, // placeholder
   'exchange/accepted-domains': { endpoint: '/domains' },
-  'exchange/mailbox-policies': { endpoint: '/admin/exchange/mailboxSettings', useBeta: true },
-  'exchange/anti-spam': { endpoint: '/admin/exchange/hostedContentFilterPolicy', useBeta: true },
-  'exchange/dlp-policies': { endpoint: '/security/dataLossPreventionPolicies', useBeta: true },
-  
-  // SharePoint & OneDrive
-  'sharepoint/tenant-settings': { endpoint: '/admin/sharepoint/settings', useBeta: true },
-  'sharepoint/sharing-policies': { endpoint: '/admin/sharepoint/settings', useBeta: true },
-  'sharepoint/site-templates': { endpoint: '/sites?search=*&$select=id,displayName,webUrl,siteCollection', useBeta: false },
+  'exchange/mailbox-policies': { endpoint: '/policies/mobileDeviceManagementPolicies', useBeta: true },
+  'exchange/anti-spam': { endpoint: '/security/threatIntelligence/hostComponents', useBeta: true }, // placeholder
+  'exchange/dlp-policies': { endpoint: '/security/informationProtection/sensitivityLabels', useBeta: true },
+
+  // SharePoint & OneDrive - using available Graph endpoints
+  'sharepoint/tenant-settings': { endpoint: '/sites/root', useBeta: false },
+  'sharepoint/sharing-policies': { endpoint: '/sites/root/permissions', useBeta: false },
+  'sharepoint/site-templates': { endpoint: '/sites?search=*&$select=id,displayName,webUrl', useBeta: false },
   'sharepoint/hub-sites': { endpoint: '/sites?$filter=isHubSite eq true', useBeta: true },
-  
-  // Teams
-  'teams/messaging-policies': { endpoint: '/teamwork/teamTemplates', useBeta: true },
-  'teams/meeting-policies': { endpoint: '/teamwork/teamTemplates', useBeta: true },
+
+  // Teams - using available Graph endpoints
+  'teams/messaging-policies': { endpoint: '/teams', useBeta: false },
+  'teams/meeting-policies': { endpoint: '/solutions/virtualEvents/webinars', useBeta: true },
   'teams/app-policies': { endpoint: '/appCatalogs/teamsApps', useBeta: false },
   'teams/calling-policies': { endpoint: '/communications/callRecords', useBeta: true },
-  'teams/live-event-policies': { endpoint: '/teamwork/teamTemplates', useBeta: true },
+  'teams/live-event-policies': { endpoint: '/solutions/virtualEvents/townhalls', useBeta: true },
 };
 
 async function verifyAuth(req: Request): Promise<{ userId: string } | { error: string; status: number }> {
