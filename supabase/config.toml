@@ -1,1 +1,10 @@
 project_id = "rcvtxvpyqmfuunnpsqny"
+
+[functions.graph-api]
+verify_jwt = false
+
+[functions.convert-format]
+verify_jwt = false
+
+[functions.run-scheduled-export]
+verify_jwt = false
