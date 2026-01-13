@@ -13,6 +13,8 @@ export interface ResourceSubcategory {
   count?: number;
   graphEndpoint?: string;
   powershellModule?: string;
+  supported?: boolean; // false = "Coming Soon", defaults to true if graphEndpoint exists
+  comingSoonReason?: string;
 }
 
 export interface ExportFormat {
@@ -150,12 +152,12 @@ export const RESOURCE_CATEGORIES: ResourceCategory[] = [
     icon: 'Mail',
     description: 'Mail flow rules, connectors, and organization settings',
     subcategories: [
-      { id: 'transport-rules', name: 'Transport Rules', powershellModule: 'ExchangeOnlineManagement' },
-      { id: 'connectors', name: 'Connectors', powershellModule: 'ExchangeOnlineManagement' },
-      { id: 'accepted-domains', name: 'Accepted Domains', powershellModule: 'ExchangeOnlineManagement' },
-      { id: 'mailbox-policies', name: 'Mailbox Policies', powershellModule: 'ExchangeOnlineManagement' },
-      { id: 'anti-spam', name: 'Anti-Spam Policies', powershellModule: 'ExchangeOnlineManagement' },
-      { id: 'dlp-policies', name: 'DLP Policies', powershellModule: 'ExchangeOnlineManagement' },
+      { id: 'transport-rules', name: 'Transport Rules', powershellModule: 'ExchangeOnlineManagement', supported: false, comingSoonReason: 'Requires PowerShell module' },
+      { id: 'connectors', name: 'Connectors', powershellModule: 'ExchangeOnlineManagement', supported: false, comingSoonReason: 'Requires PowerShell module' },
+      { id: 'accepted-domains', name: 'Accepted Domains', graphEndpoint: '/domains', supported: true },
+      { id: 'mailbox-policies', name: 'Mailbox Policies', powershellModule: 'ExchangeOnlineManagement', supported: false, comingSoonReason: 'Requires PowerShell module' },
+      { id: 'anti-spam', name: 'Anti-Spam Policies', powershellModule: 'ExchangeOnlineManagement', supported: false, comingSoonReason: 'Requires PowerShell module' },
+      { id: 'dlp-policies', name: 'DLP Policies', powershellModule: 'ExchangeOnlineManagement', supported: false, comingSoonReason: 'Requires PowerShell module' },
     ],
     exportFormats: [
       { id: 'json', name: 'JSON', extension: '.json', supported: true },
@@ -170,10 +172,10 @@ export const RESOURCE_CATEGORIES: ResourceCategory[] = [
     icon: 'FolderOpen',
     description: 'Site configurations, sharing settings, and storage policies',
     subcategories: [
-      { id: 'tenant-settings', name: 'Tenant Settings', powershellModule: 'PnP.PowerShell' },
-      { id: 'sharing-policies', name: 'Sharing Policies', powershellModule: 'PnP.PowerShell' },
-      { id: 'site-templates', name: 'Site Templates', powershellModule: 'PnP.PowerShell' },
-      { id: 'hub-sites', name: 'Hub Sites', powershellModule: 'PnP.PowerShell' },
+      { id: 'tenant-settings', name: 'Tenant Settings', powershellModule: 'PnP.PowerShell', supported: false, comingSoonReason: 'Requires PnP PowerShell' },
+      { id: 'sharing-policies', name: 'Sharing Policies', powershellModule: 'PnP.PowerShell', supported: false, comingSoonReason: 'Requires PnP PowerShell' },
+      { id: 'site-templates', name: 'Site Templates', graphEndpoint: '/sites', supported: true },
+      { id: 'hub-sites', name: 'Hub Sites', graphEndpoint: '/sites?$filter=isHubSite eq true', supported: true },
     ],
     exportFormats: [
       { id: 'json', name: 'JSON', extension: '.json', supported: true },
@@ -188,11 +190,11 @@ export const RESOURCE_CATEGORIES: ResourceCategory[] = [
     icon: 'MessageSquare',
     description: 'Teams policies, app permissions, and meeting configurations',
     subcategories: [
-      { id: 'messaging-policies', name: 'Messaging Policies', powershellModule: 'MicrosoftTeams' },
-      { id: 'meeting-policies', name: 'Meeting Policies', powershellModule: 'MicrosoftTeams' },
-      { id: 'app-policies', name: 'App Permission Policies', powershellModule: 'MicrosoftTeams' },
-      { id: 'calling-policies', name: 'Calling Policies', powershellModule: 'MicrosoftTeams' },
-      { id: 'live-event-policies', name: 'Live Event Policies', powershellModule: 'MicrosoftTeams' },
+      { id: 'messaging-policies', name: 'Messaging Policies', powershellModule: 'MicrosoftTeams', supported: false, comingSoonReason: 'Requires Teams PowerShell' },
+      { id: 'meeting-policies', name: 'Meeting Policies', powershellModule: 'MicrosoftTeams', supported: false, comingSoonReason: 'Requires Teams PowerShell' },
+      { id: 'app-policies', name: 'App Permission Policies', graphEndpoint: '/appCatalogs/teamsApps', supported: true },
+      { id: 'calling-policies', name: 'Calling Policies', powershellModule: 'MicrosoftTeams', supported: false, comingSoonReason: 'Requires Teams PowerShell' },
+      { id: 'live-event-policies', name: 'Live Event Policies', powershellModule: 'MicrosoftTeams', supported: false, comingSoonReason: 'Requires Teams PowerShell' },
     ],
     exportFormats: [
       { id: 'json', name: 'JSON', extension: '.json', supported: true },
@@ -207,10 +209,10 @@ export const RESOURCE_CATEGORIES: ResourceCategory[] = [
     icon: 'Eye',
     description: 'Information protection, retention, and compliance settings',
     subcategories: [
-      { id: 'sensitivity-labels', name: 'Sensitivity Labels', graphEndpoint: '/security/informationProtection/sensitivityLabels' },
-      { id: 'retention-policies', name: 'Retention Policies', powershellModule: 'ExchangeOnlineManagement' },
-      { id: 'dlp-policies', name: 'DLP Policies', powershellModule: 'ExchangeOnlineManagement' },
-      { id: 'insider-risk', name: 'Insider Risk Policies', powershellModule: 'ExchangeOnlineManagement' },
+      { id: 'sensitivity-labels', name: 'Sensitivity Labels', graphEndpoint: '/security/informationProtection/sensitivityLabels', supported: true },
+      { id: 'retention-policies', name: 'Retention Policies', graphEndpoint: '/security/labels/retentionLabels', supported: true },
+      { id: 'dlp-policies', name: 'DLP Policies', powershellModule: 'ExchangeOnlineManagement', supported: false, comingSoonReason: 'Requires PowerShell module' },
+      { id: 'insider-risk', name: 'Insider Risk Policies', powershellModule: 'ExchangeOnlineManagement', supported: false, comingSoonReason: 'Requires PowerShell module' },
     ],
     exportFormats: [
       { id: 'json', name: 'JSON', extension: '.json', supported: true },
