@@ -219,6 +219,7 @@ export type Database = {
           tenant_connection_id: string
           updated_at: string
           user_id: string
+          vault_secret_id: string | null
         }
         Insert: {
           client_id: string
@@ -229,6 +230,7 @@ export type Database = {
           tenant_connection_id: string
           updated_at?: string
           user_id: string
+          vault_secret_id?: string | null
         }
         Update: {
           client_id?: string
@@ -239,6 +241,7 @@ export type Database = {
           tenant_connection_id?: string
           updated_at?: string
           user_id?: string
+          vault_secret_id?: string | null
         }
         Relationships: [
           {
