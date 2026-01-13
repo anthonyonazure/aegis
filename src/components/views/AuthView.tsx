@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { 
   Key, 
@@ -17,7 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useTenantConnection } from '@/hooks/useTenant';
+import { useTenant } from '@/contexts/TenantContext';
 import { cn } from '@/lib/utils';
 
 const requiredPermissions = [
@@ -29,11 +29,7 @@ const requiredPermissions = [
   { scope: 'SecurityEvents.Read.All', description: 'Read security configurations' },
 ];
 
-interface AuthViewProps {
-  onConnectionChange?: (connected: boolean, accessToken?: string, connectionId?: string) => void;
-}
-
-export const AuthView = ({ onConnectionChange }: AuthViewProps) => {
+export const AuthView = () => {
   const [authMethod, setAuthMethod] = useState<'app' | 'delegated'>('app');
   const [tenantId, setTenantId] = useState('');
   const [clientId, setClientId] = useState('');
@@ -46,14 +42,8 @@ export const AuthView = ({ onConnectionChange }: AuthViewProps) => {
     tenantId: connectedTenantId,
     isConnecting, 
     connect, 
-    disconnect,
-    checkExistingConnection 
-  } = useTenantConnection();
-
-  // Check for existing connection on mount
-  useEffect(() => {
-    checkExistingConnection();
-  }, [checkExistingConnection]);
+    disconnect 
+  } = useTenant();
 
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -66,16 +56,11 @@ export const AuthView = ({ onConnectionChange }: AuthViewProps) => {
       return;
     }
 
-    const result = await connect(tenantId, clientId, clientSecret);
-    
-    if (result.success && result.accessToken) {
-      onConnectionChange?.(true, result.accessToken);
-    }
+    await connect(tenantId, clientId, clientSecret);
   };
 
   const handleDisconnect = async () => {
     await disconnect();
-    onConnectionChange?.(false);
   };
 
   const copyAllPermissions = () => {
