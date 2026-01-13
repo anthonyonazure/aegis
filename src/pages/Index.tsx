@@ -203,6 +203,7 @@ const Index = () => {
             onSelectAll={handleSelectAll}
             onSelectAllResources={handleSelectAllResources}
             onNavigateToExport={() => setActiveTab('export')}
+            onSetResources={setSelectedResources}
           />
         );
       case 'export':

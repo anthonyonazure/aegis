@@ -7,7 +7,8 @@ import {
   Search,
   Filter,
   Layers,
-  ArrowRight
+  ArrowRight,
+  X
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -17,6 +18,53 @@ import { Badge } from '@/components/ui/badge';
 import { RESOURCE_CATEGORIES, ResourceCategory } from '@/types/tenant';
 import { getIcon } from '@/lib/icons';
 import { cn } from '@/lib/utils';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+
+// Pre-defined templates for quick resource selection
+const RESOURCE_TEMPLATES = [
+  {
+    id: 'all-intune',
+    name: 'All Intune Policies',
+    description: 'Device configs, compliance, apps',
+    categoryIds: ['intune'],
+  },
+  {
+    id: 'security-baseline',
+    name: 'Security Baseline',
+    description: 'CA policies, compliance, security configs',
+    categoryIds: ['conditional-access', 'intune'],
+    subcategoryFilter: (catId: string, subId: string) => 
+      catId === 'conditional-access' || 
+      subId.includes('compliance') || 
+      subId.includes('security'),
+  },
+  {
+    id: 'identity-access',
+    name: 'Identity & Access',
+    description: 'Users, groups, CA policies, roles',
+    categoryIds: ['entra-id', 'conditional-access'],
+  },
+  {
+    id: 'device-management',
+    name: 'Device Management',
+    description: 'All device-related configurations',
+    categoryIds: ['intune', 'autopilot'],
+  },
+  {
+    id: 'apps-only',
+    name: 'Applications Only',
+    description: 'App configs and assignments',
+    categoryIds: ['intune'],
+    subcategoryFilter: (catId: string, subId: string) => 
+      subId.includes('app') || subId.includes('script'),
+  },
+];
 
 interface ResourcesViewProps {
   selectedResources: string[];
@@ -24,6 +72,7 @@ interface ResourcesViewProps {
   onSelectAll: (categoryId: string) => void;
   onSelectAllResources?: () => void;
   onNavigateToExport?: () => void;
+  onSetResources?: (resources: string[]) => void;
 }
 
 export const ResourcesView = ({ 
@@ -31,10 +80,15 @@ export const ResourcesView = ({
   onResourceSelect, 
   onSelectAll,
   onSelectAllResources,
-  onNavigateToExport
+  onNavigateToExport,
+  onSetResources
 }: ResourcesViewProps) => {
   const [expandedCategories, setExpandedCategories] = useState<string[]>(['intune']);
   const [searchQuery, setSearchQuery] = useState('');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'supported' | 'coming-soon'>('all');
+  const [filterFormats, setFilterFormats] = useState<string[]>([]);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
 
   const toggleCategory = (categoryId: string) => {
     setExpandedCategories(prev => 
@@ -79,14 +133,41 @@ export const ResourcesView = ({
     return selectedCount > 0 && selectedCount < supported.length;
   };
 
-  const filteredCategories = RESOURCE_CATEGORIES.filter(category => {
-    if (!searchQuery) return true;
-    const query = searchQuery.toLowerCase();
-    return (
-      category.name.toLowerCase().includes(query) ||
-      category.subcategories.some(sub => sub.name.toLowerCase().includes(query))
-    );
-  });
+  // Apply filters to categories and subcategories
+  const filterSubcategory = (category: ResourceCategory, sub: typeof category.subcategories[0]) => {
+    const isSupported = isResourceSupported(category.id, sub.id);
+    
+    // Filter by support status
+    if (filterStatus === 'supported' && !isSupported) return false;
+    if (filterStatus === 'coming-soon' && isSupported) return false;
+    
+    // Filter by export format
+    if (filterFormats.length > 0) {
+      const categoryFormats = category.exportFormats.filter(f => f.supported).map(f => f.id);
+      if (!filterFormats.some(f => categoryFormats.includes(f as typeof categoryFormats[number]))) return false;
+    }
+    
+    return true;
+  };
+
+  const filteredCategories = RESOURCE_CATEGORIES.map(category => {
+    // Filter subcategories based on search and filters
+    const filteredSubs = category.subcategories.filter(sub => {
+      // Search filter
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        const matchesSearch = 
+          category.name.toLowerCase().includes(query) ||
+          sub.name.toLowerCase().includes(query);
+        if (!matchesSearch) return false;
+      }
+      
+      // Apply other filters
+      return filterSubcategory(category, sub);
+    });
+    
+    return { ...category, subcategories: filteredSubs };
+  }).filter(category => category.subcategories.length > 0);
 
   const totalResources = RESOURCE_CATEGORIES.reduce((acc, cat) => 
     acc + cat.subcategories.filter(sub => sub.supported !== false && (sub.supported === true || sub.graphEndpoint)).length, 0
@@ -94,6 +175,47 @@ export const ResourcesView = ({
   const selectedCount = selectedResources.length;
   const allSelected = selectedCount === totalResources && totalResources > 0;
   const someSelected = selectedCount > 0 && selectedCount < totalResources;
+  
+  const activeFilterCount = (filterStatus !== 'all' ? 1 : 0) + (filterFormats.length > 0 ? 1 : 0);
+
+  const handleApplyTemplate = (templateId: string) => {
+    const template = RESOURCE_TEMPLATES.find(t => t.id === templateId);
+    if (!template || !onSetResources) return;
+    
+    const resources: string[] = [];
+    
+    RESOURCE_CATEGORIES.forEach(category => {
+      if (!template.categoryIds.includes(category.id)) return;
+      
+      category.subcategories.forEach(sub => {
+        const isSupported = isResourceSupported(category.id, sub.id);
+        if (!isSupported) return;
+        
+        // If template has a subcategory filter, apply it
+        if (template.subcategoryFilter && !template.subcategoryFilter(category.id, sub.id)) {
+          return;
+        }
+        
+        resources.push(`${category.id}/${sub.id}`);
+      });
+    });
+    
+    onSetResources(resources);
+    setTemplatesOpen(false);
+  };
+
+  const clearFilters = () => {
+    setFilterStatus('all');
+    setFilterFormats([]);
+  };
+
+  const toggleFormatFilter = (format: string) => {
+    setFilterFormats(prev => 
+      prev.includes(format) 
+        ? prev.filter(f => f !== format)
+        : [...prev, format]
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -149,14 +271,98 @@ export const ResourcesView = ({
             {allSelected ? 'Deselect All' : 'Select All'}
           </Button>
         )}
-        <Button variant="outline" className="gap-2">
-          <Filter className="w-4 h-4" />
-          Filters
-        </Button>
-        <Button variant="outline" className="gap-2">
-          <Layers className="w-4 h-4" />
-          Templates
-        </Button>
+        {/* Filters Popover */}
+        <Popover open={filtersOpen} onOpenChange={setFiltersOpen}>
+          <PopoverTrigger asChild>
+            <Button variant="outline" className="gap-2">
+              <Filter className="w-4 h-4" />
+              Filters
+              {activeFilterCount > 0 && (
+                <Badge variant="secondary" className="ml-1 h-5 w-5 p-0 flex items-center justify-center text-xs">
+                  {activeFilterCount}
+                </Badge>
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-72" align="end">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h4 className="font-medium text-foreground">Filters</h4>
+                {activeFilterCount > 0 && (
+                  <Button variant="ghost" size="sm" onClick={clearFilters} className="h-auto py-1 px-2 text-xs">
+                    Clear all
+                  </Button>
+                )}
+              </div>
+              
+              <div className="space-y-2">
+                <Label className="text-sm">Support Status</Label>
+                <RadioGroup value={filterStatus} onValueChange={(v) => setFilterStatus(v as typeof filterStatus)}>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="all" id="status-all" />
+                    <Label htmlFor="status-all" className="text-sm font-normal">All resources</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="supported" id="status-supported" />
+                    <Label htmlFor="status-supported" className="text-sm font-normal">Supported only</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="coming-soon" id="status-coming" />
+                    <Label htmlFor="status-coming" className="text-sm font-normal">Coming Soon</Label>
+                  </div>
+                </RadioGroup>
+              </div>
+              
+              <div className="space-y-2">
+                <Label className="text-sm">Export Formats</Label>
+                <div className="space-y-2">
+                  {['json', 'terraform', 'bicep', 'powershell'].map(format => (
+                    <div key={format} className="flex items-center space-x-2">
+                      <Checkbox 
+                        id={`format-${format}`}
+                        checked={filterFormats.includes(format)}
+                        onCheckedChange={() => toggleFormatFilter(format)}
+                      />
+                      <Label htmlFor={`format-${format}`} className="text-sm font-normal">
+                        {format.toUpperCase()}
+                      </Label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
+
+        {/* Templates Popover */}
+        <Popover open={templatesOpen} onOpenChange={setTemplatesOpen}>
+          <PopoverTrigger asChild>
+            <Button variant="outline" className="gap-2">
+              <Layers className="w-4 h-4" />
+              Templates
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-80" align="end">
+            <div className="space-y-3">
+              <h4 className="font-medium text-foreground">Quick Select Templates</h4>
+              <p className="text-xs text-muted-foreground">
+                Apply a pre-defined selection of resources
+              </p>
+              <div className="space-y-2">
+                {RESOURCE_TEMPLATES.map(template => (
+                  <button
+                    key={template.id}
+                    onClick={() => handleApplyTemplate(template.id)}
+                    className="w-full text-left p-3 rounded-lg border border-border hover:bg-secondary/50 hover:border-primary/50 transition-colors"
+                  >
+                    <div className="font-medium text-sm text-foreground">{template.name}</div>
+                    <div className="text-xs text-muted-foreground">{template.description}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
       </div>
 
       {/* Resource Tree */}
