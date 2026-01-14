@@ -114,12 +114,16 @@ const GRAPH_ENDPOINTS: Record<string, { endpoint: string; useBeta?: boolean; cre
   'entra-id/admin-units': { endpoint: '/administrativeUnits', createEndpoint: '/administrativeUnits', supportsImport: true },
   'entra-id/roles': { endpoint: '/directoryRoles', supportsImport: false },
 
-  // Defender
-  'defender/asr-policies': { endpoint: '/deviceManagement/intents', useBeta: true, supportsImport: false },
-  'defender/antivirus-policies': { endpoint: '/deviceManagement/intents', useBeta: true, supportsImport: false },
-  'defender/firewall-policies': { endpoint: '/deviceManagement/intents', useBeta: true, supportsImport: false },
-  'defender/edr-policies': { endpoint: '/deviceManagement/intents', useBeta: true, supportsImport: false },
-  'defender/security-baselines': { endpoint: '/deviceManagement/templates', useBeta: true, supportsImport: false },
+  // Defender - Using configurationPolicies (new API) with template filtering
+  // ASR template: e8c053d6-9f95-42b1-a7f1-ebfd71c67a4b
+  // Antivirus template: 804339ad-1553-4478-a742-138fb5807c11
+  // Firewall template: 6078910e-d808-4a9f-a51d-1b8a7bacb7c0
+  // EDR template: 0385b795-0f2f-44ac-8602-9f65bf6adede
+  'defender/asr-policies': { endpoint: '/deviceManagement/configurationPolicies?$filter=templateReference/templateFamily eq \'endpointSecurityAttackSurfaceReduction\'', useBeta: true, supportsImport: false },
+  'defender/antivirus-policies': { endpoint: '/deviceManagement/configurationPolicies?$filter=templateReference/templateFamily eq \'endpointSecurityAntivirus\'', useBeta: true, supportsImport: false },
+  'defender/firewall-policies': { endpoint: '/deviceManagement/configurationPolicies?$filter=templateReference/templateFamily eq \'endpointSecurityFirewall\'', useBeta: true, supportsImport: false },
+  'defender/edr-policies': { endpoint: '/deviceManagement/configurationPolicies?$filter=templateReference/templateFamily eq \'endpointSecurityEndpointDetectionAndResponse\'', useBeta: true, supportsImport: false },
+  'defender/security-baselines': { endpoint: '/deviceManagement/templates?$filter=templateType eq \'securityBaseline\'', useBeta: true, supportsImport: false },
 
   // Purview / Information Protection
   'purview/sensitivity-labels': { endpoint: '/informationProtection/policy/labels', useBeta: true, supportsImport: false },
