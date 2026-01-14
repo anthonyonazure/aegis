@@ -9,6 +9,7 @@ import {
   createTenantConnection, 
   updateTenantConnection,
   createExportJob,
+  getExportJob,
   getActiveTenantConnection,
   subscribeToExportJob,
   storeEncryptedCredential,
@@ -306,6 +307,17 @@ export function useExport() {
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const { toast } = useToast();
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
+  }, []);
 
   const startExport = useCallback(async (
     accessToken: string,
@@ -336,38 +348,70 @@ export function useExport() {
 
       setCurrentJobId(job.id);
 
-      // Subscribe to job updates
+      // Start polling for progress updates (more reliable than realtime)
+      pollingRef.current = setInterval(async () => {
+        try {
+          const updatedJob = await getExportJob(job.id);
+          if (updatedJob) {
+            setProgress(updatedJob.progress || 0);
+
+            if (updatedJob.status === 'completed' || updatedJob.status === 'failed') {
+              // Stop polling
+              if (pollingRef.current) {
+                clearInterval(pollingRef.current);
+                pollingRef.current = null;
+              }
+              setIsExporting(false);
+
+              if (updatedJob.status === 'completed') {
+                if (updatedJob.error) {
+                  toast({
+                    title: 'Export Complete (with errors)',
+                    description: updatedJob.error,
+                  });
+                } else {
+                  toast({
+                    title: 'Export Complete',
+                    description: `Successfully exported ${resources.length} resources`,
+                  });
+                }
+              } else {
+                toast({
+                  title: 'Export Failed',
+                  description: updatedJob.error || 'Export encountered errors',
+                  variant: 'destructive',
+                });
+              }
+            }
+          }
+        } catch (err) {
+          console.error('Error polling job status:', err);
+        }
+      }, 1000); // Poll every second
+
+      // Also subscribe to realtime updates as a backup
       const unsubscribe = subscribeToExportJob(job.id, (updatedJob: { progress?: number; status?: string; error?: string }) => {
         if (updatedJob.progress !== undefined) setProgress(updatedJob.progress);
 
         if (updatedJob.status === 'completed' || updatedJob.status === 'failed') {
+          // Stop polling
+          if (pollingRef.current) {
+            clearInterval(pollingRef.current);
+            pollingRef.current = null;
+          }
           setIsExporting(false);
           unsubscribe();
-
-          if (updatedJob.status === 'completed') {
-            if (updatedJob.error) {
-              toast({
-                title: 'Export Complete (with errors)',
-                description: updatedJob.error,
-              });
-            } else {
-              toast({
-                title: 'Export Complete',
-                description: `Successfully exported ${resources.length} resources`,
-              });
-            }
-          } else {
-            toast({
-              title: 'Export Failed',
-              description: updatedJob.error || 'Export encountered errors',
-              variant: 'destructive',
-            });
-          }
         }
       });
 
-      // Start the export
+      // Start the export (this runs the edge function)
       const result = await exportResources(accessToken, resources, job.id);
+
+      // Stop polling since export function returned
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
 
       if (!result.success) {
         toast({
@@ -380,8 +424,7 @@ export function useExport() {
         return null;
       }
 
-      // Export function completed - update state directly since subscription may not fire
-      // The edge function has finished processing, so mark export as complete
+      // Export function completed - update state directly
       setProgress(100);
       setIsExporting(false);
       unsubscribe();
@@ -410,6 +453,11 @@ export function useExport() {
 
       return job.id;
     } catch (error) {
+      // Stop polling on error
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
       const errorMessage = error instanceof Error ? error.message : 'Export failed';
       toast({
         title: 'Export Error',
