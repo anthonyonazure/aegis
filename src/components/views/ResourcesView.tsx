@@ -11,14 +11,16 @@ import {
   X,
   Plus,
   Trash2,
-  Save
+  Save,
+  Cloud,
+  Server
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
-import { RESOURCE_CATEGORIES, ResourceCategory } from '@/types/tenant';
+import { RESOURCE_CATEGORIES, AZURE_RESOURCE_CATEGORIES, ALL_RESOURCE_CATEGORIES, ResourceCategory } from '@/types/tenant';
 import { getIcon } from '@/lib/icons';
 import { cn } from '@/lib/utils';
 import {
@@ -47,6 +49,7 @@ const RESOURCE_TEMPLATES = [
     description: 'Device configs, compliance, apps',
     categoryIds: ['intune'],
     isBuiltIn: true,
+    provider: 'graph' as const,
   },
   {
     id: 'security-baseline',
@@ -58,6 +61,7 @@ const RESOURCE_TEMPLATES = [
       subId.includes('compliance') || 
       subId.includes('security'),
     isBuiltIn: true,
+    provider: 'graph' as const,
   },
   {
     id: 'identity-access',
@@ -65,6 +69,7 @@ const RESOURCE_TEMPLATES = [
     description: 'Users, groups, CA policies, roles',
     categoryIds: ['entra-id', 'conditional-access'],
     isBuiltIn: true,
+    provider: 'graph' as const,
   },
   {
     id: 'device-management',
@@ -72,6 +77,7 @@ const RESOURCE_TEMPLATES = [
     description: 'All device-related configurations',
     categoryIds: ['intune', 'autopilot'],
     isBuiltIn: true,
+    provider: 'graph' as const,
   },
   {
     id: 'apps-only',
@@ -81,6 +87,40 @@ const RESOURCE_TEMPLATES = [
     subcategoryFilter: (catId: string, subId: string) => 
       subId.includes('app') || subId.includes('script'),
     isBuiltIn: true,
+    provider: 'graph' as const,
+  },
+  // Azure Templates
+  {
+    id: 'azure-infrastructure',
+    name: 'Azure Infrastructure',
+    description: 'VMs, networks, storage, compute',
+    categoryIds: ['azure-compute', 'azure-networking', 'azure-storage'],
+    isBuiltIn: true,
+    provider: 'azure' as const,
+  },
+  {
+    id: 'azure-security',
+    name: 'Azure Security',
+    description: 'Key Vaults, identities, policies, RBAC',
+    categoryIds: ['azure-identity'],
+    isBuiltIn: true,
+    provider: 'azure' as const,
+  },
+  {
+    id: 'azure-paas',
+    name: 'Azure PaaS',
+    description: 'App Services, databases, containers',
+    categoryIds: ['azure-paas'],
+    isBuiltIn: true,
+    provider: 'azure' as const,
+  },
+  {
+    id: 'azure-all',
+    name: 'All Azure Resources',
+    description: 'Complete Azure infrastructure export',
+    categoryIds: ['azure-compute', 'azure-networking', 'azure-storage', 'azure-identity', 'azure-paas', 'azure-monitoring'],
+    isBuiltIn: true,
+    provider: 'azure' as const,
   },
 ];
 
@@ -111,6 +151,7 @@ export const ResourcesView = ({
   const [expandedCategories, setExpandedCategories] = useState<string[]>(['intune']);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'supported' | 'coming-soon'>('all');
+  const [filterProvider, setFilterProvider] = useState<'all' | 'graph' | 'azure'>('all');
   const [filterFormats, setFilterFormats] = useState<string[]>([]);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
@@ -223,22 +264,22 @@ export const ResourcesView = ({
     );
   };
 
-  // Check if resource is supported (has graphEndpoint OR explicit supported: true)
+  // Check if resource is supported (has graphEndpoint, azureResourceType, OR explicit supported: true)
   const isResourceSupported = (categoryId: string, subId: string) => {
-    const category = RESOURCE_CATEGORIES.find(c => c.id === categoryId);
+    const category = ALL_RESOURCE_CATEGORIES.find(c => c.id === categoryId);
     const sub = category?.subcategories.find(s => s.id === subId);
     if (!sub) return false;
-    // Explicit supported flag takes priority, otherwise check for graphEndpoint
+    // Explicit supported flag takes priority, otherwise check for graphEndpoint or azureResourceType
     if (sub.supported === false) return false;
     if (sub.supported === true) return true;
-    return !!sub.graphEndpoint;
+    return !!sub.graphEndpoint || !!sub.azureResourceType;
   };
 
   const getSupportedSubcategories = (category: ResourceCategory) => {
     return category.subcategories.filter(sub => {
       if (sub.supported === false) return false;
       if (sub.supported === true) return true;
-      return !!sub.graphEndpoint;
+      return !!sub.graphEndpoint || !!sub.azureResourceType;
     });
   };
 
@@ -275,7 +316,13 @@ export const ResourcesView = ({
     return true;
   };
 
-  const filteredCategories = RESOURCE_CATEGORIES.map(category => {
+  const filteredCategories = ALL_RESOURCE_CATEGORIES.map(category => {
+    // Filter by provider
+    if (filterProvider !== 'all') {
+      const categoryProvider = category.provider || 'graph';
+      if (categoryProvider !== filterProvider) return { ...category, subcategories: [] };
+    }
+    
     // Filter subcategories based on search and filters
     const filteredSubs = category.subcategories.filter(sub => {
       // Search filter
@@ -294,14 +341,14 @@ export const ResourcesView = ({
     return { ...category, subcategories: filteredSubs };
   }).filter(category => category.subcategories.length > 0);
 
-  const totalResources = RESOURCE_CATEGORIES.reduce((acc, cat) => 
-    acc + cat.subcategories.filter(sub => sub.supported !== false && (sub.supported === true || sub.graphEndpoint)).length, 0
+  const totalResources = ALL_RESOURCE_CATEGORIES.reduce((acc, cat) => 
+    acc + cat.subcategories.filter(sub => sub.supported !== false && (sub.supported === true || sub.graphEndpoint || sub.azureResourceType)).length, 0
   );
   const selectedCount = selectedResources.length;
   const allSelected = selectedCount === totalResources && totalResources > 0;
   const someSelected = selectedCount > 0 && selectedCount < totalResources;
   
-  const activeFilterCount = (filterStatus !== 'all' ? 1 : 0) + (filterFormats.length > 0 ? 1 : 0);
+  const activeFilterCount = (filterStatus !== 'all' ? 1 : 0) + (filterFormats.length > 0 ? 1 : 0) + (filterProvider !== 'all' ? 1 : 0);
 
   const handleApplyTemplate = (templateId: string) => {
     const template = RESOURCE_TEMPLATES.find(t => t.id === templateId);
@@ -309,7 +356,7 @@ export const ResourcesView = ({
     
     const resources: string[] = [];
     
-    RESOURCE_CATEGORIES.forEach(category => {
+    ALL_RESOURCE_CATEGORIES.forEach(category => {
       if (!template.categoryIds.includes(category.id)) return;
       
       category.subcategories.forEach(sub => {
@@ -331,6 +378,7 @@ export const ResourcesView = ({
 
   const clearFilters = () => {
     setFilterStatus('all');
+    setFilterProvider('all');
     setFilterFormats([]);
   };
 
@@ -349,7 +397,7 @@ export const ResourcesView = ({
         <div>
           <h1 className="text-2xl font-bold text-foreground">Resource Browser</h1>
           <p className="text-muted-foreground mt-1">
-            Select the resources you want to export from your M365 tenant
+            Select resources from Microsoft 365 and Azure to export
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -363,6 +411,29 @@ export const ResourcesView = ({
             </Button>
           )}
         </div>
+      </div>
+
+      {/* Provider Toggle */}
+      <div className="flex gap-2">
+        {[
+          { id: 'all', label: 'All Resources', icon: Layers },
+          { id: 'graph', label: 'Microsoft 365', icon: Cloud },
+          { id: 'azure', label: 'Azure', icon: Server },
+        ].map((option) => {
+          const Icon = option.icon;
+          return (
+            <Button
+              key={option.id}
+              variant={filterProvider === option.id ? "default" : "outline"}
+              size="sm"
+              className="gap-2"
+              onClick={() => setFilterProvider(option.id as typeof filterProvider)}
+            >
+              <Icon className="w-4 h-4" />
+              {option.label}
+            </Button>
+          );
+        })}
       </div>
 
       {/* Search & Filters */}
@@ -708,6 +779,11 @@ export const ResourcesView = ({
                                 {isSupported && sub.graphEndpoint && (
                                   <code className="text-xs text-muted-foreground font-mono bg-secondary/50 px-2 py-0.5 rounded">
                                     Graph API
+                                  </code>
+                                )}
+                                {isSupported && sub.azureResourceType && (
+                                  <code className="text-xs text-blue-500 font-mono bg-blue-500/10 px-2 py-0.5 rounded">
+                                    Azure ARM
                                   </code>
                                 )}
                                 {!isSupported && (

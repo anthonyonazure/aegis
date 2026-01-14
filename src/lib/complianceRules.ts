@@ -859,6 +859,235 @@ export const COMPLIANCE_RULES: ComplianceRule[] = [
       };
     },
   },
+
+  // ===============================
+  // Azure Resource Rules
+  // ===============================
+  {
+    id: 'azure-storage-https',
+    name: 'Storage Requires HTTPS',
+    description: 'Storage accounts should require secure transfer',
+    category: 'azure-storage',
+    severity: 'high',
+    baseline: 'cis-m365',
+    resourceTypes: ['azure-storage/storage-accounts'],
+    check: (resource) => {
+      const props = resource.properties as Record<string, unknown> | undefined;
+      const supportsHttpsOnly = props?.supportsHttpsTrafficOnly === true ||
+                                 (resource as Record<string, unknown>).supportsHttpsTrafficOnly === true;
+      return {
+        passed: supportsHttpsOnly,
+        message: supportsHttpsOnly ? 'HTTPS-only traffic enforced' : 'HTTP traffic allowed (insecure)',
+      };
+    },
+  },
+  {
+    id: 'azure-storage-encryption',
+    name: 'Storage Encryption Enabled',
+    description: 'Storage accounts should use encryption at rest',
+    category: 'azure-storage',
+    severity: 'high',
+    baseline: 'microsoft-recommended',
+    resourceTypes: ['azure-storage/storage-accounts'],
+    check: (resource) => {
+      const props = resource.properties as Record<string, unknown> | undefined;
+      const encryption = props?.encryption as Record<string, unknown> | undefined;
+      const isEncrypted = encryption?.services !== undefined || props?.isHnsEnabled !== undefined;
+      return {
+        passed: isEncrypted !== false,
+        message: isEncrypted ? 'Encryption at rest configured' : 'Encryption not verified',
+      };
+    },
+  },
+  {
+    id: 'azure-keyvault-softdelete',
+    name: 'Key Vault Soft Delete',
+    description: 'Key Vaults should have soft delete enabled',
+    category: 'azure-identity',
+    severity: 'high',
+    baseline: 'microsoft-recommended',
+    resourceTypes: ['azure-identity/key-vaults'],
+    check: (resource) => {
+      const props = resource.properties as Record<string, unknown> | undefined;
+      const softDeleteEnabled = props?.enableSoftDelete === true;
+      return {
+        passed: softDeleteEnabled,
+        message: softDeleteEnabled ? 'Soft delete enabled' : 'Soft delete not enabled (data loss risk)',
+      };
+    },
+  },
+  {
+    id: 'azure-keyvault-purge-protection',
+    name: 'Key Vault Purge Protection',
+    description: 'Key Vaults should have purge protection enabled',
+    category: 'azure-identity',
+    severity: 'high',
+    baseline: 'zero-trust',
+    resourceTypes: ['azure-identity/key-vaults'],
+    check: (resource) => {
+      const props = resource.properties as Record<string, unknown> | undefined;
+      const purgeProtection = props?.enablePurgeProtection === true;
+      return {
+        passed: purgeProtection,
+        message: purgeProtection ? 'Purge protection enabled' : 'Purge protection not enabled',
+      };
+    },
+  },
+  {
+    id: 'azure-nsg-no-any-inbound',
+    name: 'NSG No Open Inbound',
+    description: 'NSGs should not allow unrestricted inbound access',
+    category: 'azure-networking',
+    severity: 'critical',
+    baseline: 'cis-m365',
+    resourceTypes: ['azure-networking/network-security-groups'],
+    check: (resource) => {
+      const props = resource.properties as Record<string, unknown> | undefined;
+      const rules = props?.securityRules as Array<Record<string, unknown>> | undefined;
+      const hasOpenInbound = rules?.some(rule => {
+        const ruleProps = rule.properties as Record<string, unknown> | undefined;
+        return ruleProps?.direction === 'Inbound' &&
+               ruleProps?.access === 'Allow' &&
+               (ruleProps?.sourceAddressPrefix === '*' || ruleProps?.sourceAddressPrefix === 'Internet');
+      });
+      return {
+        passed: !hasOpenInbound,
+        message: hasOpenInbound ? 'Open inbound rules found (security risk)' : 'No unrestricted inbound access',
+      };
+    },
+  },
+  {
+    id: 'azure-vm-managed-disks',
+    name: 'VMs Use Managed Disks',
+    description: 'Virtual machines should use managed disks',
+    category: 'azure-compute',
+    severity: 'medium',
+    baseline: 'microsoft-recommended',
+    resourceTypes: ['azure-compute/virtual-machines'],
+    check: (resource) => {
+      const props = resource.properties as Record<string, unknown> | undefined;
+      const storageProfile = props?.storageProfile as Record<string, unknown> | undefined;
+      const osDisk = storageProfile?.osDisk as Record<string, unknown> | undefined;
+      const hasManaged = osDisk?.managedDisk !== undefined;
+      return {
+        passed: hasManaged,
+        message: hasManaged ? 'Using managed disks' : 'Not using managed disks',
+      };
+    },
+  },
+  {
+    id: 'azure-vm-encryption',
+    name: 'VM Disk Encryption',
+    description: 'VM disks should be encrypted',
+    category: 'azure-compute',
+    severity: 'high',
+    baseline: 'cis-m365',
+    resourceTypes: ['azure-compute/virtual-machines'],
+    check: (resource) => {
+      const props = resource.properties as Record<string, unknown> | undefined;
+      const storageProfile = props?.storageProfile as Record<string, unknown> | undefined;
+      const osDisk = storageProfile?.osDisk as Record<string, unknown> | undefined;
+      const encryptionSettings = osDisk?.encryptionSettings as Record<string, unknown> | undefined;
+      const managedDisk = osDisk?.managedDisk as Record<string, unknown> | undefined;
+      const isEncrypted = encryptionSettings?.enabled === true || 
+                          managedDisk?.diskEncryptionSet !== undefined;
+      return {
+        passed: isEncrypted !== false,
+        message: isEncrypted ? 'Disk encryption configured' : 'Disk encryption not verified',
+      };
+    },
+  },
+  {
+    id: 'azure-sql-tde',
+    name: 'SQL TDE Enabled',
+    description: 'SQL databases should have Transparent Data Encryption enabled',
+    category: 'azure-paas',
+    severity: 'high',
+    baseline: 'microsoft-recommended',
+    resourceTypes: ['azure-paas/sql-databases'],
+    check: (resource) => {
+      const props = resource.properties as Record<string, unknown> | undefined;
+      const tde = props?.transparentDataEncryption as Record<string, unknown> | undefined;
+      const status = tde?.status || props?.status;
+      const isEnabled = status === 'Enabled';
+      return {
+        passed: isEnabled !== false,
+        message: isEnabled ? 'TDE enabled' : 'TDE status not verified',
+      };
+    },
+  },
+  {
+    id: 'azure-app-https-only',
+    name: 'App Service HTTPS Only',
+    description: 'App Services should require HTTPS',
+    category: 'azure-paas',
+    severity: 'high',
+    baseline: 'cis-m365',
+    resourceTypes: ['azure-paas/app-services', 'azure-paas/function-apps'],
+    check: (resource) => {
+      const props = resource.properties as Record<string, unknown> | undefined;
+      const httpsOnly = props?.httpsOnly === true;
+      return {
+        passed: httpsOnly,
+        message: httpsOnly ? 'HTTPS-only enabled' : 'HTTP allowed (insecure)',
+      };
+    },
+  },
+  {
+    id: 'azure-app-managed-identity',
+    name: 'App Service Managed Identity',
+    description: 'App Services should use managed identity',
+    category: 'azure-paas',
+    severity: 'medium',
+    baseline: 'zero-trust',
+    resourceTypes: ['azure-paas/app-services', 'azure-paas/function-apps'],
+    check: (resource) => {
+      const identity = resource.identity as Record<string, unknown> | undefined;
+      const hasIdentity = identity?.type === 'SystemAssigned' || 
+                          identity?.type === 'UserAssigned' ||
+                          identity?.type === 'SystemAssigned, UserAssigned';
+      return {
+        passed: hasIdentity === true,
+        message: hasIdentity ? `Managed identity: ${identity?.type}` : 'No managed identity configured',
+      };
+    },
+  },
+  {
+    id: 'azure-aks-rbac',
+    name: 'AKS RBAC Enabled',
+    description: 'AKS clusters should have RBAC enabled',
+    category: 'azure-paas',
+    severity: 'critical',
+    baseline: 'zero-trust',
+    resourceTypes: ['azure-paas/aks-clusters'],
+    check: (resource) => {
+      const props = resource.properties as Record<string, unknown> | undefined;
+      const rbacEnabled = props?.enableRBAC === true;
+      return {
+        passed: rbacEnabled,
+        message: rbacEnabled ? 'Kubernetes RBAC enabled' : 'RBAC not enabled (security risk)',
+      };
+    },
+  },
+  {
+    id: 'azure-aks-network-policy',
+    name: 'AKS Network Policy',
+    description: 'AKS clusters should have network policy configured',
+    category: 'azure-paas',
+    severity: 'high',
+    baseline: 'zero-trust',
+    resourceTypes: ['azure-paas/aks-clusters'],
+    check: (resource) => {
+      const props = resource.properties as Record<string, unknown> | undefined;
+      const networkProfile = props?.networkProfile as Record<string, unknown> | undefined;
+      const hasNetworkPolicy = networkProfile?.networkPolicy !== undefined &&
+                               networkProfile?.networkPolicy !== 'none';
+      return {
+        passed: hasNetworkPolicy === true,
+        message: hasNetworkPolicy ? `Network policy: ${networkProfile?.networkPolicy}` : 'No network policy configured',
+      };
+    },
+  },
 ];
 
 export function getApplicableRules(resourceTypes: string[], baseline?: string): ComplianceRule[] {
