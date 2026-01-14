@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { motion } from 'framer-motion';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Clock, 
   CheckCircle2, 
@@ -9,7 +9,8 @@ import {
   Eye,
   Trash2,
   RefreshCw,
-  AlertTriangle
+  AlertTriangle,
+  Radio
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -19,6 +20,7 @@ import { cn } from '@/lib/utils';
 import { getExportJobs, deleteExportJob } from '@/lib/database';
 import { downloadExportAsZip } from '@/lib/exportUtils';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 import {
   Dialog,
   DialogContent,
@@ -84,7 +86,10 @@ export const JobsView = () => {
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState<string | null>(null);
   const [selectedJob, setSelectedJob] = useState<ExportJobRecord | null>(null);
+  const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
+  const [lastRealtimeUpdate, setLastRealtimeUpdate] = useState<Date | null>(null);
   const { toast } = useToast();
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   const fetchJobs = useCallback(async () => {
     try {
@@ -106,20 +111,50 @@ export const JobsView = () => {
     fetchJobs();
   }, [fetchJobs]);
 
-  // Auto-refresh when there are pending or running jobs
+  // Subscribe to realtime updates for export_jobs
   useEffect(() => {
-    const hasPendingOrRunning = jobs.some((j) => j.status === 'pending' || j.status === 'running');
+    const channel = supabase
+      .channel('export-jobs-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'export_jobs',
+        },
+        (payload) => {
+          console.log('Realtime update received:', payload);
+          setLastRealtimeUpdate(new Date());
 
-    if (!hasPendingOrRunning) return;
+          if (payload.eventType === 'INSERT') {
+            const newJob = payload.new as ExportJobRecord;
+            setJobs((prev) => [newJob, ...prev]);
+          } else if (payload.eventType === 'UPDATE') {
+            const updatedJob = payload.new as ExportJobRecord;
+            setJobs((prev) =>
+              prev.map((job) => (job.id === updatedJob.id ? updatedJob : job))
+            );
+          } else if (payload.eventType === 'DELETE') {
+            const deletedJob = payload.old as { id: string };
+            setJobs((prev) => prev.filter((job) => job.id !== deletedJob.id));
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log('Realtime subscription status:', status);
+        setIsRealtimeConnected(status === 'SUBSCRIBED');
+      });
 
-    const interval = setInterval(() => {
-      fetchJobs();
-    }, 3000); // Refresh every 3 seconds
+    channelRef.current = channel;
 
-    return () => clearInterval(interval);
-  }, [jobs, fetchJobs]);
+    return () => {
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+      }
+    };
+  }, []);
 
-  // Keep the Job Details dialog in sync with refreshed job data
+  // Keep the Job Details dialog in sync with job data
   useEffect(() => {
     if (!selectedJob) return;
 
@@ -188,10 +223,41 @@ export const JobsView = () => {
             View, download, and manage your export history
           </p>
         </div>
-        <Button variant="outline" className="gap-2" onClick={fetchJobs} disabled={loading}>
-          <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-3">
+          {/* Realtime Indicator */}
+          <AnimatePresence>
+            {isRealtimeConnected && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.8 }}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-success/10 border border-success/20"
+              >
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-success"></span>
+                </span>
+                <span className="text-xs font-medium text-success">LIVE</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
+          
+          {lastRealtimeUpdate && (
+            <motion.span
+              key={lastRealtimeUpdate.getTime()}
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="text-xs text-muted-foreground"
+            >
+              Updated {lastRealtimeUpdate.toLocaleTimeString()}
+            </motion.span>
+          )}
+          
+          <Button variant="outline" className="gap-2" onClick={fetchJobs} disabled={loading}>
+            <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Summary Stats */}
