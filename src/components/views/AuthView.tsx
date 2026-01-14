@@ -10,17 +10,23 @@ import {
   Check,
   AlertCircle,
   Loader2,
-  CheckCircle2
+  CheckCircle2,
+  Cloud,
+  Server
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useTenant } from '@/contexts/TenantContext';
 import { cn } from '@/lib/utils';
+import { testAzureConnection } from '@/lib/azureApi';
+import { AzureSubscription } from '@/types/tenant';
+import { useToast } from '@/hooks/use-toast';
 
-const requiredPermissions = [
+const graphPermissions = [
   { scope: 'DeviceManagementConfiguration.Read.All', description: 'Read Intune device configurations' },
   { scope: 'DeviceManagementApps.Read.All', description: 'Read Intune app configurations' },
   { scope: 'Policy.Read.All', description: 'Read Conditional Access policies' },
@@ -29,12 +35,27 @@ const requiredPermissions = [
   { scope: 'SecurityEvents.Read.All', description: 'Read security configurations' },
 ];
 
+const azurePermissions = [
+  { scope: 'Reader', description: 'Read all Azure resources in selected subscriptions' },
+  { scope: 'Contributor (optional)', description: 'Required for import/restore operations' },
+];
+
 export const AuthView = () => {
+  const [connectionType, setConnectionType] = useState<'graph' | 'azure' | 'both'>('graph');
   const [authMethod, setAuthMethod] = useState<'app' | 'delegated'>('app');
   const [tenantId, setTenantId] = useState('');
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
   const [copied, setCopied] = useState<string | null>(null);
+  
+  // Azure-specific state
+  const [azureConnecting, setAzureConnecting] = useState(false);
+  const [azureConnected, setAzureConnected] = useState(false);
+  const [azureToken, setAzureToken] = useState<string | null>(null);
+  const [subscriptions, setSubscriptions] = useState<AzureSubscription[]>([]);
+  const [selectedSubscriptions, setSelectedSubscriptions] = useState<string[]>([]);
+  
+  const { toast } = useToast();
 
   const { 
     isConnected, 
@@ -56,19 +77,81 @@ export const AuthView = () => {
       return;
     }
 
-    await connect(tenantId, clientId, clientSecret);
+    // Connect to Graph API (M365)
+    if (connectionType === 'graph' || connectionType === 'both') {
+      await connect(tenantId, clientId, clientSecret);
+    }
+
+    // Connect to Azure if needed
+    if (connectionType === 'azure' || connectionType === 'both') {
+      await handleAzureConnect();
+    }
+  };
+
+  const handleAzureConnect = async () => {
+    if (!tenantId || !clientId || !clientSecret) {
+      return;
+    }
+
+    setAzureConnecting(true);
+    try {
+      const result = await testAzureConnection(tenantId, clientId, clientSecret);
+      
+      if (!result.success) {
+        toast({
+          title: 'Azure Connection Failed',
+          description: result.error || 'Failed to connect to Azure',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      setAzureToken(result.accessToken || null);
+      setSubscriptions(result.subscriptions || []);
+      setAzureConnected(true);
+      
+      // Auto-select all subscriptions
+      setSelectedSubscriptions(result.subscriptions?.map(s => s.subscriptionId) || []);
+      
+      toast({
+        title: 'Azure Connected',
+        description: `Found ${result.subscriptions?.length || 0} subscriptions`,
+      });
+    } catch (error) {
+      toast({
+        title: 'Connection Error',
+        description: error instanceof Error ? error.message : 'Failed to connect',
+        variant: 'destructive',
+      });
+    } finally {
+      setAzureConnecting(false);
+    }
   };
 
   const handleDisconnect = async () => {
     await disconnect();
+    setAzureConnected(false);
+    setAzureToken(null);
+    setSubscriptions([]);
+    setSelectedSubscriptions([]);
+  };
+
+  const toggleSubscription = (subscriptionId: string) => {
+    setSelectedSubscriptions(prev => 
+      prev.includes(subscriptionId)
+        ? prev.filter(id => id !== subscriptionId)
+        : [...prev, subscriptionId]
+    );
   };
 
   const copyAllPermissions = () => {
-    const allScopes = requiredPermissions.map(p => p.scope).join('\n');
+    const allScopes = graphPermissions.map(p => p.scope).join('\n');
     navigator.clipboard.writeText(allScopes);
     setCopied('all');
     setTimeout(() => setCopied(null), 2000);
   };
+
+  const isAnyConnected = isConnected || azureConnected;
 
   return (
     <div className="space-y-6">
@@ -76,12 +159,12 @@ export const AuthView = () => {
       <div>
         <h1 className="text-2xl font-bold text-foreground">Authentication</h1>
         <p className="text-muted-foreground mt-1">
-          Connect to your Microsoft 365 tenant using App Registration or Delegated auth
+          Connect to Microsoft 365 and/or Azure to export and manage resources
         </p>
       </div>
 
       {/* Connection Status */}
-      {isConnected && (
+      {isAnyConnected && (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -92,10 +175,13 @@ export const AuthView = () => {
                 <div className="flex items-center gap-3">
                   <div className="status-dot status-dot-success" />
                   <div>
-                    <p className="font-medium text-foreground">Connected to {tenantName || connectedTenantId}</p>
-                    <p className="text-sm text-muted-foreground">
-                      Tenant ID: {connectedTenantId}
+                    <p className="font-medium text-foreground">
+                      Connected to {tenantName || connectedTenantId || 'Azure Tenant'}
                     </p>
+                    <div className="flex gap-3 text-sm text-muted-foreground">
+                      {isConnected && <span className="flex items-center gap-1"><Cloud className="w-3 h-3" /> M365</span>}
+                      {azureConnected && <span className="flex items-center gap-1"><Server className="w-3 h-3" /> Azure ({selectedSubscriptions.length} subs)</span>}
+                    </div>
                   </div>
                 </div>
                 <Button variant="outline" onClick={handleDisconnect}>
@@ -106,6 +192,45 @@ export const AuthView = () => {
           </Card>
         </motion.div>
       )}
+
+      {/* Connection Type Selector */}
+      <Card className="glass-panel">
+        <CardHeader>
+          <CardTitle className="text-lg">Connection Type</CardTitle>
+          <CardDescription>
+            Choose what you want to connect to
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {[
+              { id: 'graph', label: 'Microsoft 365 Only', icon: Cloud, desc: 'Intune, CA, Entra ID, Defender' },
+              { id: 'azure', label: 'Azure Only', icon: Server, desc: 'VMs, Networks, Storage, PaaS' },
+              { id: 'both', label: 'Both (Recommended)', icon: Building2, desc: 'Full M365 + Azure coverage' },
+            ].map((option) => {
+              const Icon = option.icon;
+              return (
+                <button
+                  key={option.id}
+                  onClick={() => setConnectionType(option.id as 'graph' | 'azure' | 'both')}
+                  disabled={isAnyConnected}
+                  className={cn(
+                    "p-4 rounded-lg border-2 text-left transition-all",
+                    connectionType === option.id 
+                      ? "border-primary bg-primary/10" 
+                      : "border-border hover:border-primary/50",
+                    isAnyConnected && "opacity-50 cursor-not-allowed"
+                  )}
+                >
+                  <Icon className={cn("w-6 h-6 mb-2", connectionType === option.id ? "text-primary" : "text-muted-foreground")} />
+                  <p className="font-medium text-foreground">{option.label}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{option.desc}</p>
+                </button>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
 
       <Tabs value={authMethod} onValueChange={(v) => setAuthMethod(v as 'app' | 'delegated')}>
         <TabsList className="bg-secondary">
@@ -144,7 +269,7 @@ export const AuthView = () => {
                       onChange={(e) => setTenantId(e.target.value)}
                       placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
                       className="font-mono bg-secondary/50 border-border"
-                      disabled={isConnected}
+                      disabled={isAnyConnected}
                     />
                   </div>
                   <div className="space-y-2">
@@ -155,7 +280,7 @@ export const AuthView = () => {
                       onChange={(e) => setClientId(e.target.value)}
                       placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
                       className="font-mono bg-secondary/50 border-border"
-                      disabled={isConnected}
+                      disabled={isAnyConnected}
                     />
                   </div>
                 </div>
@@ -169,7 +294,7 @@ export const AuthView = () => {
                     onChange={(e) => setClientSecret(e.target.value)}
                     placeholder="Enter your client secret"
                     className="font-mono bg-secondary/50 border-border"
-                    disabled={isConnected}
+                    disabled={isAnyConnected}
                   />
                   <p className="text-xs text-muted-foreground">
                     For CI/CD, use environment variables: AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET
@@ -178,65 +303,163 @@ export const AuthView = () => {
 
                 <Button 
                   onClick={handleConnect} 
-                  disabled={isConnecting || isConnected || !tenantId || !clientId || !clientSecret}
+                  disabled={isConnecting || azureConnecting || isAnyConnected || !tenantId || !clientId || !clientSecret}
                   className="w-full md:w-auto"
                 >
-                  {isConnecting ? (
+                  {isConnecting || azureConnecting ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                       Connecting...
                     </>
-                  ) : isConnected ? (
+                  ) : isAnyConnected ? (
                     <>
                       <CheckCircle2 className="w-4 h-4 mr-2" />
                       Connected
                     </>
                   ) : (
-                    'Connect to Tenant'
+                    'Connect'
                   )}
                 </Button>
               </CardContent>
             </Card>
           </motion.div>
 
+          {/* Azure Subscriptions Selector */}
+          {azureConnected && subscriptions.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+            >
+              <Card className="glass-panel">
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Server className="w-5 h-5 text-primary" />
+                    Azure Subscriptions
+                  </CardTitle>
+                  <CardDescription>
+                    Select which subscriptions to include in exports
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {subscriptions.map((sub) => (
+                      <div 
+                        key={sub.subscriptionId}
+                        className="flex items-center justify-between p-3 rounded-lg bg-secondary/30"
+                      >
+                        <div className="flex items-center gap-3">
+                          <Checkbox
+                            checked={selectedSubscriptions.includes(sub.subscriptionId)}
+                            onCheckedChange={() => toggleSubscription(sub.subscriptionId)}
+                          />
+                          <div>
+                            <p className="font-medium text-foreground">{sub.displayName}</p>
+                            <p className="text-xs text-muted-foreground font-mono">{sub.subscriptionId}</p>
+                          </div>
+                        </div>
+                        <span className={cn(
+                          "px-2 py-1 rounded-full text-xs font-medium",
+                          sub.state === 'Enabled' ? "bg-success/20 text-success" : "bg-muted text-muted-foreground"
+                        )}>
+                          {sub.state}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-4 flex gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => setSelectedSubscriptions(subscriptions.map(s => s.subscriptionId))}
+                    >
+                      Select All
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => setSelectedSubscriptions([])}
+                    >
+                      Clear All
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
+
           {/* Required Permissions */}
           <Card className="glass-panel">
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
                 <Shield className="w-5 h-5 text-primary" />
-                Required API Permissions
+                Required Permissions
               </CardTitle>
               <CardDescription>
-                Your app registration needs these Microsoft Graph permissions (Application type)
+                Permissions needed based on your connection type
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                {requiredPermissions.map((perm) => (
-                  <div 
-                    key={perm.scope}
-                    className="flex items-center justify-between p-3 rounded-lg bg-secondary/30"
-                  >
-                    <div className="flex items-center gap-3">
-                      <code className="text-sm font-mono text-primary">{perm.scope}</code>
-                      <span className="text-sm text-muted-foreground hidden md:inline">
-                        {perm.description}
-                      </span>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => copyToClipboard(perm.scope, perm.scope)}
-                    >
-                      {copied === perm.scope ? (
-                        <Check className="w-4 h-4 text-success" />
-                      ) : (
-                        <Copy className="w-4 h-4" />
-                      )}
-                    </Button>
+            <CardContent className="space-y-6">
+              {/* Graph Permissions */}
+              {(connectionType === 'graph' || connectionType === 'both') && (
+                <div>
+                  <h4 className="font-medium text-foreground mb-3 flex items-center gap-2">
+                    <Cloud className="w-4 h-4" /> Microsoft Graph API Permissions
+                  </h4>
+                  <div className="space-y-2">
+                    {graphPermissions.map((perm) => (
+                      <div 
+                        key={perm.scope}
+                        className="flex items-center justify-between p-3 rounded-lg bg-secondary/30"
+                      >
+                        <div className="flex items-center gap-3">
+                          <code className="text-sm font-mono text-primary">{perm.scope}</code>
+                          <span className="text-sm text-muted-foreground hidden md:inline">
+                            {perm.description}
+                          </span>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => copyToClipboard(perm.scope, perm.scope)}
+                        >
+                          {copied === perm.scope ? (
+                            <Check className="w-4 h-4 text-success" />
+                          ) : (
+                            <Copy className="w-4 h-4" />
+                          )}
+                        </Button>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                </div>
+              )}
+
+              {/* Azure RBAC Permissions */}
+              {(connectionType === 'azure' || connectionType === 'both') && (
+                <div>
+                  <h4 className="font-medium text-foreground mb-3 flex items-center gap-2">
+                    <Server className="w-4 h-4" /> Azure RBAC Permissions
+                  </h4>
+                  <div className="space-y-2">
+                    {azurePermissions.map((perm) => (
+                      <div 
+                        key={perm.scope}
+                        className="flex items-center justify-between p-3 rounded-lg bg-secondary/30"
+                      >
+                        <div className="flex items-center gap-3">
+                          <code className="text-sm font-mono text-primary">{perm.scope}</code>
+                          <span className="text-sm text-muted-foreground hidden md:inline">
+                            {perm.description}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-3">
+                    Assign these roles to your App Registration at the subscription or management group level in Azure Portal.
+                  </p>
+                </div>
+              )}
 
               <div className="mt-4 flex items-center gap-2">
                 <Button 
@@ -248,16 +471,18 @@ export const AuthView = () => {
                   <ExternalLink className="w-4 h-4" />
                   Open Azure Portal
                 </Button>
-                <Button variant="ghost" size="sm" onClick={copyAllPermissions}>
-                  {copied === 'all' ? (
-                    <>
-                      <Check className="w-4 h-4 mr-1 text-success" />
-                      Copied!
-                    </>
-                  ) : (
-                    'Copy All Permissions'
-                  )}
-                </Button>
+                {(connectionType === 'graph' || connectionType === 'both') && (
+                  <Button variant="ghost" size="sm" onClick={copyAllPermissions}>
+                    {copied === 'all' ? (
+                      <>
+                        <Check className="w-4 h-4 mr-1 text-success" />
+                        Copied!
+                      </>
+                    ) : (
+                      'Copy All Graph Permissions'
+                    )}
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -296,7 +521,7 @@ export const AuthView = () => {
       </Tabs>
 
       {/* Status Card - Only show if not connected */}
-      {!isConnected && (
+      {!isAnyConnected && (
         <Card className="glass-panel border-warning/20">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
@@ -304,7 +529,7 @@ export const AuthView = () => {
               <div>
                 <p className="font-medium text-foreground">Not Connected</p>
                 <p className="text-sm text-muted-foreground">
-                  Configure authentication above to connect to your M365 tenant
+                  Configure authentication above to connect to your {connectionType === 'graph' ? 'M365' : connectionType === 'azure' ? 'Azure' : 'M365 and Azure'} tenant
                 </p>
               </div>
             </div>
