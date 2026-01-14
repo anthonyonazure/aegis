@@ -122,8 +122,8 @@ const GRAPH_ENDPOINTS: Record<string, { endpoint: string; useBeta?: boolean; cre
   'defender/security-baselines': { endpoint: '/deviceManagement/templates', useBeta: true, supportsImport: false },
 
   // Purview / Information Protection
-  'purview/sensitivity-labels': { endpoint: '/security/informationProtection/sensitivityLabels', useBeta: true, supportsImport: false },
-  'purview/retention-policies': { endpoint: '/security/labels/retentionLabels', useBeta: true, supportsImport: false },
+  'purview/sensitivity-labels': { endpoint: '/informationProtection/policy/labels', useBeta: true, supportsImport: false },
+  'purview/retention-policies': { endpoint: '/security/triggerTypes/retentionEventTypes', useBeta: true, supportsImport: false },
 
   // Exchange Online - using available Graph endpoints
   'exchange/transport-rules': { endpoint: '/security/attackSimulation/simulationAutomations', useBeta: true, supportsImport: false },
@@ -137,7 +137,7 @@ const GRAPH_ENDPOINTS: Record<string, { endpoint: string; useBeta?: boolean; cre
   'sharepoint/tenant-settings': { endpoint: '/sites/root', useBeta: false, supportsImport: false },
   'sharepoint/sharing-policies': { endpoint: '/sites/root/permissions', useBeta: false, supportsImport: false },
   'sharepoint/site-templates': { endpoint: '/sites?search=*&$select=id,displayName,webUrl', useBeta: false, supportsImport: false },
-  'sharepoint/hub-sites': { endpoint: '/sites?$filter=isHubSite eq true', useBeta: true, supportsImport: false },
+  'sharepoint/hub-sites': { endpoint: '/sites/getAllSites?$select=id,displayName,webUrl,isHubSite,hubSiteId', useBeta: true, supportsImport: false },
 
   // Teams - using available Graph endpoints
   'teams/messaging-policies': { endpoint: '/teams', useBeta: false, supportsImport: false },
