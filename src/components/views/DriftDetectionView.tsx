@@ -362,36 +362,42 @@ export const DriftDetectionView = () => {
                 Compare Two Exports
               </CardTitle>
               <CardDescription>
-                Select a baseline and a comparison export to detect drift
+                Select an older export as baseline (before) and a newer export to compare (after) to detect what changed
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <label className="text-sm font-medium text-foreground mb-2 block">Baseline Export</label>
+                  <label className="text-sm font-medium text-foreground mb-2 block">
+                    Baseline (Older Export)
+                    <span className="text-muted-foreground font-normal ml-2">— the "before" state</span>
+                  </label>
                   <Select value={baselineExport} onValueChange={setBaselineExport}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select baseline" />
+                      <SelectValue placeholder="Select older export" />
                     </SelectTrigger>
                     <SelectContent>
                       {exportJobs.map(job => (
                         <SelectItem key={job.id} value={job.id}>
-                          {job.name} ({format(new Date(job.created_at), 'MMM d, yyyy')})
+                          {job.name} ({format(new Date(job.created_at), 'MMM d, yyyy HH:mm')})
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-foreground mb-2 block">Compare With</label>
+                  <label className="text-sm font-medium text-foreground mb-2 block">
+                    Current (Newer Export)
+                    <span className="text-muted-foreground font-normal ml-2">— the "after" state</span>
+                  </label>
                   <Select value={compareExport} onValueChange={setCompareExport}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select comparison" />
+                      <SelectValue placeholder="Select newer export" />
                     </SelectTrigger>
                     <SelectContent>
                       {exportJobs.map(job => (
                         <SelectItem key={job.id} value={job.id}>
-                          {job.name} ({format(new Date(job.created_at), 'MMM d, yyyy')})
+                          {job.name} ({format(new Date(job.created_at), 'MMM d, yyyy HH:mm')})
                         </SelectItem>
                       ))}
                     </SelectContent>
