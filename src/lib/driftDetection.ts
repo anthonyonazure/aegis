@@ -250,7 +250,9 @@ export function compareResources(
   const flatBaseline = baselineResources.flatMap(flattenResourceData);
   const flatCurrent = currentResources.flatMap(flattenResourceData);
   
-  // Create maps for quick lookup by multiple keys
+  console.log(`[DriftDetection] Comparing ${flatBaseline.length} baseline items vs ${flatCurrent.length} current items`);
+  
+  // Create maps for quick lookup - use composite keys for better matching
   const baselineById = new Map<string, typeof flatBaseline[0]>();
   const currentById = new Map<string, typeof flatCurrent[0]>();
   
@@ -258,32 +260,66 @@ export function compareResources(
   const baselineByTypeName = new Map<string, typeof flatBaseline[0]>();
   const currentByTypeName = new Map<string, typeof flatCurrent[0]>();
   
+  // And by just the inner ID (without resource type prefix) for cross-matching
+  const baselineByInnerId = new Map<string, typeof flatBaseline[0]>();
+  const currentByInnerId = new Map<string, typeof flatCurrent[0]>();
+  
   for (const resource of flatBaseline) {
     baselineById.set(resource.resourceId, resource);
     const typeNameKey = `${resource.resourceType}::${resource.resourceName}`;
     baselineByTypeName.set(typeNameKey, resource);
+    
+    // Extract inner ID for fallback matching
+    const innerIdMatch = resource.resourceId.match(/::([^:]+)$/);
+    if (innerIdMatch) {
+      baselineByInnerId.set(innerIdMatch[1], resource);
+    }
   }
   
   for (const resource of flatCurrent) {
     currentById.set(resource.resourceId, resource);
     const typeNameKey = `${resource.resourceType}::${resource.resourceName}`;
     currentByTypeName.set(typeNameKey, resource);
+    
+    // Extract inner ID for fallback matching
+    const innerIdMatch = resource.resourceId.match(/::([^:]+)$/);
+    if (innerIdMatch) {
+      currentByInnerId.set(innerIdMatch[1], resource);
+    }
   }
   
-  const processedCurrentIds = new Set<string>();
+  const matchedCurrentIds = new Set<string>();
+  const matchedBaselineIds = new Set<string>();
   
   // Check for modified and removed resources from baseline
   for (const [key, baseline] of baselineById) {
-    // Try to find matching current resource by ID first
-    let current = currentById.get(key);
+    if (matchedBaselineIds.has(key)) continue;
     
-    // If not found by ID, try by type+name
+    // Try to find matching current resource using multiple strategies
+    let current: typeof flatCurrent[0] | undefined;
+    let matchMethod = '';
+    
+    // Strategy 1: Exact ID match
+    current = currentById.get(key);
+    if (current) matchMethod = 'exact-id';
+    
+    // Strategy 2: Type + Name match
     if (!current) {
       const typeNameKey = `${baseline.resourceType}::${baseline.resourceName}`;
       current = currentByTypeName.get(typeNameKey);
+      if (current) matchMethod = 'type-name';
     }
     
+    // Strategy 3: Inner ID match (for cases where resource type differs slightly)
     if (!current) {
+      const innerIdMatch = key.match(/::([^:]+)$/);
+      if (innerIdMatch && innerIdMatch[1] !== 'unknown' && !innerIdMatch[1].startsWith('index-')) {
+        current = currentByInnerId.get(innerIdMatch[1]);
+        if (current) matchMethod = 'inner-id';
+      }
+    }
+    
+    if (!current || matchedCurrentIds.has(current.resourceId)) {
       // Resource was removed
       results.push({
         resourceType: baseline.resourceType,
@@ -291,8 +327,10 @@ export function compareResources(
         resourceName: baseline.resourceName,
         status: 'removed',
       });
+      console.log(`[DriftDetection] REMOVED: ${baseline.resourceName} (${baseline.resourceType})`);
     } else {
-      processedCurrentIds.add(current.resourceId);
+      matchedCurrentIds.add(current.resourceId);
+      matchedBaselineIds.add(key);
       
       // Check if modified
       const changes = getChangedFields(baseline.data, current.data);
@@ -305,6 +343,7 @@ export function compareResources(
           status: 'modified',
           changes,
         });
+        console.log(`[DriftDetection] MODIFIED (${matchMethod}): ${baseline.resourceName} - ${changes.length} changes: ${changes.map(c => c.field).join(', ')}`);
       } else {
         results.push({
           resourceType: baseline.resourceType,
@@ -318,20 +357,46 @@ export function compareResources(
   
   // Check for added resources (in current but not in baseline)
   for (const [key, current] of currentById) {
-    if (!processedCurrentIds.has(key)) {
-      // Check if we already matched this by type+name
-      const typeNameKey = `${current.resourceType}::${current.resourceName}`;
-      const matchedByName = baselineByTypeName.has(typeNameKey);
-      
-      if (!matchedByName) {
-        results.push({
-          resourceType: current.resourceType,
-          resourceId: key,
-          resourceName: current.resourceName,
-          status: 'added',
-        });
+    if (matchedCurrentIds.has(key)) continue;
+    
+    // Double-check this wasn't matched by name
+    const typeNameKey = `${current.resourceType}::${current.resourceName}`;
+    if (baselineByTypeName.has(typeNameKey)) {
+      const baseline = baselineByTypeName.get(typeNameKey)!;
+      if (!matchedBaselineIds.has(baseline.resourceId)) {
+        // This is actually a match we missed - compare them
+        matchedBaselineIds.add(baseline.resourceId);
+        matchedCurrentIds.add(key);
+        
+        const changes = getChangedFields(baseline.data, current.data);
+        if (changes.length > 0) {
+          results.push({
+            resourceType: current.resourceType,
+            resourceId: key,
+            resourceName: current.resourceName,
+            status: 'modified',
+            changes,
+          });
+          console.log(`[DriftDetection] MODIFIED (late-match): ${current.resourceName} - ${changes.length} changes`);
+        } else {
+          results.push({
+            resourceType: current.resourceType,
+            resourceId: key,
+            resourceName: current.resourceName,
+            status: 'unchanged',
+          });
+        }
+        continue;
       }
     }
+    
+    results.push({
+      resourceType: current.resourceType,
+      resourceId: key,
+      resourceName: current.resourceName,
+      status: 'added',
+    });
+    console.log(`[DriftDetection] ADDED: ${current.resourceName} (${current.resourceType})`);
   }
   
   // Sort results: modified/added/removed first, then unchanged
@@ -339,6 +404,15 @@ export function compareResources(
     const priority = { modified: 0, added: 1, removed: 2, unchanged: 3 };
     return (priority[a.status] || 4) - (priority[b.status] || 4);
   });
+  
+  const summary = {
+    total: results.length,
+    modified: results.filter(r => r.status === 'modified').length,
+    added: results.filter(r => r.status === 'added').length,
+    removed: results.filter(r => r.status === 'removed').length,
+    unchanged: results.filter(r => r.status === 'unchanged').length,
+  };
+  console.log(`[DriftDetection] Summary:`, summary);
   
   return results;
 }
