@@ -506,6 +506,25 @@ serve(async (req) => {
       const total = resources.length;
 
       for (const resource of resources) {
+        // Check if job was cancelled before processing each resource
+        const { data: jobStatus } = await supabase
+          .from('export_jobs')
+          .select('status')
+          .eq('id', exportJobId)
+          .single();
+        
+        if (jobStatus?.status === 'cancelled') {
+          console.log('Export job cancelled by user');
+          return new Response(
+            JSON.stringify({ 
+              success: false, 
+              error: 'Export cancelled by user',
+              results 
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
         const endpointConfig = GRAPH_ENDPOINTS[resource];
         
         if (!endpointConfig) {
