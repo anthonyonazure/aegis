@@ -18,8 +18,10 @@ import {
   Calendar,
   Link,
   List,
-  Eye
+  Eye,
+  Download
 } from 'lucide-react';
+import { saveAs } from 'file-saver';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -458,6 +460,55 @@ export const ValidationView = () => {
     });
   };
 
+  const downloadResourceJson = (resourceId: string, resourceName: string, data: Record<string, unknown> | undefined) => {
+    if (!data) {
+      toast({
+        title: 'No Data',
+        description: 'No data available for this resource',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const fileName = `${resourceName.replace(/[^a-z0-9-_]/gi, '_')}.json`;
+    saveAs(blob, fileName);
+    
+    toast({
+      title: 'Downloaded',
+      description: `Saved ${fileName}`,
+    });
+  };
+
+  const downloadAllResourcesJson = () => {
+    if (!displayResult || displayResult.validation_details.length === 0) {
+      toast({
+        title: 'No Data',
+        description: 'No validation results to export',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const exportData = displayResult.validation_details.map(detail => ({
+      resourceId: detail.resourceId,
+      resourceType: detail.resourceType,
+      resourceName: detail.resourceName,
+      validationStatus: detail.status,
+      checks: detail.checks,
+      data: detail.rawData || resourceData.get(detail.resourceId) || null,
+    }));
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const fileName = `validation-debug-${new Date().toISOString().split('T')[0]}.json`;
+    saveAs(blob, fileName);
+    
+    toast({
+      title: 'Downloaded',
+      description: `Exported ${exportData.length} resources to ${fileName}`,
+    });
+  };
+
   const analyzeData = (data: unknown): DataProperty[] => {
     if (!data || typeof data !== 'object') return [];
     
@@ -787,16 +838,22 @@ export const ValidationView = () => {
                 Validation Results
                 {getStatusBadge(displayResult.status)}
               </CardTitle>
-              <div className="flex items-center gap-4 text-sm">
-                <span className="flex items-center gap-1 text-green-400">
-                  <CheckCircle2 className="w-4 h-4" /> {displayResult.passed_count} passed
-                </span>
-                <span className="flex items-center gap-1 text-yellow-400">
-                  <AlertTriangle className="w-4 h-4" /> {displayResult.warning_count} warnings
-                </span>
-                <span className="flex items-center gap-1 text-red-400">
-                  <XCircle className="w-4 h-4" /> {displayResult.error_count} errors
-                </span>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-4 text-sm">
+                  <span className="flex items-center gap-1 text-green-400">
+                    <CheckCircle2 className="w-4 h-4" /> {displayResult.passed_count} passed
+                  </span>
+                  <span className="flex items-center gap-1 text-yellow-400">
+                    <AlertTriangle className="w-4 h-4" /> {displayResult.warning_count} warnings
+                  </span>
+                  <span className="flex items-center gap-1 text-red-400">
+                    <XCircle className="w-4 h-4" /> {displayResult.error_count} errors
+                  </span>
+                </div>
+                <Button variant="outline" size="sm" onClick={downloadAllResourcesJson} className="gap-2">
+                  <Download className="w-4 h-4" />
+                  Export All JSON
+                </Button>
               </div>
             </div>
             <CardDescription>
@@ -849,20 +906,37 @@ export const ValidationView = () => {
                           ))}
                         </div>
                         
-                        {/* Data Inspector Toggle */}
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleDataView(detail.resourceId);
-                          }}
-                          className="w-full gap-2"
-                        >
-                          <Eye className="w-4 h-4" />
-                          {showDataFor.has(detail.resourceId) ? 'Hide Data Details' : 'Show Data Details'}
-                        </Button>
-                        
+                        {/* Data Inspector Toggle & Download */}
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleDataView(detail.resourceId);
+                            }}
+                            className="flex-1 gap-2"
+                          >
+                            <Eye className="w-4 h-4" />
+                            {showDataFor.has(detail.resourceId) ? 'Hide Data' : 'Show Data'}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              downloadResourceJson(
+                                detail.resourceId,
+                                detail.resourceName,
+                                detail.rawData || resourceData.get(detail.resourceId)
+                              );
+                            }}
+                            className="gap-2"
+                          >
+                            <Download className="w-4 h-4" />
+                            JSON
+                          </Button>
+                        </div>
                         {/* Data Inspector */}
                         <AnimatePresence>
                           {showDataFor.has(detail.resourceId) && (
