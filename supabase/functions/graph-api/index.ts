@@ -493,15 +493,33 @@ serve(async (req) => {
             success: true,
           });
 
-          // Store in database
+          // Store in database - extract resource details from response
           const resourceParts = resource.split('/');
+          const resourceData = data.value || data;
+          
+          // Extract name and ID from the data (handles both single objects and arrays)
+          let resourceName: string | null = null;
+          let resourceId: string | null = null;
+          
+          if (Array.isArray(resourceData)) {
+            // For arrays, store a summary
+            resourceName = `${resourceData.length} ${resourceParts[1]} items`;
+            resourceId = exportJobId; // Use job ID as reference
+          } else if (typeof resourceData === 'object' && resourceData !== null) {
+            // For single objects, extract name and ID
+            resourceName = resourceData.displayName || resourceData.name || resourceData.title || resourceData.webUrl || null;
+            resourceId = resourceData.id || null;
+          }
+          
           await supabase
             .from('exported_resources')
             .insert({
               export_job_id: exportJobId,
               category: resourceParts[0],
               resource_type: resourceParts[1],
-              data: data.value || data,
+              resource_name: resourceName,
+              resource_id: resourceId,
+              data: resourceData,
             });
 
         } catch (error: unknown) {
