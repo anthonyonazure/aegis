@@ -3,6 +3,9 @@ project_id = "rcvtxvpyqmfuunnpsqny"
 [functions.graph-api]
 verify_jwt = false
 
+[functions.azure-api]
+verify_jwt = false
+
 [functions.convert-format]
 verify_jwt = false
 

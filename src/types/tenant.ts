@@ -1,3 +1,5 @@
+export type ResourceProvider = 'graph' | 'azure';
+
 export interface ResourceCategory {
   id: string;
   name: string;
@@ -5,6 +7,7 @@ export interface ResourceCategory {
   description: string;
   subcategories: ResourceSubcategory[];
   exportFormats: ExportFormat[];
+  provider?: ResourceProvider; // 'graph' for M365, 'azure' for ARM
 }
 
 export interface ResourceSubcategory {
@@ -12,13 +15,14 @@ export interface ResourceSubcategory {
   name: string;
   count?: number;
   graphEndpoint?: string;
+  azureResourceType?: string; // Azure ARM resource type
   powershellModule?: string;
   supported?: boolean; // false = "Coming Soon", defaults to true if graphEndpoint exists
   comingSoonReason?: string;
 }
 
 export interface ExportFormat {
-  id: 'json' | 'terraform' | 'bicep' | 'powershell';
+  id: 'json' | 'terraform' | 'bicep' | 'powershell' | 'arm';
   name: string;
   extension: string;
   supported: boolean;
@@ -27,7 +31,7 @@ export interface ExportFormat {
 export interface ExportJob {
   id: string;
   name: string;
-  status: 'pending' | 'running' | 'completed' | 'failed';
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
   progress: number;
   categories: string[];
   formats: ExportFormat['id'][];
@@ -45,6 +49,15 @@ export interface TenantConnection {
   status: 'connected' | 'disconnected' | 'error';
   lastSync?: Date;
   clientId?: string;
+  connectionType?: 'graph' | 'azure' | 'both'; // Type of connection
+  subscriptionIds?: string[]; // Selected Azure subscriptions
+}
+
+export interface AzureSubscription {
+  subscriptionId: string;
+  displayName: string;
+  state: string;
+  selected?: boolean;
 }
 
 export interface GitConfig {
@@ -222,6 +235,152 @@ export const RESOURCE_CATEGORIES: ResourceCategory[] = [
     ],
   },
 ];
+
+// Azure Resource Manager Categories
+export const AZURE_RESOURCE_CATEGORIES: ResourceCategory[] = [
+  {
+    id: 'azure-compute',
+    name: 'Azure Compute',
+    icon: 'Server',
+    description: 'Virtual machines, scale sets, and compute resources',
+    provider: 'azure',
+    subcategories: [
+      { id: 'virtual-machines', name: 'Virtual Machines', azureResourceType: 'Microsoft.Compute/virtualMachines', supported: true },
+      { id: 'vm-scale-sets', name: 'VM Scale Sets', azureResourceType: 'Microsoft.Compute/virtualMachineScaleSets', supported: true },
+      { id: 'availability-sets', name: 'Availability Sets', azureResourceType: 'Microsoft.Compute/availabilitySets', supported: true },
+      { id: 'disks', name: 'Managed Disks', azureResourceType: 'Microsoft.Compute/disks', supported: true },
+      { id: 'images', name: 'VM Images', azureResourceType: 'Microsoft.Compute/images', supported: true },
+      { id: 'galleries', name: 'Shared Image Galleries', azureResourceType: 'Microsoft.Compute/galleries', supported: true },
+    ],
+    exportFormats: [
+      { id: 'json', name: 'JSON', extension: '.json', supported: true },
+      { id: 'arm', name: 'ARM Template', extension: '.json', supported: true },
+      { id: 'terraform', name: 'Terraform', extension: '.tf', supported: true },
+      { id: 'bicep', name: 'Bicep', extension: '.bicep', supported: true },
+      { id: 'powershell', name: 'PowerShell', extension: '.ps1', supported: true },
+    ],
+  },
+  {
+    id: 'azure-networking',
+    name: 'Azure Networking',
+    icon: 'Network',
+    description: 'Virtual networks, load balancers, and network security',
+    provider: 'azure',
+    subcategories: [
+      { id: 'virtual-networks', name: 'Virtual Networks', azureResourceType: 'Microsoft.Network/virtualNetworks', supported: true },
+      { id: 'subnets', name: 'Subnets', azureResourceType: 'Microsoft.Network/virtualNetworks/subnets', supported: true },
+      { id: 'network-security-groups', name: 'Network Security Groups', azureResourceType: 'Microsoft.Network/networkSecurityGroups', supported: true },
+      { id: 'public-ip-addresses', name: 'Public IP Addresses', azureResourceType: 'Microsoft.Network/publicIPAddresses', supported: true },
+      { id: 'load-balancers', name: 'Load Balancers', azureResourceType: 'Microsoft.Network/loadBalancers', supported: true },
+      { id: 'application-gateways', name: 'Application Gateways', azureResourceType: 'Microsoft.Network/applicationGateways', supported: true },
+      { id: 'vpn-gateways', name: 'VPN Gateways', azureResourceType: 'Microsoft.Network/vpnGateways', supported: true },
+      { id: 'private-endpoints', name: 'Private Endpoints', azureResourceType: 'Microsoft.Network/privateEndpoints', supported: true },
+      { id: 'dns-zones', name: 'DNS Zones', azureResourceType: 'Microsoft.Network/dnsZones', supported: true },
+    ],
+    exportFormats: [
+      { id: 'json', name: 'JSON', extension: '.json', supported: true },
+      { id: 'arm', name: 'ARM Template', extension: '.json', supported: true },
+      { id: 'terraform', name: 'Terraform', extension: '.tf', supported: true },
+      { id: 'bicep', name: 'Bicep', extension: '.bicep', supported: true },
+      { id: 'powershell', name: 'PowerShell', extension: '.ps1', supported: true },
+    ],
+  },
+  {
+    id: 'azure-storage',
+    name: 'Azure Storage',
+    icon: 'HardDrive',
+    description: 'Storage accounts, blobs, files, and data storage',
+    provider: 'azure',
+    subcategories: [
+      { id: 'storage-accounts', name: 'Storage Accounts', azureResourceType: 'Microsoft.Storage/storageAccounts', supported: true },
+      { id: 'blob-containers', name: 'Blob Containers', azureResourceType: 'Microsoft.Storage/storageAccounts/blobServices/containers', supported: true },
+      { id: 'file-shares', name: 'File Shares', azureResourceType: 'Microsoft.Storage/storageAccounts/fileServices/shares', supported: true },
+      { id: 'tables', name: 'Storage Tables', azureResourceType: 'Microsoft.Storage/storageAccounts/tableServices/tables', supported: true },
+      { id: 'queues', name: 'Storage Queues', azureResourceType: 'Microsoft.Storage/storageAccounts/queueServices/queues', supported: true },
+    ],
+    exportFormats: [
+      { id: 'json', name: 'JSON', extension: '.json', supported: true },
+      { id: 'arm', name: 'ARM Template', extension: '.json', supported: true },
+      { id: 'terraform', name: 'Terraform', extension: '.tf', supported: true },
+      { id: 'bicep', name: 'Bicep', extension: '.bicep', supported: true },
+      { id: 'powershell', name: 'PowerShell', extension: '.ps1', supported: true },
+    ],
+  },
+  {
+    id: 'azure-identity',
+    name: 'Azure Identity & Security',
+    icon: 'Shield',
+    description: 'Key Vaults, Managed Identities, and RBAC',
+    provider: 'azure',
+    subcategories: [
+      { id: 'key-vaults', name: 'Key Vaults', azureResourceType: 'Microsoft.KeyVault/vaults', supported: true },
+      { id: 'managed-identities', name: 'Managed Identities', azureResourceType: 'Microsoft.ManagedIdentity/userAssignedIdentities', supported: true },
+      { id: 'role-assignments', name: 'Role Assignments', azureResourceType: 'Microsoft.Authorization/roleAssignments', supported: true },
+      { id: 'role-definitions', name: 'Custom Role Definitions', azureResourceType: 'Microsoft.Authorization/roleDefinitions', supported: true },
+      { id: 'policy-assignments', name: 'Policy Assignments', azureResourceType: 'Microsoft.Authorization/policyAssignments', supported: true },
+      { id: 'policy-definitions', name: 'Policy Definitions', azureResourceType: 'Microsoft.Authorization/policyDefinitions', supported: true },
+    ],
+    exportFormats: [
+      { id: 'json', name: 'JSON', extension: '.json', supported: true },
+      { id: 'arm', name: 'ARM Template', extension: '.json', supported: true },
+      { id: 'terraform', name: 'Terraform', extension: '.tf', supported: true },
+      { id: 'bicep', name: 'Bicep', extension: '.bicep', supported: true },
+      { id: 'powershell', name: 'PowerShell', extension: '.ps1', supported: true },
+    ],
+  },
+  {
+    id: 'azure-paas',
+    name: 'Azure PaaS Services',
+    icon: 'Cloud',
+    description: 'App Services, Functions, SQL Databases, and more',
+    provider: 'azure',
+    subcategories: [
+      { id: 'app-services', name: 'App Services', azureResourceType: 'Microsoft.Web/sites', supported: true },
+      { id: 'app-service-plans', name: 'App Service Plans', azureResourceType: 'Microsoft.Web/serverfarms', supported: true },
+      { id: 'function-apps', name: 'Function Apps', azureResourceType: 'Microsoft.Web/sites', supported: true },
+      { id: 'sql-servers', name: 'SQL Servers', azureResourceType: 'Microsoft.Sql/servers', supported: true },
+      { id: 'sql-databases', name: 'SQL Databases', azureResourceType: 'Microsoft.Sql/servers/databases', supported: true },
+      { id: 'cosmos-accounts', name: 'Cosmos DB Accounts', azureResourceType: 'Microsoft.DocumentDB/databaseAccounts', supported: true },
+      { id: 'redis-caches', name: 'Redis Caches', azureResourceType: 'Microsoft.Cache/redis', supported: true },
+      { id: 'service-bus', name: 'Service Bus Namespaces', azureResourceType: 'Microsoft.ServiceBus/namespaces', supported: true },
+      { id: 'event-hubs', name: 'Event Hubs', azureResourceType: 'Microsoft.EventHub/namespaces', supported: true },
+      { id: 'container-registries', name: 'Container Registries', azureResourceType: 'Microsoft.ContainerRegistry/registries', supported: true },
+      { id: 'aks-clusters', name: 'AKS Clusters', azureResourceType: 'Microsoft.ContainerService/managedClusters', supported: true },
+    ],
+    exportFormats: [
+      { id: 'json', name: 'JSON', extension: '.json', supported: true },
+      { id: 'arm', name: 'ARM Template', extension: '.json', supported: true },
+      { id: 'terraform', name: 'Terraform', extension: '.tf', supported: true },
+      { id: 'bicep', name: 'Bicep', extension: '.bicep', supported: true },
+      { id: 'powershell', name: 'PowerShell', extension: '.ps1', supported: true },
+    ],
+  },
+  {
+    id: 'azure-monitoring',
+    name: 'Azure Monitoring',
+    icon: 'Activity',
+    description: 'Log Analytics, Application Insights, and alerts',
+    provider: 'azure',
+    subcategories: [
+      { id: 'log-analytics', name: 'Log Analytics Workspaces', azureResourceType: 'Microsoft.OperationalInsights/workspaces', supported: true },
+      { id: 'app-insights', name: 'Application Insights', azureResourceType: 'Microsoft.Insights/components', supported: true },
+      { id: 'action-groups', name: 'Action Groups', azureResourceType: 'Microsoft.Insights/actionGroups', supported: true },
+      { id: 'metric-alerts', name: 'Metric Alerts', azureResourceType: 'Microsoft.Insights/metricAlerts', supported: true },
+      { id: 'activity-log-alerts', name: 'Activity Log Alerts', azureResourceType: 'Microsoft.Insights/activityLogAlerts', supported: true },
+      { id: 'diagnostic-settings', name: 'Diagnostic Settings', azureResourceType: 'Microsoft.Insights/diagnosticSettings', supported: true },
+    ],
+    exportFormats: [
+      { id: 'json', name: 'JSON', extension: '.json', supported: true },
+      { id: 'arm', name: 'ARM Template', extension: '.json', supported: true },
+      { id: 'terraform', name: 'Terraform', extension: '.tf', supported: true },
+      { id: 'bicep', name: 'Bicep', extension: '.bicep', supported: true },
+      { id: 'powershell', name: 'PowerShell', extension: '.ps1', supported: true },
+    ],
+  },
+];
+
+// Combined categories for unified view
+export const ALL_RESOURCE_CATEGORIES = [...RESOURCE_CATEGORIES, ...AZURE_RESOURCE_CATEGORIES];
 
 export const CICD_TEMPLATES = [
   {
