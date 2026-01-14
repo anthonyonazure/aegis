@@ -13,41 +13,67 @@ export interface DriftResult {
 }
 
 // Fields to ignore when comparing resources (metadata, timestamps, etc.)
-const IGNORED_FIELDS = [
-  'id',
+// Note: We keep 'id' for matching but exclude these volatile metadata fields
+const IGNORED_FIELDS = new Set([
   '@odata.context',
   '@odata.type',
   '@odata.id',
+  '@odata.count',
+  '@odata.nextLink',
   'createdDateTime',
   'modifiedDateTime',
   'lastModifiedDateTime',
+  'lastSyncDateTime',
+  'lastSuccessfulSyncDateTime',
   'createdBy',
   'lastModifiedBy',
   'version',
-];
+  'roleScopeTagIds', // Often changes without meaningful impact
+]);
 
-function deepEqual(a: unknown, b: unknown): boolean {
-  if (a === b) return true;
-  if (typeof a !== typeof b) return false;
-  if (a === null || b === null) return a === b;
-  
-  if (Array.isArray(a) && Array.isArray(b)) {
-    if (a.length !== b.length) return false;
-    return a.every((item, index) => deepEqual(item, b[index]));
-  }
-  
-  if (typeof a === 'object' && typeof b === 'object') {
-    const aKeys = Object.keys(a as object).filter(k => !IGNORED_FIELDS.includes(k));
-    const bKeys = Object.keys(b as object).filter(k => !IGNORED_FIELDS.includes(k));
-    
-    if (aKeys.length !== bKeys.length) return false;
-    
-    return aKeys.every(key => 
-      deepEqual((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key])
+// Fields that indicate volatile state but not configuration drift
+const VOLATILE_FIELDS = new Set([
+  'lastSignInDateTime',
+  'signInSessionsValidFromDateTime',
+  'refreshTokensValidFromDateTime',
+  'lastPasswordChangeDateTime',
+  'onPremisesLastSyncDateTime',
+  'deviceLastSeenDateTime',
+  'approximateLastSignInDateTime',
+]);
+
+function shouldIgnoreField(key: string): boolean {
+  if (IGNORED_FIELDS.has(key)) return true;
+  if (VOLATILE_FIELDS.has(key)) return true;
+  if (key.startsWith('@odata')) return true;
+  return false;
+}
+
+function normalizeValue(value: unknown): unknown {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'string') return value.trim();
+  if (Array.isArray(value)) {
+    // Sort arrays by their JSON representation for consistent comparison
+    return value.map(normalizeValue).sort((a, b) => 
+      JSON.stringify(a).localeCompare(JSON.stringify(b))
     );
   }
-  
-  return false;
+  if (typeof value === 'object') {
+    const normalized: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (!shouldIgnoreField(k)) {
+        normalized[k] = normalizeValue(v);
+      }
+    }
+    return normalized;
+  }
+  return value;
+}
+
+function deepEqual(a: unknown, b: unknown): boolean {
+  const normA = normalizeValue(a);
+  const normB = normalizeValue(b);
+  return JSON.stringify(normA) === JSON.stringify(normB);
 }
 
 function getChangedFields(
@@ -57,8 +83,8 @@ function getChangedFields(
   const changes: Array<{ field: string; baselineValue: unknown; currentValue: unknown }> = [];
   
   const allKeys = new Set([
-    ...Object.keys(baseline).filter(k => !IGNORED_FIELDS.includes(k)),
-    ...Object.keys(current).filter(k => !IGNORED_FIELDS.includes(k)),
+    ...Object.keys(baseline).filter(k => !shouldIgnoreField(k)),
+    ...Object.keys(current).filter(k => !shouldIgnoreField(k)),
   ]);
   
   for (const key of allKeys) {
@@ -77,53 +103,197 @@ function getChangedFields(
   return changes;
 }
 
+// Extract a unique identifier from resource data
+function extractResourceKey(resource: { 
+  resourceType: string; 
+  resourceId?: string | null; 
+  resourceName?: string | null;
+  data: Record<string, unknown>;
+  category?: string;
+}): string {
+  // First try explicit resource_id from database
+  if (resource.resourceId) {
+    return `${resource.resourceType}::${resource.resourceId}`;
+  }
+  
+  // Then try common ID fields in the data
+  const data = resource.data;
+  
+  // Handle array data - get IDs from first few items to create a composite key
+  if (Array.isArray(data)) {
+    const ids = data.slice(0, 3).map((item: unknown) => {
+      if (typeof item === 'object' && item !== null) {
+        const obj = item as Record<string, unknown>;
+        return obj.id || obj.objectId || obj.policyId || obj.displayName || 'unknown';
+      }
+      return 'unknown';
+    });
+    return `${resource.resourceType}::array::${ids.join(',')}::len${data.length}`;
+  }
+  
+  // Standard ID fields
+  const idFields = ['id', 'objectId', 'policyId', 'templateId', 'configurationId'];
+  for (const field of idFields) {
+    if (data[field]) {
+      return `${resource.resourceType}::${data[field]}`;
+    }
+  }
+  
+  // Fall back to name-based key
+  const nameFields = ['displayName', 'name', 'title', 'userPrincipalName'];
+  for (const field of nameFields) {
+    if (data[field]) {
+      return `${resource.resourceType}::name::${data[field]}`;
+    }
+  }
+  
+  // Last resort: use resource name from export
+  if (resource.resourceName) {
+    return `${resource.resourceType}::${resource.resourceName}`;
+  }
+  
+  // Really last resort: hash of data
+  return `${resource.resourceType}::hash::${JSON.stringify(data).slice(0, 100)}`;
+}
+
+// Flatten array data into individual resources for comparison
+function flattenResourceData(resource: {
+  resourceType: string;
+  resourceId?: string | null;
+  resourceName?: string | null;
+  data: Record<string, unknown>;
+  category?: string;
+}): Array<{
+  resourceType: string;
+  resourceId: string;
+  resourceName: string;
+  data: Record<string, unknown>;
+  isArrayItem: boolean;
+  arrayIndex?: number;
+}> {
+  const data = resource.data;
+  
+  // If data is an array, flatten it into individual items
+  if (Array.isArray(data)) {
+    return data.map((item, index) => {
+      let itemData: Record<string, unknown>;
+      if (typeof item === 'object' && item !== null) {
+        itemData = item as Record<string, unknown>;
+      } else {
+        itemData = { value: item };
+      }
+      
+      const itemId = (itemData.id || itemData.objectId || itemData.policyId || `index-${index}`) as string;
+      const itemName = (itemData.displayName || itemData.name || itemData.title || `Item ${index + 1}`) as string;
+      
+      return {
+        resourceType: resource.resourceType,
+        resourceId: `${resource.resourceType}::${itemId}`,
+        resourceName: itemName,
+        data: itemData,
+        isArrayItem: true,
+        arrayIndex: index,
+      };
+    });
+  }
+  
+  // Handle OData value wrapper
+  if (data.value && Array.isArray(data.value)) {
+    return (data.value as Array<Record<string, unknown>>).map((item, index) => {
+      const itemId = (item.id || item.objectId || item.policyId || `index-${index}`) as string;
+      const itemName = (item.displayName || item.name || item.title || `Item ${index + 1}`) as string;
+      
+      return {
+        resourceType: resource.resourceType,
+        resourceId: `${resource.resourceType}::${itemId}`,
+        resourceName: itemName,
+        data: item,
+        isArrayItem: true,
+        arrayIndex: index,
+      };
+    });
+  }
+  
+  // Single resource - keep as is
+  const resourceId = extractResourceKey(resource);
+  const dataRecord = data as Record<string, unknown>;
+  const resourceName = (dataRecord.displayName || dataRecord.name || dataRecord.title || resource.resourceName || resource.resourceType) as string;
+  
+  return [{
+    resourceType: resource.resourceType,
+    resourceId,
+    resourceName,
+    data,
+    isArrayItem: false,
+  }];
+}
+
 export function compareResources(
   baselineResources: Array<{ 
     resourceType: string; 
-    resourceId?: string; 
-    resourceName?: string;
-    data: Record<string, unknown> 
+    resourceId?: string | null; 
+    resourceName?: string | null;
+    data: Record<string, unknown>;
+    category?: string;
   }>,
   currentResources: Array<{ 
     resourceType: string; 
-    resourceId?: string; 
-    resourceName?: string;
-    data: Record<string, unknown> 
+    resourceId?: string | null; 
+    resourceName?: string | null;
+    data: Record<string, unknown>;
+    category?: string;
   }>
 ): DriftResult[] {
   const results: DriftResult[] = [];
   
-  // Create maps for quick lookup
-  const baselineMap = new Map<string, typeof baselineResources[0]>();
-  const currentMap = new Map<string, typeof currentResources[0]>();
+  // Flatten all resources (handle arrays)
+  const flatBaseline = baselineResources.flatMap(flattenResourceData);
+  const flatCurrent = currentResources.flatMap(flattenResourceData);
   
-  for (const resource of baselineResources) {
-    const key = resource.resourceId || 
-                (resource.data.id as string) || 
-                `${resource.resourceType}/${resource.resourceName}`;
-    baselineMap.set(key, resource);
+  // Create maps for quick lookup by multiple keys
+  const baselineById = new Map<string, typeof flatBaseline[0]>();
+  const currentById = new Map<string, typeof flatCurrent[0]>();
+  
+  // Also create maps by type+name for fallback matching
+  const baselineByTypeName = new Map<string, typeof flatBaseline[0]>();
+  const currentByTypeName = new Map<string, typeof flatCurrent[0]>();
+  
+  for (const resource of flatBaseline) {
+    baselineById.set(resource.resourceId, resource);
+    const typeNameKey = `${resource.resourceType}::${resource.resourceName}`;
+    baselineByTypeName.set(typeNameKey, resource);
   }
   
-  for (const resource of currentResources) {
-    const key = resource.resourceId || 
-                (resource.data.id as string) || 
-                `${resource.resourceType}/${resource.resourceName}`;
-    currentMap.set(key, resource);
+  for (const resource of flatCurrent) {
+    currentById.set(resource.resourceId, resource);
+    const typeNameKey = `${resource.resourceType}::${resource.resourceName}`;
+    currentByTypeName.set(typeNameKey, resource);
   }
   
-  // Check for modified and removed resources
-  for (const [key, baseline] of baselineMap) {
-    const current = currentMap.get(key);
+  const processedCurrentIds = new Set<string>();
+  
+  // Check for modified and removed resources from baseline
+  for (const [key, baseline] of baselineById) {
+    // Try to find matching current resource by ID first
+    let current = currentById.get(key);
+    
+    // If not found by ID, try by type+name
+    if (!current) {
+      const typeNameKey = `${baseline.resourceType}::${baseline.resourceName}`;
+      current = currentByTypeName.get(typeNameKey);
+    }
     
     if (!current) {
       // Resource was removed
       results.push({
         resourceType: baseline.resourceType,
         resourceId: key,
-        resourceName: baseline.resourceName || (baseline.data.displayName as string) || 'Unknown',
+        resourceName: baseline.resourceName,
         status: 'removed',
       });
     } else {
+      processedCurrentIds.add(current.resourceId);
+      
       // Check if modified
       const changes = getChangedFields(baseline.data, current.data);
       
@@ -131,7 +301,7 @@ export function compareResources(
         results.push({
           resourceType: baseline.resourceType,
           resourceId: key,
-          resourceName: baseline.resourceName || (baseline.data.displayName as string) || 'Unknown',
+          resourceName: baseline.resourceName,
           status: 'modified',
           changes,
         });
@@ -139,36 +309,49 @@ export function compareResources(
         results.push({
           resourceType: baseline.resourceType,
           resourceId: key,
-          resourceName: baseline.resourceName || (baseline.data.displayName as string) || 'Unknown',
+          resourceName: baseline.resourceName,
           status: 'unchanged',
         });
       }
     }
   }
   
-  // Check for added resources
-  for (const [key, current] of currentMap) {
-    if (!baselineMap.has(key)) {
-      results.push({
-        resourceType: current.resourceType,
-        resourceId: key,
-        resourceName: current.resourceName || (current.data.displayName as string) || 'Unknown',
-        status: 'added',
-      });
+  // Check for added resources (in current but not in baseline)
+  for (const [key, current] of currentById) {
+    if (!processedCurrentIds.has(key)) {
+      // Check if we already matched this by type+name
+      const typeNameKey = `${current.resourceType}::${current.resourceName}`;
+      const matchedByName = baselineByTypeName.has(typeNameKey);
+      
+      if (!matchedByName) {
+        results.push({
+          resourceType: current.resourceType,
+          resourceId: key,
+          resourceName: current.resourceName,
+          status: 'added',
+        });
+      }
     }
   }
+  
+  // Sort results: modified/added/removed first, then unchanged
+  results.sort((a, b) => {
+    const priority = { modified: 0, added: 1, removed: 2, unchanged: 3 };
+    return (priority[a.status] || 4) - (priority[b.status] || 4);
+  });
   
   return results;
 }
 
 export function compareExports(
-  exportA: Array<{ resource_type: string; resource_id?: string; resource_name?: string; data: unknown }>,
-  exportB: Array<{ resource_type: string; resource_id?: string; resource_name?: string; data: unknown }>
+  exportA: Array<{ resource_type: string; resource_id?: string | null; resource_name?: string | null; category: string; data: unknown }>,
+  exportB: Array<{ resource_type: string; resource_id?: string | null; resource_name?: string | null; category: string; data: unknown }>
 ): DriftResult[] {
   const resourcesA = exportA.map(r => ({
     resourceType: r.resource_type,
     resourceId: r.resource_id,
     resourceName: r.resource_name,
+    category: r.category,
     data: r.data as Record<string, unknown>,
   }));
   
@@ -176,8 +359,33 @@ export function compareExports(
     resourceType: r.resource_type,
     resourceId: r.resource_id,
     resourceName: r.resource_name,
+    category: r.category,
     data: r.data as Record<string, unknown>,
   }));
   
   return compareResources(resourcesA, resourcesB);
+}
+
+// Helper to get a summary of changes
+export function getDriftSummary(results: DriftResult[]): {
+  total: number;
+  unchanged: number;
+  added: number;
+  removed: number;
+  modified: number;
+  hasDrift: boolean;
+} {
+  const unchanged = results.filter(r => r.status === 'unchanged').length;
+  const added = results.filter(r => r.status === 'added').length;
+  const removed = results.filter(r => r.status === 'removed').length;
+  const modified = results.filter(r => r.status === 'modified').length;
+  
+  return {
+    total: results.length,
+    unchanged,
+    added,
+    removed,
+    modified,
+    hasDrift: added > 0 || removed > 0 || modified > 0,
+  };
 }
