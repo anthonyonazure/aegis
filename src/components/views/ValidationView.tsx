@@ -67,18 +67,35 @@ interface ExportJob {
   created_at: string;
 }
 
-// Validation rules
+// Validation rules - designed to handle Graph API response structures
 const VALIDATION_RULES = [
   {
     id: 'schema',
     name: 'Schema Validation',
-    description: 'Checks if the resource has required properties',
+    description: 'Checks if the resource has identifiable properties',
     check: (data: Record<string, unknown>): { status: 'passed' | 'warning' | 'error'; message: string } => {
       if (!data || typeof data !== 'object') {
         return { status: 'error', message: 'Invalid data structure' };
       }
-      if (!data.displayName && !data.name) {
-        return { status: 'warning', message: 'Missing displayName or name property' };
+      
+      // Handle array data (common for Graph API responses)
+      if (Array.isArray(data)) {
+        return data.length > 0 
+          ? { status: 'passed', message: `Contains ${data.length} items` }
+          : { status: 'warning', message: 'Empty array returned' };
+      }
+      
+      // Check for any common name/identifier properties
+      const nameProps = ['displayName', 'name', 'title', 'description', 'webUrl', 'userPrincipalName', 'mail'];
+      const hasName = nameProps.some(prop => data[prop]);
+      
+      if (!hasName) {
+        // Check if it has meaningful data at all
+        const keys = Object.keys(data).filter(k => !k.startsWith('@'));
+        if (keys.length > 2) {
+          return { status: 'passed', message: 'Resource has data properties' };
+        }
+        return { status: 'warning', message: 'No standard name property found' };
       }
       return { status: 'passed', message: 'Schema is valid' };
     }
@@ -86,15 +103,35 @@ const VALIDATION_RULES = [
   {
     id: 'id_present',
     name: 'Resource ID',
-    description: 'Checks if the resource has a valid ID',
+    description: 'Checks if the resource has an identifier',
     check: (data: Record<string, unknown>): { status: 'passed' | 'warning' | 'error'; message: string } => {
-      if (!data.id) {
-        return { status: 'error', message: 'Missing resource ID' };
+      // Handle array data
+      if (Array.isArray(data)) {
+        const itemsWithIds = data.filter((item: any) => item?.id);
+        if (data.length === 0) {
+          return { status: 'passed', message: 'Empty collection (no IDs expected)' };
+        }
+        if (itemsWithIds.length === data.length) {
+          return { status: 'passed', message: `All ${data.length} items have IDs` };
+        }
+        if (itemsWithIds.length > 0) {
+          return { status: 'warning', message: `${itemsWithIds.length}/${data.length} items have IDs` };
+        }
+        return { status: 'warning', message: 'Items in collection lack IDs' };
       }
-      if (typeof data.id !== 'string' || data.id.length < 10) {
-        return { status: 'warning', message: 'Resource ID format may be invalid' };
+      
+      // Check various ID properties
+      const idProps = ['id', '@odata.id', 'objectId', 'policyId'];
+      const hasId = idProps.some(prop => data[prop]);
+      
+      if (!hasId) {
+        // Some resources don't have IDs (e.g., settings, root objects)
+        if (data['@odata.context'] || data['@odata.type']) {
+          return { status: 'passed', message: 'OData resource (ID may be in context)' };
+        }
+        return { status: 'warning', message: 'No standard ID property found' };
       }
-      return { status: 'passed', message: 'Resource ID is present and valid' };
+      return { status: 'passed', message: 'Resource ID is present' };
     }
   },
   {
@@ -102,7 +139,12 @@ const VALIDATION_RULES = [
     name: 'Reference Integrity',
     description: 'Checks for broken references to other resources',
     check: (data: Record<string, unknown>): { status: 'passed' | 'warning' | 'error'; message: string } => {
-      const refFields = ['groupId', 'userId', 'policyId', 'templateId', 'parentId'];
+      // Handle array data
+      if (Array.isArray(data)) {
+        return { status: 'passed', message: 'Collection references not checked' };
+      }
+      
+      const refFields = ['groupId', 'userId', 'policyId', 'templateId', 'parentId', 'appId'];
       const missingRefs = refFields.filter(field => 
         data[field] !== undefined && (data[field] === null || data[field] === '')
       );
@@ -118,14 +160,22 @@ const VALIDATION_RULES = [
     name: 'Data Completeness',
     description: 'Checks if the resource has meaningful data',
     check: (data: Record<string, unknown>): { status: 'passed' | 'warning' | 'error'; message: string } => {
-      const keys = Object.keys(data);
-      if (keys.length < 3) {
+      // Handle array data
+      if (Array.isArray(data)) {
+        if (data.length === 0) {
+          return { status: 'warning', message: 'No items in collection' };
+        }
+        return { status: 'passed', message: `Collection has ${data.length} items` };
+      }
+      
+      const keys = Object.keys(data).filter(k => !k.startsWith('@odata'));
+      if (keys.length < 2) {
         return { status: 'warning', message: 'Resource has very few properties' };
       }
       
       const nullCount = keys.filter(k => data[k] === null).length;
-      if (nullCount > keys.length / 2) {
-        return { status: 'warning', message: 'More than half of properties are null' };
+      if (nullCount > keys.length * 0.7) {
+        return { status: 'warning', message: 'Most properties are null' };
       }
       
       return { status: 'passed', message: 'Resource data is complete' };
@@ -136,7 +186,12 @@ const VALIDATION_RULES = [
     name: 'Timestamp Validation',
     description: 'Validates date/time fields',
     check: (data: Record<string, unknown>): { status: 'passed' | 'warning' | 'error'; message: string } => {
-      const dateFields = ['createdDateTime', 'lastModifiedDateTime', 'expirationDateTime'];
+      // Handle array data
+      if (Array.isArray(data)) {
+        return { status: 'passed', message: 'Timestamps not validated for collections' };
+      }
+      
+      const dateFields = ['createdDateTime', 'lastModifiedDateTime', 'expirationDateTime', 'deletedDateTime'];
       const invalidDates: string[] = [];
       
       for (const field of dateFields) {
@@ -276,10 +331,23 @@ export const ValidationView = () => {
           passedCount++;
         }
 
+        // Extract a meaningful name from the resource
+        let displayName = resource.resource_name;
+        if (!displayName || displayName === 'Unknown') {
+          // Try to extract name from data
+          if (Array.isArray(data)) {
+            displayName = `${data.length} ${resource.resource_type} items`;
+          } else if (data.displayName || data.name || data.title) {
+            displayName = (data.displayName || data.name || data.title) as string;
+          } else {
+            displayName = resource.resource_type;
+          }
+        }
+
         validationDetails.push({
           resourceId: resource.id,
           resourceType: resource.resource_type,
-          resourceName: resource.resource_name || 'Unknown',
+          resourceName: displayName,
           status,
           checks,
         });
