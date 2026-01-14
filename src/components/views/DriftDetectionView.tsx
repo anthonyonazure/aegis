@@ -18,6 +18,8 @@ import {
   ChevronDown,
   ChevronRight,
   Download,
+  Cloud,
+  Server,
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -43,7 +45,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useTenant } from '@/contexts/TenantContext';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
-import { compareExports, DriftResult } from '@/lib/driftDetection';
+import { compareExports, DriftResult, ResourceProvider, filterResultsByProvider, getAzureDriftSummary } from '@/lib/driftDetection';
 import { logAuditEvent } from '@/lib/auditLog';
 import { DiffViewer } from '@/components/DiffViewer';
 import { notifyDriftDetected } from '@/lib/webhookNotifications';
@@ -93,6 +95,7 @@ export const DriftDetectionView = () => {
   const [baselineResources, setBaselineResources] = useState<ExportedResource[]>([]);
   const [compareResources, setCompareResources] = useState<ExportedResource[]>([]);
   const [resultFilter, setResultFilter] = useState<'all' | 'changes' | 'modified' | 'added' | 'removed'>('changes');
+  const [providerFilter, setProviderFilter] = useState<ResourceProvider>('all');
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -283,14 +286,26 @@ export const DriftDetectionView = () => {
     }
   };
 
-  const unchangedCount = results.filter(r => r.status === 'unchanged').length;
-  const addedCount = results.filter(r => r.status === 'added').length;
-  const removedCount = results.filter(r => r.status === 'removed').length;
-  const modifiedCount = results.filter(r => r.status === 'modified').length;
+  // Count by provider
+  const azureResults = results.filter(r => r.provider === 'azure');
+  const graphResults = results.filter(r => r.provider === 'graph');
+  const azureCount = azureResults.length;
+  const graphCount = graphResults.length;
+  
+  // Apply provider filter first
+  const providerFilteredResults = filterResultsByProvider(results, providerFilter);
+  
+  const unchangedCount = providerFilteredResults.filter(r => r.status === 'unchanged').length;
+  const addedCount = providerFilteredResults.filter(r => r.status === 'added').length;
+  const removedCount = providerFilteredResults.filter(r => r.status === 'removed').length;
+  const modifiedCount = providerFilteredResults.filter(r => r.status === 'modified').length;
   const changesCount = addedCount + removedCount + modifiedCount;
+  
+  // Get Azure-specific summary
+  const azureSummary = getAzureDriftSummary(results);
 
-  // Filter results based on selection
-  const filteredResults = results.filter(r => {
+  // Filter results based on status selection
+  const filteredResults = providerFilteredResults.filter(r => {
     if (resultFilter === 'all') return true;
     if (resultFilter === 'changes') return r.status !== 'unchanged';
     return r.status === resultFilter;
@@ -455,6 +470,40 @@ export const DriftDetectionView = () => {
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
+                {/* Provider filter */}
+                {(azureCount > 0 || graphCount > 0) && (
+                  <div className="flex items-center gap-2 pb-2 border-b border-border/50">
+                    <span className="text-sm text-muted-foreground">Provider:</span>
+                    <Button
+                      variant={providerFilter === 'all' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setProviderFilter('all')}
+                    >
+                      All ({results.length})
+                    </Button>
+                    {graphCount > 0 && (
+                      <Button
+                        variant={providerFilter === 'graph' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setProviderFilter('graph')}
+                      >
+                        <Server className="w-3 h-3 mr-1" />
+                        M365 ({graphCount})
+                      </Button>
+                    )}
+                    {azureCount > 0 && (
+                      <Button
+                        variant={providerFilter === 'azure' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setProviderFilter('azure')}
+                      >
+                        <Cloud className="w-3 h-3 mr-1" />
+                        Azure ({azureCount})
+                      </Button>
+                    )}
+                  </div>
+                )}
+
                 {/* Filter and actions */}
                 <div className="flex items-center justify-between gap-4 flex-wrap">
                   <div className="flex items-center gap-2">
@@ -554,6 +603,19 @@ export const DriftDetectionView = () => {
                                 </div>
                               </div>
                               <div className="flex items-center gap-2">
+                                {/* Provider badge */}
+                                {result.provider === 'azure' && (
+                                  <Badge className="bg-blue-600/20 text-blue-400 text-xs">
+                                    <Cloud className="w-3 h-3 mr-1" />
+                                    Azure
+                                  </Badge>
+                                )}
+                                {result.provider === 'graph' && (
+                                  <Badge className="bg-purple-600/20 text-purple-400 text-xs">
+                                    <Server className="w-3 h-3 mr-1" />
+                                    M365
+                                  </Badge>
+                                )}
                                 {result.changes && result.changes.length > 0 && (
                                   <Badge variant="outline" className="text-xs">
                                     {result.changes.length} field{result.changes.length !== 1 ? 's' : ''} changed
