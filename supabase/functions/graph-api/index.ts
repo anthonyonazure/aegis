@@ -323,10 +323,10 @@ async function getAccessToken(tenantId: string, clientId: string, clientSecret: 
 
 async function fetchGraphData(accessToken: string, endpoint: string, useBeta: boolean = false): Promise<any> {
   const baseUrl = useBeta ? 'https://graph.microsoft.com/beta' : 'https://graph.microsoft.com/v1.0';
-  const graphUrl = `${baseUrl}${endpoint}`;
-  
-  try {
-    const response = await fetch(graphUrl, {
+  const initialUrl = endpoint.startsWith('http') ? endpoint : `${baseUrl}${endpoint}`;
+
+  const fetchJson = async (url: string): Promise<any> => {
+    const response = await fetch(url, {
       headers: {
         'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
@@ -334,33 +334,63 @@ async function fetchGraphData(accessToken: string, endpoint: string, useBeta: bo
     });
 
     if (!response.ok) {
-      // Try beta endpoint if v1.0 fails and we didn't already try beta
-      if (!useBeta) {
-        const betaUrl = `https://graph.microsoft.com/beta${endpoint}`;
-        const betaResponse = await fetch(betaUrl, {
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-          },
-        });
-
-        if (!betaResponse.ok) {
-          const errorData = await betaResponse.json().catch(() => ({}));
-          console.error('Graph API error (full details):', JSON.stringify(errorData));
-          throw new Error(`API_ERROR_${betaResponse.status}`);
-        }
-
-        return await betaResponse.json();
-      }
-      
-      // Already tried beta and it failed
       const errorData = await response.json().catch(() => ({}));
       console.error('Graph API error (full details):', JSON.stringify(errorData));
       throw new Error(`API_ERROR_${response.status}`);
     }
 
     return await response.json();
+  };
+
+  const fetchAllPages = async (url: string): Promise<any> => {
+    // Graph collections return { value: [], "@odata.nextLink": "..." }
+    // If we don't follow nextLink, exports are incomplete -> false "removed" drift.
+    const MAX_PAGES = 50;
+
+    let nextUrl: string | undefined = url;
+    let page = 0;
+
+    let combined: any | null = null;
+    const allValues: any[] = [];
+
+    while (nextUrl && page < MAX_PAGES) {
+      const data = await fetchJson(nextUrl);
+
+      // Non-collection response: return directly
+      if (!data || !Array.isArray(data.value)) {
+        return data;
+      }
+
+      combined = combined ?? { ...data };
+      allValues.push(...data.value);
+
+      nextUrl = data['@odata.nextLink'];
+      page++;
+    }
+
+    if (!combined) return { value: allValues };
+
+    // Replace with combined list and remove nextLink so downstream doesn't treat it as state.
+    const { ['@odata.nextLink']: _ignored, ...rest } = combined;
+    return {
+      ...rest,
+      '@odata.count': allValues.length,
+      value: allValues,
+    };
+  };
+
+  try {
+    return await fetchAllPages(initialUrl);
   } catch (error) {
+    // Try beta endpoint if v1.0 fails and we didn't already try beta
+    if (!useBeta) {
+      const betaUrl = endpoint.startsWith('http')
+        ? endpoint.replace('graph.microsoft.com/v1.0', 'graph.microsoft.com/beta')
+        : `https://graph.microsoft.com/beta${endpoint}`;
+
+      return await fetchAllPages(betaUrl);
+    }
+
     console.error(`Error fetching ${endpoint}:`, error);
     throw error;
   }
