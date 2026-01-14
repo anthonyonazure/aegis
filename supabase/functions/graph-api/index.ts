@@ -115,12 +115,13 @@ const GRAPH_ENDPOINTS: Record<string, { endpoint: string; useBeta?: boolean; cre
   'entra-id/roles': { endpoint: '/directoryRoles', supportsImport: false },
 
   // Defender - Using configurationPolicies with $expand to get settings
-  // Note: OData filter on templateReference may not be supported, so we fetch all and filter in response processing
-  'defender/asr-policies': { endpoint: '/deviceManagement/configurationPolicies?$expand=settings&$filter=technologies has \'microsoftSense\'', useBeta: true, supportsImport: false },
-  'defender/antivirus-policies': { endpoint: '/deviceManagement/configurationPolicies?$expand=settings&$filter=technologies has \'mdm\'', useBeta: true, supportsImport: false },
+  // These endpoints fetch actual deployed policies, not template definitions
+  'defender/asr-policies': { endpoint: '/deviceManagement/configurationPolicies?$expand=settings', useBeta: true, supportsImport: false },
+  'defender/antivirus-policies': { endpoint: '/deviceManagement/configurationPolicies?$expand=settings', useBeta: true, supportsImport: false },
   'defender/firewall-policies': { endpoint: '/deviceManagement/configurationPolicies?$expand=settings', useBeta: true, supportsImport: false },
   'defender/edr-policies': { endpoint: '/deviceManagement/configurationPolicies?$expand=settings', useBeta: true, supportsImport: false },
-  'defender/security-baselines': { endpoint: '/deviceManagement/templates?$filter=templateType eq \'securityBaseline\'', useBeta: true, supportsImport: false },
+  // Security baselines: fetch deployed policies based on security baseline templates (not the template catalog)
+  'defender/security-baselines': { endpoint: '/deviceManagement/configurationPolicies?$expand=settings', useBeta: true, supportsImport: false },
 
   // Purview / Information Protection
   'purview/sensitivity-labels': { endpoint: '/informationProtection/policy/labels', useBeta: true, supportsImport: false },
