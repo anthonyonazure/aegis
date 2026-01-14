@@ -264,15 +264,35 @@ export function compareResources(
   const baselineByInnerId = new Map<string, typeof flatBaseline[0]>();
   const currentByInnerId = new Map<string, typeof flatCurrent[0]>();
   
+  // NEW: Match by just name (case-insensitive) for aggressive fallback
+  const baselineByName = new Map<string, typeof flatBaseline[0]>();
+  const currentByName = new Map<string, typeof flatCurrent[0]>();
+  
+  // NEW: Match by data ID field directly
+  const baselineByDataId = new Map<string, typeof flatBaseline[0]>();
+  const currentByDataId = new Map<string, typeof flatCurrent[0]>();
+  
   for (const resource of flatBaseline) {
     baselineById.set(resource.resourceId, resource);
     const typeNameKey = `${resource.resourceType}::${resource.resourceName}`;
     baselineByTypeName.set(typeNameKey, resource);
     
+    // Name-only matching (case-insensitive, trimmed)
+    const nameKey = resource.resourceName.toLowerCase().trim();
+    if (!baselineByName.has(nameKey)) {
+      baselineByName.set(nameKey, resource);
+    }
+    
     // Extract inner ID for fallback matching
     const innerIdMatch = resource.resourceId.match(/::([^:]+)$/);
     if (innerIdMatch) {
       baselineByInnerId.set(innerIdMatch[1], resource);
+    }
+    
+    // Extract actual ID from data
+    const dataId = resource.data.id || resource.data.objectId || resource.data.policyId;
+    if (dataId && typeof dataId === 'string') {
+      baselineByDataId.set(dataId, resource);
     }
   }
   
@@ -281,10 +301,22 @@ export function compareResources(
     const typeNameKey = `${resource.resourceType}::${resource.resourceName}`;
     currentByTypeName.set(typeNameKey, resource);
     
+    // Name-only matching (case-insensitive, trimmed)
+    const nameKey = resource.resourceName.toLowerCase().trim();
+    if (!currentByName.has(nameKey)) {
+      currentByName.set(nameKey, resource);
+    }
+    
     // Extract inner ID for fallback matching
     const innerIdMatch = resource.resourceId.match(/::([^:]+)$/);
     if (innerIdMatch) {
       currentByInnerId.set(innerIdMatch[1], resource);
+    }
+    
+    // Extract actual ID from data
+    const dataId = resource.data.id || resource.data.objectId || resource.data.policyId;
+    if (dataId && typeof dataId === 'string') {
+      currentByDataId.set(dataId, resource);
     }
   }
   
@@ -301,13 +333,15 @@ export function compareResources(
     
     // Strategy 1: Exact ID match
     current = currentById.get(key);
-    if (current) matchMethod = 'exact-id';
+    if (current && !matchedCurrentIds.has(current.resourceId)) matchMethod = 'exact-id';
+    else current = undefined;
     
     // Strategy 2: Type + Name match
     if (!current) {
       const typeNameKey = `${baseline.resourceType}::${baseline.resourceName}`;
       current = currentByTypeName.get(typeNameKey);
-      if (current) matchMethod = 'type-name';
+      if (current && !matchedCurrentIds.has(current.resourceId)) matchMethod = 'type-name';
+      else current = undefined;
     }
     
     // Strategy 3: Inner ID match (for cases where resource type differs slightly)
@@ -315,19 +349,38 @@ export function compareResources(
       const innerIdMatch = key.match(/::([^:]+)$/);
       if (innerIdMatch && innerIdMatch[1] !== 'unknown' && !innerIdMatch[1].startsWith('index-')) {
         current = currentByInnerId.get(innerIdMatch[1]);
-        if (current) matchMethod = 'inner-id';
+        if (current && !matchedCurrentIds.has(current.resourceId)) matchMethod = 'inner-id';
+        else current = undefined;
       }
     }
     
-    if (!current || matchedCurrentIds.has(current.resourceId)) {
-      // Resource was removed
+    // Strategy 4: Match by actual data ID field
+    if (!current) {
+      const dataId = baseline.data.id || baseline.data.objectId || baseline.data.policyId;
+      if (dataId && typeof dataId === 'string') {
+        current = currentByDataId.get(dataId);
+        if (current && !matchedCurrentIds.has(current.resourceId)) matchMethod = 'data-id';
+        else current = undefined;
+      }
+    }
+    
+    // Strategy 5: Name-only match (case-insensitive) - last resort
+    if (!current) {
+      const nameKey = baseline.resourceName.toLowerCase().trim();
+      current = currentByName.get(nameKey);
+      if (current && !matchedCurrentIds.has(current.resourceId)) matchMethod = 'name-only';
+      else current = undefined;
+    }
+    
+    if (!current) {
+      // Resource was removed - log why matching failed for debugging
+      console.log(`[DriftDetection] REMOVED: ${baseline.resourceName} (${baseline.resourceType}) - no match found. Baseline ID: ${key}`);
       results.push({
         resourceType: baseline.resourceType,
         resourceId: key,
         resourceName: baseline.resourceName,
         status: 'removed',
       });
-      console.log(`[DriftDetection] REMOVED: ${baseline.resourceName} (${baseline.resourceType})`);
     } else {
       matchedCurrentIds.add(current.resourceId);
       matchedBaselineIds.add(key);
@@ -359,44 +412,76 @@ export function compareResources(
   for (const [key, current] of currentById) {
     if (matchedCurrentIds.has(key)) continue;
     
-    // Double-check this wasn't matched by name
+    // Try multiple fallback strategies before declaring as added
+    let baseline: typeof flatBaseline[0] | undefined;
+    let matchMethod = '';
+    
+    // Fallback 1: Type + Name
     const typeNameKey = `${current.resourceType}::${current.resourceName}`;
-    if (baselineByTypeName.has(typeNameKey)) {
-      const baseline = baselineByTypeName.get(typeNameKey)!;
-      if (!matchedBaselineIds.has(baseline.resourceId)) {
-        // This is actually a match we missed - compare them
-        matchedBaselineIds.add(baseline.resourceId);
-        matchedCurrentIds.add(key);
-        
-        const changes = getChangedFields(baseline.data, current.data);
-        if (changes.length > 0) {
-          results.push({
-            resourceType: current.resourceType,
-            resourceId: key,
-            resourceName: current.resourceName,
-            status: 'modified',
-            changes,
-          });
-          console.log(`[DriftDetection] MODIFIED (late-match): ${current.resourceName} - ${changes.length} changes`);
-        } else {
-          results.push({
-            resourceType: current.resourceType,
-            resourceId: key,
-            resourceName: current.resourceName,
-            status: 'unchanged',
-          });
-        }
-        continue;
+    baseline = baselineByTypeName.get(typeNameKey);
+    if (baseline && !matchedBaselineIds.has(baseline.resourceId)) {
+      matchMethod = 'type-name';
+    } else {
+      baseline = undefined;
+    }
+    
+    // Fallback 2: Name only
+    if (!baseline) {
+      const nameKey = current.resourceName.toLowerCase().trim();
+      baseline = baselineByName.get(nameKey);
+      if (baseline && !matchedBaselineIds.has(baseline.resourceId)) {
+        matchMethod = 'name-only';
+      } else {
+        baseline = undefined;
       }
     }
     
-    results.push({
-      resourceType: current.resourceType,
-      resourceId: key,
-      resourceName: current.resourceName,
-      status: 'added',
-    });
-    console.log(`[DriftDetection] ADDED: ${current.resourceName} (${current.resourceType})`);
+    // Fallback 3: Data ID
+    if (!baseline) {
+      const dataId = current.data.id || current.data.objectId || current.data.policyId;
+      if (dataId && typeof dataId === 'string') {
+        baseline = baselineByDataId.get(dataId);
+        if (baseline && !matchedBaselineIds.has(baseline.resourceId)) {
+          matchMethod = 'data-id';
+        } else {
+          baseline = undefined;
+        }
+      }
+    }
+    
+    if (baseline) {
+      // This is actually a match we missed - compare them
+      matchedBaselineIds.add(baseline.resourceId);
+      matchedCurrentIds.add(key);
+      
+      const changes = getChangedFields(baseline.data, current.data);
+      if (changes.length > 0) {
+        results.push({
+          resourceType: current.resourceType,
+          resourceId: key,
+          resourceName: current.resourceName,
+          status: 'modified',
+          changes,
+        });
+        console.log(`[DriftDetection] MODIFIED (late-match ${matchMethod}): ${current.resourceName} - ${changes.length} changes`);
+      } else {
+        results.push({
+          resourceType: current.resourceType,
+          resourceId: key,
+          resourceName: current.resourceName,
+          status: 'unchanged',
+        });
+      }
+    } else {
+      // Truly a new resource
+      results.push({
+        resourceType: current.resourceType,
+        resourceId: key,
+        resourceName: current.resourceName,
+        status: 'added',
+      });
+      console.log(`[DriftDetection] ADDED: ${current.resourceName} (${current.resourceType})`);
+    }
   }
   
   // Sort results: modified/added/removed first, then unchanged
