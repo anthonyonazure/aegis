@@ -253,70 +253,78 @@ export function compareResources(
   console.log(`[DriftDetection] Comparing ${flatBaseline.length} baseline items vs ${flatCurrent.length} current items`);
   
   // Create maps for quick lookup - use composite keys for better matching
-  const baselineById = new Map<string, typeof flatBaseline[0]>();
-  const currentById = new Map<string, typeof flatCurrent[0]>();
-  
-  // Also create maps by type+name for fallback matching
-  const baselineByTypeName = new Map<string, typeof flatBaseline[0]>();
-  const currentByTypeName = new Map<string, typeof flatCurrent[0]>();
-  
-  // And by just the inner ID (without resource type prefix) for cross-matching
-  const baselineByInnerId = new Map<string, typeof flatBaseline[0]>();
-  const currentByInnerId = new Map<string, typeof flatCurrent[0]>();
-  
-  // NEW: Match by just name (case-insensitive) for aggressive fallback
-  const baselineByName = new Map<string, typeof flatBaseline[0]>();
-  const currentByName = new Map<string, typeof flatCurrent[0]>();
-  
-  // NEW: Match by data ID field directly
-  const baselineByDataId = new Map<string, typeof flatBaseline[0]>();
-  const currentByDataId = new Map<string, typeof flatCurrent[0]>();
-  
+  type FlatItem = (typeof flatBaseline)[number];
+  type MultiMap = Map<string, FlatItem[]>;
+
+  const addToMultiMap = (map: MultiMap, key: string, value: FlatItem) => {
+    const existing = map.get(key);
+    if (existing) existing.push(value);
+    else map.set(key, [value]);
+  };
+
+  const getFirstUnmatched = (list: FlatItem[] | undefined, matched: Set<string>) =>
+    list?.find(item => !matched.has(item.resourceId));
+
+  const baselineById = new Map<string, FlatItem>();
+  const currentById = new Map<string, FlatItem>();
+
+  // NOTE: These are multi-maps because some resources can share the same name
+  // (e.g., "Email" or "Device restrictions" baselines), and IDs may vary between exports.
+  const baselineByTypeName: MultiMap = new Map();
+  const currentByTypeName: MultiMap = new Map();
+
+  const baselineByInnerId: MultiMap = new Map();
+  const currentByInnerId: MultiMap = new Map();
+
+  const baselineByName: MultiMap = new Map();
+  const currentByName: MultiMap = new Map();
+
+  const baselineByDataId: MultiMap = new Map();
+  const currentByDataId: MultiMap = new Map();
+
   for (const resource of flatBaseline) {
     baselineById.set(resource.resourceId, resource);
+
     const typeNameKey = `${resource.resourceType}::${resource.resourceName}`;
-    baselineByTypeName.set(typeNameKey, resource);
-    
+    addToMultiMap(baselineByTypeName, typeNameKey, resource);
+
     // Name-only matching (case-insensitive, trimmed)
     const nameKey = resource.resourceName.toLowerCase().trim();
-    if (!baselineByName.has(nameKey)) {
-      baselineByName.set(nameKey, resource);
-    }
-    
+    addToMultiMap(baselineByName, nameKey, resource);
+
     // Extract inner ID for fallback matching
     const innerIdMatch = resource.resourceId.match(/::([^:]+)$/);
     if (innerIdMatch) {
-      baselineByInnerId.set(innerIdMatch[1], resource);
+      addToMultiMap(baselineByInnerId, innerIdMatch[1], resource);
     }
-    
+
     // Extract actual ID from data
     const dataId = resource.data.id || resource.data.objectId || resource.data.policyId;
     if (dataId && typeof dataId === 'string') {
-      baselineByDataId.set(dataId, resource);
+      addToMultiMap(baselineByDataId, dataId, resource);
     }
   }
-  
+
   for (const resource of flatCurrent) {
     currentById.set(resource.resourceId, resource);
+
     const typeNameKey = `${resource.resourceType}::${resource.resourceName}`;
-    currentByTypeName.set(typeNameKey, resource);
-    
+    addToMultiMap(currentByTypeName, typeNameKey, resource);
+
     // Name-only matching (case-insensitive, trimmed)
     const nameKey = resource.resourceName.toLowerCase().trim();
-    if (!currentByName.has(nameKey)) {
-      currentByName.set(nameKey, resource);
-    }
-    
+    addToMultiMap(currentByName, nameKey, resource);
+
     // Extract inner ID for fallback matching
     const innerIdMatch = resource.resourceId.match(/::([^:]+)$/);
     if (innerIdMatch) {
-      currentByInnerId.set(innerIdMatch[1], resource);
+      addToMultiMap(currentByInnerId, innerIdMatch[1], resource);
     }
-    
+
     // Extract actual ID from data
     const dataId = resource.data.id || resource.data.objectId || resource.data.policyId;
     if (dataId && typeof dataId === 'string') {
-      currentByDataId.set(dataId, resource);
+      addToMultiMap(currentByDataId, dataId, resource);
     }
   }
   
@@ -339,37 +347,33 @@ export function compareResources(
     // Strategy 2: Type + Name match
     if (!current) {
       const typeNameKey = `${baseline.resourceType}::${baseline.resourceName}`;
-      current = currentByTypeName.get(typeNameKey);
-      if (current && !matchedCurrentIds.has(current.resourceId)) matchMethod = 'type-name';
-      else current = undefined;
+      current = getFirstUnmatched(currentByTypeName.get(typeNameKey), matchedCurrentIds);
+      if (current) matchMethod = 'type-name';
     }
-    
+
     // Strategy 3: Inner ID match (for cases where resource type differs slightly)
     if (!current) {
       const innerIdMatch = key.match(/::([^:]+)$/);
       if (innerIdMatch && innerIdMatch[1] !== 'unknown' && !innerIdMatch[1].startsWith('index-')) {
-        current = currentByInnerId.get(innerIdMatch[1]);
-        if (current && !matchedCurrentIds.has(current.resourceId)) matchMethod = 'inner-id';
-        else current = undefined;
+        current = getFirstUnmatched(currentByInnerId.get(innerIdMatch[1]), matchedCurrentIds);
+        if (current) matchMethod = 'inner-id';
       }
     }
-    
+
     // Strategy 4: Match by actual data ID field
     if (!current) {
       const dataId = baseline.data.id || baseline.data.objectId || baseline.data.policyId;
       if (dataId && typeof dataId === 'string') {
-        current = currentByDataId.get(dataId);
-        if (current && !matchedCurrentIds.has(current.resourceId)) matchMethod = 'data-id';
-        else current = undefined;
+        current = getFirstUnmatched(currentByDataId.get(dataId), matchedCurrentIds);
+        if (current) matchMethod = 'data-id';
       }
     }
-    
+
     // Strategy 5: Name-only match (case-insensitive) - last resort
     if (!current) {
       const nameKey = baseline.resourceName.toLowerCase().trim();
-      current = currentByName.get(nameKey);
-      if (current && !matchedCurrentIds.has(current.resourceId)) matchMethod = 'name-only';
-      else current = undefined;
+      current = getFirstUnmatched(currentByName.get(nameKey), matchedCurrentIds);
+      if (current) matchMethod = 'name-only';
     }
     
     if (!current) {
@@ -418,33 +422,27 @@ export function compareResources(
     
     // Fallback 1: Type + Name
     const typeNameKey = `${current.resourceType}::${current.resourceName}`;
-    baseline = baselineByTypeName.get(typeNameKey);
-    if (baseline && !matchedBaselineIds.has(baseline.resourceId)) {
+    baseline = getFirstUnmatched(baselineByTypeName.get(typeNameKey), matchedBaselineIds);
+    if (baseline) {
       matchMethod = 'type-name';
-    } else {
-      baseline = undefined;
     }
-    
+
     // Fallback 2: Name only
     if (!baseline) {
       const nameKey = current.resourceName.toLowerCase().trim();
-      baseline = baselineByName.get(nameKey);
-      if (baseline && !matchedBaselineIds.has(baseline.resourceId)) {
+      baseline = getFirstUnmatched(baselineByName.get(nameKey), matchedBaselineIds);
+      if (baseline) {
         matchMethod = 'name-only';
-      } else {
-        baseline = undefined;
       }
     }
-    
+
     // Fallback 3: Data ID
     if (!baseline) {
       const dataId = current.data.id || current.data.objectId || current.data.policyId;
       if (dataId && typeof dataId === 'string') {
-        baseline = baselineByDataId.get(dataId);
-        if (baseline && !matchedBaselineIds.has(baseline.resourceId)) {
+        baseline = getFirstUnmatched(baselineByDataId.get(dataId), matchedBaselineIds);
+        if (baseline) {
           matchMethod = 'data-id';
-        } else {
-          baseline = undefined;
         }
       }
     }
