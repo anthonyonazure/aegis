@@ -1,10 +1,15 @@
 // Drift detection utilities for comparing tenant state vs baseline
 
+export type ResourceProvider = 'graph' | 'azure' | 'all';
+
 export interface DriftResult {
   resourceType: string;
   resourceId: string;
   resourceName: string;
   status: 'unchanged' | 'added' | 'removed' | 'modified';
+  provider?: ResourceProvider;
+  subscriptionId?: string;
+  azureResourceType?: string;
   changes?: Array<{
     field: string;
     baselineValue: unknown;
@@ -12,9 +17,8 @@ export interface DriftResult {
   }>;
 }
 
-// Fields to ignore when comparing resources (metadata, timestamps, etc.)
-// Note: We keep 'id' for matching but exclude these volatile metadata fields
-const IGNORED_FIELDS = new Set([
+// Fields to ignore when comparing Microsoft Graph resources (metadata, timestamps, etc.)
+const GRAPH_IGNORED_FIELDS = new Set([
   '@odata.context',
   '@odata.type',
   '@odata.id',
@@ -28,11 +32,64 @@ const IGNORED_FIELDS = new Set([
   'createdBy',
   'lastModifiedBy',
   'version',
-  'roleScopeTagIds', // Often changes without meaningful impact
+  'roleScopeTagIds',
 ]);
 
-// Fields that indicate volatile state but not configuration drift
-const VOLATILE_FIELDS = new Set([
+// Fields to ignore when comparing Azure ARM resources
+const AZURE_IGNORED_FIELDS = new Set([
+  'etag',
+  'systemData',
+  'provisioningState',
+  'resourceGuid',
+  'uniqueId',
+  'createdTime',
+  'changedTime',
+  'lastModifiedTime',
+  'createdBy',
+  'createdByType',
+  'lastModifiedBy',
+  'lastModifiedByType',
+  'state', // Runtime state, not configuration
+  'status', // Runtime status
+  'instanceView', // VM runtime state
+  'powerState', // VM power state
+  'statuses', // Array of runtime statuses
+  'vmId', // Generated VM identifier
+  'diskSizeBytes', // Can vary slightly
+  'timeCreated',
+  'privateIpAddressVersion',
+  'primary', // Network interface primary status
+]);
+
+// Azure properties that represent runtime metrics, not config
+const AZURE_VOLATILE_FIELDS = new Set([
+  'numberOfCores',
+  'osDiskSizeInMB',
+  'resourceDiskSizeInMB',
+  'memoryInMB',
+  'maxDataDiskCount',
+  'diskIOPSReadWrite',
+  'diskMBpsReadWrite',
+  'diskState',
+  'timeCreated',
+  'freeOfferExpirationTime',
+  'currentThroughput',
+  'usageState',
+  'availabilityState',
+  'hostNames',
+  'enabledHostNames',
+  'outboundIpAddresses',
+  'possibleOutboundIpAddresses',
+  'privateIPAddress',
+  'publicIPAddress',
+  'ipAddress',
+  'lastOperationResult',
+  'maxCpuUsedCores',
+  'maxMemoryUsedMB',
+]);
+
+// Fields that indicate volatile state but not configuration drift (Graph)
+const GRAPH_VOLATILE_FIELDS = new Set([
   'lastSignInDateTime',
   'signInSessionsValidFromDateTime',
   'refreshTokensValidFromDateTime',
@@ -42,27 +99,44 @@ const VOLATILE_FIELDS = new Set([
   'approximateLastSignInDateTime',
 ]);
 
-function shouldIgnoreField(key: string): boolean {
-  if (IGNORED_FIELDS.has(key)) return true;
-  if (VOLATILE_FIELDS.has(key)) return true;
-  if (key.startsWith('@odata')) return true;
+// Detect if a resource is from Azure ARM based on its type/data
+function isAzureResource(resourceType: string, data: Record<string, unknown>): boolean {
+  // Azure resources typically have these patterns
+  if (resourceType.startsWith('azure-') || resourceType.startsWith('Microsoft.')) return true;
+  if (data.type && typeof data.type === 'string' && data.type.includes('Microsoft.')) return true;
+  if (data.subscriptionId || data.resourceGroup) return true;
   return false;
 }
 
-function normalizeValue(value: unknown): unknown {
+function shouldIgnoreField(key: string, isAzure: boolean = false): boolean {
+  if (isAzure) {
+    if (AZURE_IGNORED_FIELDS.has(key)) return true;
+    if (AZURE_VOLATILE_FIELDS.has(key)) return true;
+    // Azure-specific patterns
+    if (key.startsWith('x-ms-')) return true;
+    if (key.endsWith('State') && key !== 'desiredState') return true;
+  } else {
+    if (GRAPH_IGNORED_FIELDS.has(key)) return true;
+    if (GRAPH_VOLATILE_FIELDS.has(key)) return true;
+    if (key.startsWith('@odata')) return true;
+  }
+  return false;
+}
+
+function normalizeValue(value: unknown, isAzure: boolean = false): unknown {
   if (value === null || value === undefined) return null;
   if (typeof value === 'string') return value.trim();
   if (Array.isArray(value)) {
     // Sort arrays by their JSON representation for consistent comparison
-    return value.map(normalizeValue).sort((a, b) => 
+    return value.map(v => normalizeValue(v, isAzure)).sort((a, b) => 
       JSON.stringify(a).localeCompare(JSON.stringify(b))
     );
   }
   if (typeof value === 'object') {
     const normalized: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      if (!shouldIgnoreField(k)) {
-        normalized[k] = normalizeValue(v);
+      if (!shouldIgnoreField(k, isAzure)) {
+        normalized[k] = normalizeValue(v, isAzure);
       }
     }
     return normalized;
@@ -70,28 +144,29 @@ function normalizeValue(value: unknown): unknown {
   return value;
 }
 
-function deepEqual(a: unknown, b: unknown): boolean {
-  const normA = normalizeValue(a);
-  const normB = normalizeValue(b);
+function deepEqual(a: unknown, b: unknown, isAzure: boolean = false): boolean {
+  const normA = normalizeValue(a, isAzure);
+  const normB = normalizeValue(b, isAzure);
   return JSON.stringify(normA) === JSON.stringify(normB);
 }
 
 function getChangedFields(
   baseline: Record<string, unknown>,
-  current: Record<string, unknown>
+  current: Record<string, unknown>,
+  isAzure: boolean = false
 ): Array<{ field: string; baselineValue: unknown; currentValue: unknown }> {
   const changes: Array<{ field: string; baselineValue: unknown; currentValue: unknown }> = [];
   
   const allKeys = new Set([
-    ...Object.keys(baseline).filter(k => !shouldIgnoreField(k)),
-    ...Object.keys(current).filter(k => !shouldIgnoreField(k)),
+    ...Object.keys(baseline).filter(k => !shouldIgnoreField(k, isAzure)),
+    ...Object.keys(current).filter(k => !shouldIgnoreField(k, isAzure)),
   ]);
   
   for (const key of allKeys) {
     const baselineValue = baseline[key];
     const currentValue = current[key];
     
-    if (!deepEqual(baselineValue, currentValue)) {
+    if (!deepEqual(baselineValue, currentValue, isAzure)) {
       changes.push({
         field: key,
         baselineValue,
@@ -118,6 +193,7 @@ function extractResourceKey(resource: {
   
   // Then try common ID fields in the data
   const data = resource.data;
+  const isAzure = isAzureResource(resource.resourceType, data);
   
   // Handle array data - get IDs from first few items to create a composite key
   if (Array.isArray(data)) {
@@ -131,7 +207,19 @@ function extractResourceKey(resource: {
     return `${resource.resourceType}::array::${ids.join(',')}::len${data.length}`;
   }
   
-  // Standard ID fields
+  // Azure-specific ID extraction
+  if (isAzure) {
+    // Azure resources use ARM resource ID format: /subscriptions/.../resourceGroups/.../providers/...
+    if (data.id && typeof data.id === 'string' && data.id.startsWith('/subscriptions/')) {
+      return `azure::${data.id}`;
+    }
+    // Try resourceId field
+    if (data.resourceId && typeof data.resourceId === 'string') {
+      return `azure::${data.resourceId}`;
+    }
+  }
+  
+  // Standard ID fields (Graph API resources)
   const idFields = ['id', 'objectId', 'policyId', 'templateId', 'configurationId'];
   for (const field of idFields) {
     if (data[field]) {
@@ -170,8 +258,26 @@ function flattenResourceData(resource: {
   data: Record<string, unknown>;
   isArrayItem: boolean;
   arrayIndex?: number;
+  isAzure: boolean;
+  subscriptionId?: string;
+  azureResourceType?: string;
 }> {
   const data = resource.data;
+  const isAzure = isAzureResource(resource.resourceType, data);
+  
+  // Extract Azure-specific metadata
+  let subscriptionId: string | undefined;
+  let azureResourceType: string | undefined;
+  
+  if (isAzure && !Array.isArray(data)) {
+    // Extract subscription ID from ARM resource ID
+    const armId = (data.id || data.resourceId) as string | undefined;
+    if (armId && typeof armId === 'string') {
+      const subMatch = armId.match(/\/subscriptions\/([^/]+)/);
+      if (subMatch) subscriptionId = subMatch[1];
+    }
+    azureResourceType = data.type as string | undefined;
+  }
   
   // If data is an array, flatten it into individual items
   if (Array.isArray(data)) {
@@ -183,6 +289,7 @@ function flattenResourceData(resource: {
         itemData = { value: item };
       }
       
+      const itemIsAzure = isAzureResource(resource.resourceType, itemData);
       const itemId = (itemData.id || itemData.objectId || itemData.policyId || `index-${index}`) as string;
       const itemName = (itemData.displayName || itemData.name || itemData.title || `Item ${index + 1}`) as string;
       
@@ -193,6 +300,9 @@ function flattenResourceData(resource: {
         data: itemData,
         isArrayItem: true,
         arrayIndex: index,
+        isAzure: itemIsAzure,
+        subscriptionId,
+        azureResourceType: itemData.type as string | undefined,
       };
     });
   }
@@ -200,6 +310,7 @@ function flattenResourceData(resource: {
   // Handle OData value wrapper
   if (data.value && Array.isArray(data.value)) {
     return (data.value as Array<Record<string, unknown>>).map((item, index) => {
+      const itemIsAzure = isAzureResource(resource.resourceType, item);
       const itemId = (item.id || item.objectId || item.policyId || `index-${index}`) as string;
       const itemName = (item.displayName || item.name || item.title || `Item ${index + 1}`) as string;
       
@@ -210,6 +321,9 @@ function flattenResourceData(resource: {
         data: item,
         isArrayItem: true,
         arrayIndex: index,
+        isAzure: itemIsAzure,
+        subscriptionId,
+        azureResourceType: item.type as string | undefined,
       };
     });
   }
@@ -225,6 +339,9 @@ function flattenResourceData(resource: {
     resourceName,
     data,
     isArrayItem: false,
+    isAzure,
+    subscriptionId,
+    azureResourceType,
   }];
 }
 
@@ -384,13 +501,16 @@ export function compareResources(
         resourceId: key,
         resourceName: baseline.resourceName,
         status: 'removed',
+        provider: baseline.isAzure ? 'azure' : 'graph',
+        subscriptionId: baseline.subscriptionId,
+        azureResourceType: baseline.azureResourceType,
       });
     } else {
       matchedCurrentIds.add(current.resourceId);
       matchedBaselineIds.add(key);
       
-      // Check if modified
-      const changes = getChangedFields(baseline.data, current.data);
+      // Check if modified - use Azure-aware comparison
+      const changes = getChangedFields(baseline.data, current.data, baseline.isAzure);
       
       if (changes.length > 0) {
         results.push({
@@ -399,6 +519,9 @@ export function compareResources(
           resourceName: baseline.resourceName,
           status: 'modified',
           changes,
+          provider: baseline.isAzure ? 'azure' : 'graph',
+          subscriptionId: baseline.subscriptionId,
+          azureResourceType: baseline.azureResourceType,
         });
         console.log(`[DriftDetection] MODIFIED (${matchMethod}): ${baseline.resourceName} - ${changes.length} changes: ${changes.map(c => c.field).join(', ')}`);
       } else {
@@ -407,6 +530,9 @@ export function compareResources(
           resourceId: key,
           resourceName: baseline.resourceName,
           status: 'unchanged',
+          provider: baseline.isAzure ? 'azure' : 'graph',
+          subscriptionId: baseline.subscriptionId,
+          azureResourceType: baseline.azureResourceType,
         });
       }
     }
@@ -452,7 +578,7 @@ export function compareResources(
       matchedBaselineIds.add(baseline.resourceId);
       matchedCurrentIds.add(key);
       
-      const changes = getChangedFields(baseline.data, current.data);
+      const changes = getChangedFields(baseline.data, current.data, current.isAzure);
       if (changes.length > 0) {
         results.push({
           resourceType: current.resourceType,
@@ -460,6 +586,9 @@ export function compareResources(
           resourceName: current.resourceName,
           status: 'modified',
           changes,
+          provider: current.isAzure ? 'azure' : 'graph',
+          subscriptionId: current.subscriptionId,
+          azureResourceType: current.azureResourceType,
         });
         console.log(`[DriftDetection] MODIFIED (late-match ${matchMethod}): ${current.resourceName} - ${changes.length} changes`);
       } else {
@@ -468,6 +597,9 @@ export function compareResources(
           resourceId: key,
           resourceName: current.resourceName,
           status: 'unchanged',
+          provider: current.isAzure ? 'azure' : 'graph',
+          subscriptionId: current.subscriptionId,
+          azureResourceType: current.azureResourceType,
         });
       }
     } else {
@@ -477,6 +609,9 @@ export function compareResources(
         resourceId: key,
         resourceName: current.resourceName,
         status: 'added',
+        provider: current.isAzure ? 'azure' : 'graph',
+        subscriptionId: current.subscriptionId,
+        azureResourceType: current.azureResourceType,
       });
       console.log(`[DriftDetection] ADDED: ${current.resourceName} (${current.resourceType})`);
     }
@@ -531,11 +666,15 @@ export function getDriftSummary(results: DriftResult[]): {
   removed: number;
   modified: number;
   hasDrift: boolean;
+  azureCount: number;
+  graphCount: number;
 } {
   const unchanged = results.filter(r => r.status === 'unchanged').length;
   const added = results.filter(r => r.status === 'added').length;
   const removed = results.filter(r => r.status === 'removed').length;
   const modified = results.filter(r => r.status === 'modified').length;
+  const azureCount = results.filter(r => r.provider === 'azure').length;
+  const graphCount = results.filter(r => r.provider === 'graph').length;
   
   return {
     total: results.length,
@@ -544,5 +683,48 @@ export function getDriftSummary(results: DriftResult[]): {
     removed,
     modified,
     hasDrift: added > 0 || removed > 0 || modified > 0,
+    azureCount,
+    graphCount,
   };
+}
+
+// Filter results by provider
+export function filterResultsByProvider(
+  results: DriftResult[], 
+  provider: ResourceProvider
+): DriftResult[] {
+  if (provider === 'all') return results;
+  return results.filter(r => r.provider === provider);
+}
+
+// Get Azure-specific drift summary
+export function getAzureDriftSummary(results: DriftResult[]): {
+  bySubscription: Map<string, { added: number; removed: number; modified: number; unchanged: number }>;
+  byResourceType: Map<string, { added: number; removed: number; modified: number; unchanged: number }>;
+} {
+  const azureResults = results.filter(r => r.provider === 'azure');
+  
+  const bySubscription = new Map<string, { added: number; removed: number; modified: number; unchanged: number }>();
+  const byResourceType = new Map<string, { added: number; removed: number; modified: number; unchanged: number }>();
+  
+  for (const result of azureResults) {
+    const subId = result.subscriptionId || 'unknown';
+    const resourceType = result.azureResourceType || result.resourceType;
+    
+    // Update subscription summary
+    if (!bySubscription.has(subId)) {
+      bySubscription.set(subId, { added: 0, removed: 0, modified: 0, unchanged: 0 });
+    }
+    const subSummary = bySubscription.get(subId)!;
+    subSummary[result.status]++;
+    
+    // Update resource type summary
+    if (!byResourceType.has(resourceType)) {
+      byResourceType.set(resourceType, { added: 0, removed: 0, modified: 0, unchanged: 0 });
+    }
+    const typeSummary = byResourceType.get(resourceType)!;
+    typeSummary[result.status]++;
+  }
+  
+  return { bySubscription, byResourceType };
 }
