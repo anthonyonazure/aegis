@@ -10,14 +10,15 @@ import {
   Trash2,
   RefreshCw,
   AlertTriangle,
-  Radio
+  Radio,
+  StopCircle
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { getExportJobs, deleteExportJob } from '@/lib/database';
+import { getExportJobs, deleteExportJob, cancelExportJob } from '@/lib/database';
 import { downloadExportAsZip } from '@/lib/exportUtils';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -43,7 +44,7 @@ interface ExportJobRecord {
   metadata: { results?: Array<{ resource: string; success: boolean; error?: string }> } | null;
 }
 
-type JobStatus = 'pending' | 'running' | 'completed' | 'failed';
+type JobStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
 
 const getStatusIcon = (status: JobStatus) => {
   switch (status) {
@@ -53,6 +54,8 @@ const getStatusIcon = (status: JobStatus) => {
       return <Loader2 className="w-5 h-5 text-primary animate-spin" />;
     case 'failed':
       return <XCircle className="w-5 h-5 text-destructive" />;
+    case 'cancelled':
+      return <StopCircle className="w-5 h-5 text-muted-foreground" />;
     default:
       return <Clock className="w-5 h-5 text-muted-foreground" />;
   }
@@ -72,6 +75,7 @@ const getStatusBadge = (status: JobStatus, hasError: boolean) => {
     running: { label: 'Running', className: 'bg-primary/20 text-primary' },
     failed: { label: 'Failed', className: 'bg-destructive/20 text-destructive' },
     pending: { label: 'Pending', className: 'bg-muted text-muted-foreground' },
+    cancelled: { label: 'Cancelled', className: 'bg-muted text-muted-foreground' },
   };
   
   return (
@@ -85,6 +89,7 @@ export const JobsView = () => {
   const [jobs, setJobs] = useState<ExportJobRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState<string | null>(null);
   const [selectedJob, setSelectedJob] = useState<ExportJobRecord | null>(null);
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
   const [lastRealtimeUpdate, setLastRealtimeUpdate] = useState<Date | null>(null);
@@ -197,6 +202,26 @@ export const JobsView = () => {
         description: 'Failed to delete export job',
         variant: 'destructive',
       });
+    }
+  };
+
+  const handleCancel = async (jobId: string) => {
+    setCancelling(jobId);
+    try {
+      await cancelExportJob(jobId);
+      toast({
+        title: 'Export Cancelled',
+        description: 'The export job has been cancelled',
+      });
+    } catch (error) {
+      console.error('Cancel failed:', error);
+      toast({
+        title: 'Cancel Failed',
+        description: 'Failed to cancel export job',
+        variant: 'destructive',
+      });
+    } finally {
+      setCancelling(null);
     }
   };
 
@@ -363,6 +388,22 @@ export const JobsView = () => {
                       </div>
 
                       <div className="flex items-center gap-2">
+                        {(job.status === 'running' || job.status === 'pending') && (
+                          <Button 
+                            variant="ghost" 
+                            size="icon"
+                            onClick={() => handleCancel(job.id)}
+                            disabled={cancelling === job.id}
+                            title="Cancel Export"
+                            className="text-muted-foreground hover:text-destructive"
+                          >
+                            {cancelling === job.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <StopCircle className="w-4 h-4" />
+                            )}
+                          </Button>
+                        )}
                         {job.status === 'completed' && (
                           <>
                             <Button 

@@ -182,6 +182,23 @@ export async function deleteExportJob(id: string) {
   if (error) throw sanitizeDatabaseError(error, 'delete export job');
 }
 
+export async function cancelExportJob(id: string) {
+  const { data, error } = await supabase
+    .from('export_jobs')
+    .update({
+      status: 'cancelled',
+      error: 'Export cancelled by user',
+      completed_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .in('status', ['pending', 'running'])
+    .select()
+    .single();
+
+  if (error) throw sanitizeDatabaseError(error, 'cancel export job');
+  return data;
+}
+
 // Exported Resources
 export async function getExportedResources(exportJobId: string) {
   const { data, error } = await supabase
