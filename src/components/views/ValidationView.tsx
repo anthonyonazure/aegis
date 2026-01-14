@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ShieldCheck, 
   AlertTriangle, 
@@ -11,7 +11,14 @@ import {
   FileJson,
   ChevronDown,
   ChevronRight,
-  Info
+  Info,
+  Code,
+  Database,
+  Hash,
+  Calendar,
+  Link,
+  List,
+  Eye
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -45,6 +52,14 @@ interface ValidationDetail {
     status: 'passed' | 'warning' | 'error';
     message: string;
   }>;
+  rawData?: Record<string, unknown>;
+}
+
+interface DataProperty {
+  key: string;
+  value: unknown;
+  type: 'string' | 'number' | 'boolean' | 'object' | 'array' | 'null' | 'date';
+  isOData: boolean;
 }
 
 interface ValidationResult {
@@ -222,6 +237,8 @@ export const ValidationView = () => {
   const [validationProgress, setValidationProgress] = useState(0);
   const [expandedResources, setExpandedResources] = useState<Set<string>>(new Set());
   const [currentResult, setCurrentResult] = useState<ValidationResult | null>(null);
+  const [resourceData, setResourceData] = useState<Map<string, Record<string, unknown>>>(new Map());
+  const [showDataFor, setShowDataFor] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     loadData();
@@ -350,7 +367,11 @@ export const ValidationView = () => {
           resourceName: displayName,
           status,
           checks,
+          rawData: data,
         });
+        
+        // Store resource data for inspector
+        setResourceData(prev => new Map(prev).set(resource.id, data));
 
         setValidationProgress(Math.round(((i + 1) / resources.length) * 100));
         
@@ -423,6 +444,218 @@ export const ValidationView = () => {
       }
       return next;
     });
+  };
+
+  const toggleDataView = (resourceId: string) => {
+    setShowDataFor(prev => {
+      const next = new Set(prev);
+      if (next.has(resourceId)) {
+        next.delete(resourceId);
+      } else {
+        next.add(resourceId);
+      }
+      return next;
+    });
+  };
+
+  const analyzeData = (data: unknown): DataProperty[] => {
+    if (!data || typeof data !== 'object') return [];
+    
+    if (Array.isArray(data)) {
+      return [{
+        key: 'items',
+        value: data,
+        type: 'array',
+        isOData: false,
+      }];
+    }
+    
+    return Object.entries(data as Record<string, unknown>).map(([key, value]) => {
+      let type: DataProperty['type'] = 'string';
+      
+      if (value === null) {
+        type = 'null';
+      } else if (Array.isArray(value)) {
+        type = 'array';
+      } else if (typeof value === 'object') {
+        type = 'object';
+      } else if (typeof value === 'number') {
+        type = 'number';
+      } else if (typeof value === 'boolean') {
+        type = 'boolean';
+      } else if (typeof value === 'string') {
+        // Check if it's a date
+        if (key.toLowerCase().includes('date') || key.toLowerCase().includes('time')) {
+          const date = new Date(value);
+          if (!isNaN(date.getTime())) {
+            type = 'date';
+          }
+        }
+      }
+      
+      return {
+        key,
+        value,
+        type,
+        isOData: key.startsWith('@odata') || key.startsWith('@'),
+      };
+    });
+  };
+
+  const getPropertyIcon = (type: DataProperty['type']) => {
+    switch (type) {
+      case 'array': return <List className="w-3 h-3 text-blue-400" />;
+      case 'object': return <Database className="w-3 h-3 text-purple-400" />;
+      case 'number': return <Hash className="w-3 h-3 text-green-400" />;
+      case 'boolean': return <CheckCircle2 className="w-3 h-3 text-yellow-400" />;
+      case 'date': return <Calendar className="w-3 h-3 text-orange-400" />;
+      case 'null': return <XCircle className="w-3 h-3 text-muted-foreground" />;
+      default: return <Code className="w-3 h-3 text-muted-foreground" />;
+    }
+  };
+
+  const formatValue = (prop: DataProperty): string => {
+    if (prop.value === null) return 'null';
+    if (prop.value === undefined) return 'undefined';
+    
+    if (prop.type === 'array') {
+      const arr = prop.value as unknown[];
+      return `[${arr.length} items]`;
+    }
+    
+    if (prop.type === 'object') {
+      const obj = prop.value as Record<string, unknown>;
+      const keys = Object.keys(obj);
+      return `{${keys.length} properties}`;
+    }
+    
+    if (prop.type === 'date') {
+      try {
+        return format(new Date(prop.value as string), 'MMM d, yyyy HH:mm');
+      } catch {
+        return String(prop.value);
+      }
+    }
+    
+    if (prop.type === 'boolean') {
+      return prop.value ? 'true' : 'false';
+    }
+    
+    const str = String(prop.value);
+    return str.length > 100 ? str.substring(0, 100) + '...' : str;
+  };
+
+  const renderDataInspector = (data: Record<string, unknown> | undefined) => {
+    if (!data) return null;
+    
+    const properties = analyzeData(data);
+    const regularProps = properties.filter(p => !p.isOData);
+    const odataProps = properties.filter(p => p.isOData);
+    
+    // Summary stats
+    const stats = {
+      total: properties.length,
+      strings: regularProps.filter(p => p.type === 'string').length,
+      numbers: regularProps.filter(p => p.type === 'number').length,
+      booleans: regularProps.filter(p => p.type === 'boolean').length,
+      arrays: regularProps.filter(p => p.type === 'array').length,
+      objects: regularProps.filter(p => p.type === 'object').length,
+      nulls: regularProps.filter(p => p.type === 'null').length,
+      dates: regularProps.filter(p => p.type === 'date').length,
+    };
+    
+    return (
+      <div className="mt-3 p-3 rounded-lg bg-background/80 border border-border/50 space-y-3">
+        {/* Data Summary */}
+        <div className="flex items-center gap-2 flex-wrap text-xs">
+          <span className="font-medium text-foreground">Data Summary:</span>
+          <Badge variant="outline" className="gap-1">
+            <Code className="w-3 h-3" /> {stats.total} properties
+          </Badge>
+          {stats.strings > 0 && <Badge variant="outline" className="text-muted-foreground">{stats.strings} strings</Badge>}
+          {stats.numbers > 0 && <Badge variant="outline" className="text-green-400">{stats.numbers} numbers</Badge>}
+          {stats.booleans > 0 && <Badge variant="outline" className="text-yellow-400">{stats.booleans} booleans</Badge>}
+          {stats.arrays > 0 && <Badge variant="outline" className="text-blue-400">{stats.arrays} arrays</Badge>}
+          {stats.objects > 0 && <Badge variant="outline" className="text-purple-400">{stats.objects} objects</Badge>}
+          {stats.dates > 0 && <Badge variant="outline" className="text-orange-400">{stats.dates} dates</Badge>}
+          {stats.nulls > 0 && <Badge variant="outline" className="text-muted-foreground">{stats.nulls} nulls</Badge>}
+        </div>
+        
+        {/* Regular Properties */}
+        {regularProps.length > 0 && (
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-muted-foreground">Resource Properties:</p>
+            <div className="grid gap-1 max-h-[200px] overflow-y-auto">
+              {regularProps.map((prop, idx) => (
+                <div key={idx} className="flex items-start gap-2 p-1.5 rounded bg-muted/30 text-xs">
+                  {getPropertyIcon(prop.type)}
+                  <span className="font-mono text-primary min-w-[120px]">{prop.key}:</span>
+                  <span className="text-muted-foreground break-all flex-1">{formatValue(prop)}</span>
+                  <Badge variant="outline" className="text-[10px] shrink-0">{prop.type}</Badge>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        
+        {/* OData Properties (collapsed by default) */}
+        {odataProps.length > 0 && (
+          <Collapsible>
+            <CollapsibleTrigger className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors">
+              <ChevronRight className="w-3 h-3" />
+              <span>{odataProps.length} OData metadata properties</span>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="grid gap-1 mt-2 pl-5">
+                {odataProps.map((prop, idx) => (
+                  <div key={idx} className="flex items-start gap-2 p-1.5 rounded bg-muted/20 text-xs">
+                    <Link className="w-3 h-3 text-muted-foreground" />
+                    <span className="font-mono text-muted-foreground">{prop.key}:</span>
+                    <span className="text-muted-foreground/70 break-all">{formatValue(prop)}</span>
+                  </div>
+                ))}
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+        )}
+        
+        {/* Array Items Preview */}
+        {Array.isArray(data) && data.length > 0 && (
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-muted-foreground">Array Items ({data.length} total):</p>
+            <div className="space-y-1 max-h-[200px] overflow-y-auto">
+              {data.slice(0, 5).map((item, idx) => {
+                const itemProps = analyzeData(item).filter(p => !p.isOData);
+                const nameProps = itemProps.filter(p => 
+                  ['displayName', 'name', 'title', 'id'].includes(p.key)
+                );
+                return (
+                  <div key={idx} className="p-2 rounded bg-muted/30 text-xs">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Badge variant="outline" className="text-[10px]">Item {idx + 1}</Badge>
+                      {nameProps.map(p => (
+                        <span key={p.key} className="text-foreground">
+                          {p.key}: {formatValue(p)}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="text-muted-foreground/70">
+                      {itemProps.length} properties: {itemProps.map(p => p.key).slice(0, 5).join(', ')}
+                      {itemProps.length > 5 && ` +${itemProps.length - 5} more`}
+                    </div>
+                  </div>
+                );
+              })}
+              {data.length > 5 && (
+                <p className="text-xs text-muted-foreground text-center py-1">
+                  ... and {data.length - 5} more items
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    );
   };
 
   const getStatusIcon = (status: string) => {
@@ -601,17 +834,47 @@ export const ValidationView = () => {
                       </motion.div>
                     </CollapsibleTrigger>
                     <CollapsibleContent>
-                      <div className="ml-8 mt-2 space-y-1 pb-2">
-                        {detail.checks.map((check, idx) => (
-                          <div
-                            key={idx}
-                            className="flex items-center gap-2 p-2 rounded bg-background/50 text-sm"
-                          >
-                            {getStatusIcon(check.status)}
-                            <span className="font-medium">{check.name}:</span>
-                            <span className="text-muted-foreground">{check.message}</span>
-                          </div>
-                        ))}
+                      <div className="ml-8 mt-2 space-y-2 pb-2">
+                        {/* Validation Checks */}
+                        <div className="space-y-1">
+                          {detail.checks.map((check, idx) => (
+                            <div
+                              key={idx}
+                              className="flex items-center gap-2 p-2 rounded bg-background/50 text-sm"
+                            >
+                              {getStatusIcon(check.status)}
+                              <span className="font-medium">{check.name}:</span>
+                              <span className="text-muted-foreground">{check.message}</span>
+                            </div>
+                          ))}
+                        </div>
+                        
+                        {/* Data Inspector Toggle */}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleDataView(detail.resourceId);
+                          }}
+                          className="w-full gap-2"
+                        >
+                          <Eye className="w-4 h-4" />
+                          {showDataFor.has(detail.resourceId) ? 'Hide Data Details' : 'Show Data Details'}
+                        </Button>
+                        
+                        {/* Data Inspector */}
+                        <AnimatePresence>
+                          {showDataFor.has(detail.resourceId) && (
+                            <motion.div
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: 'auto' }}
+                              exit={{ opacity: 0, height: 0 }}
+                            >
+                              {renderDataInspector(detail.rawData || resourceData.get(detail.resourceId))}
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
                       </div>
                     </CollapsibleContent>
                   </Collapsible>
