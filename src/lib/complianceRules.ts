@@ -422,10 +422,28 @@ export const COMPLIANCE_RULES: ComplianceRule[] = [
     baseline: 'microsoft-recommended',
     resourceTypes: ['defender/asr-policies'],
     check: (resource) => {
-      const isEnabled = resource.isAssigned === true || resource.state === 'enabled';
+      // configurationPolicies structure: check if policy exists and has settings
+      const name = resource.name as string || resource.displayName as string || '';
+      const settings = resource.settings as unknown[] | undefined;
+      const hasSettings = settings && settings.length > 0;
+      const templateRef = resource.templateReference as Record<string, unknown> | undefined;
+      const isASR = templateRef?.templateFamily === 'endpointSecurityAttackSurfaceReduction' ||
+                    name.toLowerCase().includes('asr') ||
+                    name.toLowerCase().includes('attack surface');
+      
+      if (!isASR && !hasSettings) {
+        return { passed: false, message: 'No ASR policy configured' };
+      }
+      
+      // Check if policy is assigned (has assignments)
+      const isAssigned = resource.isAssigned === true || 
+                         (resource.assignments as unknown[] | undefined)?.length > 0;
+      
       return {
-        passed: isEnabled,
-        message: isEnabled ? 'ASR policy is enabled' : 'ASR policy is not enabled',
+        passed: hasSettings === true,
+        message: hasSettings 
+          ? (isAssigned ? 'ASR policy is configured and assigned' : 'ASR policy exists but may not be assigned')
+          : 'ASR policy has no settings configured',
       };
     },
   },
@@ -438,10 +456,27 @@ export const COMPLIANCE_RULES: ComplianceRule[] = [
     baseline: 'microsoft-recommended',
     resourceTypes: ['defender/antivirus-policies'],
     check: (resource) => {
-      const realtimeEnabled = resource.allowRealtimeMonitoring !== false;
+      // configurationPolicies structure - check settings for real-time monitoring
+      const settings = resource.settings as Array<{ settingInstance?: { settingDefinitionId?: string; choiceSettingValue?: { value?: string } } }> | undefined;
+      const hasRealtimeSetting = settings?.some(s => {
+        const defId = s.settingInstance?.settingDefinitionId || '';
+        return defId.includes('allowrealtimemonitoring') || defId.includes('realtimescantype');
+      });
+      
+      // If we can find the setting, check its value
+      const realtimeSetting = settings?.find(s => 
+        s.settingInstance?.settingDefinitionId?.includes('allowrealtimemonitoring')
+      );
+      const isDisabled = realtimeSetting?.settingInstance?.choiceSettingValue?.value?.includes('_0') || 
+                         realtimeSetting?.settingInstance?.choiceSettingValue?.value?.includes('disable');
+      
+      // Default to passed if policy exists (real-time is on by default)
+      const policyExists = settings && settings.length > 0;
       return {
-        passed: realtimeEnabled,
-        message: realtimeEnabled ? 'Real-time protection enabled' : 'Real-time protection is disabled',
+        passed: policyExists && !isDisabled,
+        message: isDisabled 
+          ? 'Real-time protection is disabled' 
+          : (policyExists ? 'Antivirus policy configured' : 'No antivirus policy found'),
       };
     },
   },
