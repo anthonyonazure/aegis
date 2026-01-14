@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   GitCompare, 
   Play,
@@ -14,6 +14,10 @@ import {
   History,
   Eye,
   Code,
+  Filter,
+  ChevronDown,
+  ChevronRight,
+  Download,
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -88,6 +92,8 @@ export const DriftDetectionView = () => {
   const [selectedDiffResult, setSelectedDiffResult] = useState<DriftResult | null>(null);
   const [baselineResources, setBaselineResources] = useState<ExportedResource[]>([]);
   const [compareResources, setCompareResources] = useState<ExportedResource[]>([]);
+  const [resultFilter, setResultFilter] = useState<'all' | 'changes' | 'modified' | 'added' | 'removed'>('changes');
+  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     loadData();
@@ -281,6 +287,43 @@ export const DriftDetectionView = () => {
   const addedCount = results.filter(r => r.status === 'added').length;
   const removedCount = results.filter(r => r.status === 'removed').length;
   const modifiedCount = results.filter(r => r.status === 'modified').length;
+  const changesCount = addedCount + removedCount + modifiedCount;
+
+  // Filter results based on selection
+  const filteredResults = results.filter(r => {
+    if (resultFilter === 'all') return true;
+    if (resultFilter === 'changes') return r.status !== 'unchanged';
+    return r.status === resultFilter;
+  });
+
+  const toggleExpanded = (id: string) => {
+    setExpandedItems(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const expandAll = () => {
+    const allIds = filteredResults.map((r, i) => `${r.resourceId}-${i}`);
+    setExpandedItems(new Set(allIds));
+  };
+
+  const collapseAll = () => {
+    setExpandedItems(new Set());
+  };
+
+  const exportChangesJson = () => {
+    const changesOnly = results.filter(r => r.status !== 'unchanged');
+    const blob = new Blob([JSON.stringify(changesOnly, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `drift-changes-${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="space-y-6">
@@ -375,88 +418,228 @@ export const DriftDetectionView = () => {
           {results.length > 0 && (
             <Card className="glass-panel border-border/50">
               <CardHeader>
-                <CardTitle>Comparison Results</CardTitle>
-                <CardDescription className="flex items-center gap-4 flex-wrap">
-                  <span className="text-green-400">{unchangedCount} unchanged</span>
-                  <span className="text-blue-400">{addedCount} added</span>
-                  <span className="text-red-400">{removedCount} removed</span>
-                  <span className="text-yellow-400">{modifiedCount} modified</span>
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ScrollArea className="h-[400px]">
-                  <div className="space-y-2">
-                    {results.map((result, idx) => (
-                      <motion.div
-                        key={`${result.resourceId}-${idx}`}
-                        initial={{ opacity: 0, y: 5 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: idx * 0.02 }}
-                        className={cn(
-                          "p-3 rounded-lg border",
-                          result.status === 'unchanged' && "bg-muted/20 border-border/30",
-                          result.status === 'added' && "bg-blue-500/10 border-blue-500/30",
-                          result.status === 'removed' && "bg-red-500/10 border-red-500/30",
-                          result.status === 'modified' && "bg-yellow-500/10 border-yellow-500/30"
-                        )}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            {getStatusIcon(result.status)}
-                            <div>
-                              <p className="font-medium text-sm text-foreground">{result.resourceName}</p>
-                              <p className="text-xs text-muted-foreground">{result.resourceType}</p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {result.status === 'modified' && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  setSelectedDiffResult(result);
-                                  setDiffDialogOpen(true);
-                                }}
-                              >
-                                <Code className="w-4 h-4 mr-1" />
-                                View Diff
-                              </Button>
-                            )}
-                            {getStatusBadge(result.status)}
-                          </div>
-                        </div>
-                        {result.changes && result.changes.length > 0 && (
-                          <div className="mt-3 pl-7 space-y-1">
-                            {result.changes.slice(0, 5).map((change, cidx) => (
-                              <div key={cidx} className="text-xs">
-                                <span className="text-muted-foreground">{change.field}:</span>
-                                <span className="text-red-400 ml-2 line-through">
-                                  {JSON.stringify(change.baselineValue)?.slice(0, 30)}
-                                </span>
-                                <span className="text-green-400 ml-2">
-                                  {JSON.stringify(change.currentValue)?.slice(0, 30)}
-                                </span>
-                              </div>
-                            ))}
-                            {result.changes.length > 5 && (
-                              <Button
-                                variant="link"
-                                size="sm"
-                                className="text-xs p-0 h-auto text-muted-foreground hover:text-foreground"
-                                onClick={() => {
-                                  setSelectedDiffResult(result);
-                                  setDiffDialogOpen(true);
-                                }}
-                              >
-                                +{result.changes.length - 5} more changes - View full diff
-                              </Button>
-                            )}
-                          </div>
-                        )}
-                      </motion.div>
-                    ))}
+                <div className="flex items-center justify-between flex-wrap gap-4">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      Comparison Results
+                      {changesCount > 0 && (
+                        <Badge className="bg-yellow-500/20 text-yellow-400">
+                          {changesCount} changes detected
+                        </Badge>
+                      )}
+                      {changesCount === 0 && (
+                        <Badge className="bg-green-500/20 text-green-400">
+                          No drift
+                        </Badge>
+                      )}
+                    </CardTitle>
+                    <CardDescription className="flex items-center gap-4 flex-wrap mt-2">
+                      <span className="text-green-400">{unchangedCount} unchanged</span>
+                      <span className="text-blue-400">{addedCount} added</span>
+                      <span className="text-red-400">{removedCount} removed</span>
+                      <span className="text-yellow-400">{modifiedCount} modified</span>
+                    </CardDescription>
                   </div>
-                </ScrollArea>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" onClick={exportChangesJson} disabled={changesCount === 0}>
+                      <Download className="w-4 h-4 mr-1" />
+                      Export Changes
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Filter and actions */}
+                <div className="flex items-center justify-between gap-4 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <Filter className="w-4 h-4 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">Show:</span>
+                    <div className="flex gap-1">
+                      <Button
+                        variant={resultFilter === 'changes' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setResultFilter('changes')}
+                      >
+                        Changes Only ({changesCount})
+                      </Button>
+                      <Button
+                        variant={resultFilter === 'modified' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setResultFilter('modified')}
+                      >
+                        Modified ({modifiedCount})
+                      </Button>
+                      <Button
+                        variant={resultFilter === 'added' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setResultFilter('added')}
+                      >
+                        Added ({addedCount})
+                      </Button>
+                      <Button
+                        variant={resultFilter === 'removed' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setResultFilter('removed')}
+                      >
+                        Removed ({removedCount})
+                      </Button>
+                      <Button
+                        variant={resultFilter === 'all' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setResultFilter('all')}
+                      >
+                        All ({results.length})
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="ghost" size="sm" onClick={expandAll}>
+                      Expand All
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={collapseAll}>
+                      Collapse All
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Results list */}
+                {filteredResults.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No results match the current filter
+                  </div>
+                ) : (
+                  <ScrollArea className="h-[500px]">
+                    <div className="space-y-2">
+                      {filteredResults.map((result, idx) => {
+                        const itemKey = `${result.resourceId}-${idx}`;
+                        const isExpanded = expandedItems.has(itemKey);
+                        
+                        return (
+                          <motion.div
+                            key={itemKey}
+                            initial={{ opacity: 0, y: 5 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: Math.min(idx * 0.02, 0.5) }}
+                            className={cn(
+                              "rounded-lg border overflow-hidden",
+                              result.status === 'unchanged' && "bg-muted/20 border-border/30",
+                              result.status === 'added' && "bg-blue-500/10 border-blue-500/30",
+                              result.status === 'removed' && "bg-red-500/10 border-red-500/30",
+                              result.status === 'modified' && "bg-yellow-500/10 border-yellow-500/30"
+                            )}
+                          >
+                            {/* Header - always visible */}
+                            <div
+                              className="flex items-center justify-between p-3 cursor-pointer hover:bg-muted/20 transition-colors"
+                              onClick={() => toggleExpanded(itemKey)}
+                            >
+                              <div className="flex items-center gap-3">
+                                {result.status !== 'unchanged' && (
+                                  isExpanded ? (
+                                    <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                                  ) : (
+                                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                                  )
+                                )}
+                                {getStatusIcon(result.status)}
+                                <div>
+                                  <p className="font-medium text-sm text-foreground">{result.resourceName}</p>
+                                  <p className="text-xs text-muted-foreground">{result.resourceType}</p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {result.changes && result.changes.length > 0 && (
+                                  <Badge variant="outline" className="text-xs">
+                                    {result.changes.length} field{result.changes.length !== 1 ? 's' : ''} changed
+                                  </Badge>
+                                )}
+                                {result.status === 'modified' && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedDiffResult(result);
+                                      setDiffDialogOpen(true);
+                                    }}
+                                  >
+                                    <Code className="w-4 h-4 mr-1" />
+                                    Full Diff
+                                  </Button>
+                                )}
+                                {getStatusBadge(result.status)}
+                              </div>
+                            </div>
+
+                            {/* Expanded details */}
+                            <AnimatePresence>
+                              {isExpanded && result.status !== 'unchanged' && (
+                                <motion.div
+                                  initial={{ height: 0, opacity: 0 }}
+                                  animate={{ height: 'auto', opacity: 1 }}
+                                  exit={{ height: 0, opacity: 0 }}
+                                  className="overflow-hidden"
+                                >
+                                  <div className="px-4 pb-4 pt-0 border-t border-border/30">
+                                    {result.status === 'added' && (
+                                      <div className="mt-3 p-3 rounded bg-blue-500/5 border border-blue-500/20">
+                                        <p className="text-sm text-blue-400 font-medium mb-2">New Resource Added</p>
+                                        <p className="text-xs text-muted-foreground">
+                                          This resource exists in the comparison export but not in the baseline.
+                                        </p>
+                                      </div>
+                                    )}
+
+                                    {result.status === 'removed' && (
+                                      <div className="mt-3 p-3 rounded bg-red-500/5 border border-red-500/20">
+                                        <p className="text-sm text-red-400 font-medium mb-2">Resource Removed</p>
+                                        <p className="text-xs text-muted-foreground">
+                                          This resource existed in the baseline but is no longer present.
+                                        </p>
+                                      </div>
+                                    )}
+
+                                    {result.status === 'modified' && result.changes && result.changes.length > 0 && (
+                                      <div className="mt-3 space-y-2">
+                                        <p className="text-sm font-medium text-yellow-400">Changed Fields:</p>
+                                        <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                                          {result.changes.map((change, cidx) => (
+                                            <div
+                                              key={cidx}
+                                              className="p-3 rounded bg-muted/30 border border-border/30"
+                                            >
+                                              <p className="text-sm font-medium text-foreground mb-2">
+                                                {change.field}
+                                              </p>
+                                              <div className="grid gap-2 md:grid-cols-2">
+                                                <div className="p-2 rounded bg-red-500/10 border border-red-500/20">
+                                                  <p className="text-xs text-red-400 font-medium mb-1">Before (Baseline):</p>
+                                                  <pre className="text-xs text-muted-foreground whitespace-pre-wrap break-all max-h-[100px] overflow-auto">
+                                                    {JSON.stringify(change.baselineValue, null, 2) || 'null'}
+                                                  </pre>
+                                                </div>
+                                                <div className="p-2 rounded bg-green-500/10 border border-green-500/20">
+                                                  <p className="text-xs text-green-400 font-medium mb-1">After (Current):</p>
+                                                  <pre className="text-xs text-muted-foreground whitespace-pre-wrap break-all max-h-[100px] overflow-auto">
+                                                    {JSON.stringify(change.currentValue, null, 2) || 'null'}
+                                                  </pre>
+                                                </div>
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          </motion.div>
+                        );
+                      })}
+                    </div>
+                  </ScrollArea>
+                )}
               </CardContent>
             </Card>
           )}
