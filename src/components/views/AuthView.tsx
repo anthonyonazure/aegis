@@ -27,17 +27,35 @@ import { AzureSubscription } from '@/types/tenant';
 import { useToast } from '@/hooks/use-toast';
 
 const graphPermissions = [
-  { scope: 'DeviceManagementConfiguration.Read.All', description: 'Read Intune device configurations' },
-  { scope: 'DeviceManagementApps.Read.All', description: 'Read Intune app configurations' },
-  { scope: 'Policy.Read.All', description: 'Read Conditional Access policies' },
-  { scope: 'Directory.Read.All', description: 'Read directory data' },
-  { scope: 'Application.Read.All', description: 'Read app registrations' },
-  { scope: 'SecurityEvents.Read.All', description: 'Read security configurations' },
+  // Intune / Device Management
+  { scope: 'DeviceManagementConfiguration.Read.All', description: 'Intune device configurations' },
+  { scope: 'DeviceManagementApps.Read.All', description: 'Intune apps & scripts' },
+  { scope: 'DeviceManagementManagedDevices.Read.All', description: 'Managed devices & compliance' },
+  { scope: 'DeviceManagementServiceConfig.Read.All', description: 'Autopilot & enrollment' },
+  // Identity & Access
+  { scope: 'Policy.Read.All', description: 'Conditional Access & policies' },
+  { scope: 'Directory.Read.All', description: 'Users, groups, roles' },
+  { scope: 'Application.Read.All', description: 'App registrations' },
+  { scope: 'RoleManagement.Read.Directory', description: 'Role assignments' },
+  // Security & Compliance
+  { scope: 'SecurityEvents.Read.All', description: 'Defender & security configs' },
+  { scope: 'ThreatAssessment.Read.All', description: 'Threat policies' },
+  // Collaboration
+  { scope: 'Mail.Read', description: 'Exchange transport rules (delegated)' },
+  { scope: 'SharePointTenantSettings.Read.All', description: 'SharePoint settings' },
+  { scope: 'Team.ReadBasic.All', description: 'Teams configurations' },
 ];
 
 const azurePermissions = [
-  { scope: 'Reader', description: 'Read all Azure resources in selected subscriptions' },
-  { scope: 'Contributor (optional)', description: 'Required for import/restore operations' },
+  { scope: 'Reader', description: 'Read all resources in subscriptions', required: true },
+  { scope: 'Microsoft.Resources/subscriptions/read', description: 'List subscriptions', required: true },
+  { scope: 'Microsoft.Compute/*/read', description: 'VMs, disks, availability sets', required: false },
+  { scope: 'Microsoft.Network/*/read', description: 'VNets, NSGs, load balancers', required: false },
+  { scope: 'Microsoft.Storage/*/read', description: 'Storage accounts & containers', required: false },
+  { scope: 'Microsoft.KeyVault/*/read', description: 'Key Vaults & secrets metadata', required: false },
+  { scope: 'Microsoft.Web/*/read', description: 'App Services & functions', required: false },
+  { scope: 'Microsoft.Sql/*/read', description: 'SQL databases & servers', required: false },
+  { scope: 'Contributor (optional)', description: 'Required for import/restore', required: false },
 ];
 
 export const AuthView = () => {
@@ -451,6 +469,9 @@ export const AuthView = () => {
                           <span className="text-sm text-muted-foreground hidden md:inline">
                             {perm.description}
                           </span>
+                          {perm.required && (
+                            <span className="text-xs bg-warning/20 text-warning px-1.5 py-0.5 rounded">Required</span>
+                          )}
                         </div>
                       </div>
                     ))}
