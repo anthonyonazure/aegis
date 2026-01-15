@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   XCircle,
   Settings2,
+  Key,
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -42,6 +43,7 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { RESOURCE_CATEGORIES } from '@/types/tenant';
+import { ServicePrincipalManager, ServicePrincipalConfig, useServicePrincipalConfigs } from '@/components/ServicePrincipalManager';
 
 const EXPORT_FORMATS = [
   { id: 'json', name: 'JSON' },
@@ -63,6 +65,7 @@ interface ScheduledExport {
   next_run_at: string | null;
   run_count: number;
   created_at: string;
+  service_principal_config_id: string | null;
 }
 
 const SCHEDULE_PRESETS = [
@@ -76,6 +79,7 @@ const SCHEDULE_PRESETS = [
 
 export const ScheduledExportsView = () => {
   const { toast } = useToast();
+  const { configs: spConfigs, isLoading: spLoading } = useServicePrincipalConfigs();
   const [schedules, setSchedules] = useState<ScheduledExport[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
@@ -87,6 +91,7 @@ export const ScheduledExportsView = () => {
   const [formSchedule, setFormSchedule] = useState('0 0 * * *');
   const [formResources, setFormResources] = useState<string[]>([]);
   const [formFormats, setFormFormats] = useState<string[]>(['json']);
+  const [formServicePrincipalId, setFormServicePrincipalId] = useState<string | null>(null);
 
   useEffect(() => {
     loadSchedules();
@@ -140,6 +145,7 @@ export const ScheduledExportsView = () => {
         schedule_cron: formSchedule,
         schedule_description: preset?.label || 'Custom schedule',
         is_active: true,
+        service_principal_config_id: formServicePrincipalId,
       }]);
 
       if (error) throw error;
@@ -222,6 +228,12 @@ export const ScheduledExportsView = () => {
     setFormSchedule('0 0 * * *');
     setFormResources([]);
     setFormFormats(['json']);
+    setFormServicePrincipalId(null);
+  };
+
+  const getConfigName = (configId: string | null) => {
+    if (!configId) return null;
+    return spConfigs.find(c => c.id === configId)?.name || 'Unknown';
   };
 
   const toggleResource = (resourceId: string) => {
@@ -291,6 +303,40 @@ export const ScheduledExportsView = () => {
                       onChange={(e) => setFormDescription(e.target.value)}
                     />
                   </div>
+                </div>
+
+                {/* Service Principal Configuration */}
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <Key className="w-4 h-4" />
+                    Service Principal
+                  </Label>
+                  <Select 
+                    value={formServicePrincipalId || 'none'} 
+                    onValueChange={(v) => setFormServicePrincipalId(v === 'none' ? null : v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a saved configuration..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">
+                        <span className="text-muted-foreground">No configuration (use active connection)</span>
+                      </SelectItem>
+                      {spConfigs.map(config => (
+                        <SelectItem key={config.id} value={config.id}>
+                          <div className="flex flex-col">
+                            <span>{config.name}</span>
+                            <span className="text-xs text-muted-foreground font-mono">
+                              {config.tenant_id.slice(0, 8)}...
+                            </span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Select a saved service principal to use for this scheduled export
+                  </p>
                 </div>
 
                 {/* Schedule */}
@@ -480,6 +526,12 @@ export const ScheduledExportsView = () => {
                             <Clock className="w-3 h-3" />
                             {schedule.schedule_description || schedule.schedule_cron}
                           </span>
+                          {schedule.service_principal_config_id && (
+                            <span className="flex items-center gap-1">
+                              <Key className="w-3 h-3" />
+                              {getConfigName(schedule.service_principal_config_id)}
+                            </span>
+                          )}
                           <span>{schedule.resource_ids.length} resources</span>
                           <span>{schedule.formats.join(', ').toUpperCase()}</span>
                           <span>{schedule.run_count} runs</span>
