@@ -391,231 +391,225 @@ export const ResourcesView = ({
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
+    <div className="space-y-4">
+      {/* Header with Actions */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Resource Browser</h1>
-          <p className="text-muted-foreground mt-1">
-            Select resources from Microsoft 365 and Azure to export
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <Badge variant="outline" className="px-3 py-1">
-            {selectedCount} / {totalResources} selected
+        <div className="flex items-center gap-4">
+          <h1 className="text-xl font-semibold text-foreground">Resources</h1>
+          <Badge variant="outline" className="text-xs">
+            {selectedCount}/{totalResources}
           </Badge>
-          {selectedCount > 0 && onNavigateToExport && (
-            <Button onClick={onNavigateToExport} className="gap-2">
-              Next: Export
-              <ArrowRight className="w-4 h-4" />
-            </Button>
-          )}
         </div>
-      </div>
-
-      {/* Provider Toggle */}
-      <div className="flex gap-2">
-        {[
-          { id: 'all', label: 'All Resources', icon: Layers },
-          { id: 'graph', label: 'Microsoft 365', icon: Cloud },
-          { id: 'azure', label: 'Azure', icon: Server },
-        ].map((option) => {
-          const Icon = option.icon;
-          return (
-            <Button
-              key={option.id}
-              variant={filterProvider === option.id ? "default" : "outline"}
-              size="sm"
-              className="gap-2"
-              onClick={() => setFilterProvider(option.id as typeof filterProvider)}
-            >
-              <Icon className="w-4 h-4" />
-              {option.label}
-            </Button>
-          );
-        })}
-      </div>
-
-      {/* Search & Filters */}
-      <div className="flex gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input 
-            placeholder="Search resources..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 bg-card border-border"
-          />
-        </div>
-        {onSelectAllResources && (
-          <Button 
-            variant={allSelected ? "default" : "outline"} 
-            className="gap-2"
-            onClick={onSelectAllResources}
-          >
-            <div className={cn(
-              "w-4 h-4 rounded border flex items-center justify-center",
-              allSelected 
-                ? "bg-primary-foreground border-primary-foreground" 
-                : someSelected 
-                  ? "border-primary bg-primary/20" 
-                  : "border-current"
-            )}>
-              {allSelected && <Check className="w-3 h-3 text-primary" />}
-              {someSelected && !allSelected && <div className="w-2 h-2 bg-primary rounded-sm" />}
-            </div>
-            {allSelected ? 'Deselect All' : 'Select All'}
+        {selectedCount > 0 && onNavigateToExport && (
+          <Button onClick={onNavigateToExport} size="sm" className="gap-2">
+            Export
+            <ArrowRight className="w-4 h-4" />
           </Button>
         )}
-        {/* Filters Popover */}
-        <Popover open={filtersOpen} onOpenChange={setFiltersOpen}>
-          <PopoverTrigger asChild>
-            <Button variant="outline" className="gap-2">
-              <Filter className="w-4 h-4" />
-              Filters
-              {activeFilterCount > 0 && (
-                <Badge variant="secondary" className="ml-1 h-5 w-5 p-0 flex items-center justify-center text-xs">
-                  {activeFilterCount}
-                </Badge>
-              )}
+      </div>
+
+      {/* Unified Toolbar */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {/* Provider Toggle - Compact */}
+        <div className="flex rounded-lg border border-border overflow-hidden">
+          {[
+            { id: 'all', label: 'All', icon: Layers },
+            { id: 'graph', label: 'M365', icon: Cloud },
+            { id: 'azure', label: 'Azure', icon: Server },
+          ].map((option) => {
+            const Icon = option.icon;
+            return (
+              <button
+                key={option.id}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 text-sm transition-colors",
+                  filterProvider === option.id 
+                    ? "bg-primary text-primary-foreground" 
+                    : "bg-card hover:bg-secondary/50 text-muted-foreground"
+                )}
+                onClick={() => setFilterProvider(option.id as typeof filterProvider)}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Search */}
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input 
+            placeholder="Search..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-8 h-8 text-sm bg-card border-border"
+          />
+        </div>
+
+        <div className="flex items-center gap-1.5 ml-auto">
+          {/* Select All */}
+          {onSelectAllResources && (
+            <Button 
+              variant="ghost" 
+              size="sm"
+              className="h-8 gap-1.5 text-muted-foreground"
+              onClick={onSelectAllResources}
+            >
+              <div className={cn(
+                "w-3.5 h-3.5 rounded border flex items-center justify-center",
+                allSelected 
+                  ? "bg-primary border-primary" 
+                  : someSelected 
+                    ? "border-primary bg-primary/20" 
+                    : "border-muted-foreground"
+              )}>
+                {allSelected && <Check className="w-2.5 h-2.5 text-primary-foreground" />}
+                {someSelected && !allSelected && <div className="w-1.5 h-1.5 bg-primary rounded-sm" />}
+              </div>
+              {allSelected ? 'Clear' : 'All'}
             </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-72" align="end">
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h4 className="font-medium text-foreground">Filters</h4>
+          )}
+
+          {/* Filters Popover */}
+          <Popover open={filtersOpen} onOpenChange={setFiltersOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-muted-foreground">
+                <Filter className="w-3.5 h-3.5" />
                 {activeFilterCount > 0 && (
-                  <Button variant="ghost" size="sm" onClick={clearFilters} className="h-auto py-1 px-2 text-xs">
-                    Clear all
+                  <span className="text-xs bg-primary text-primary-foreground rounded-full w-4 h-4 flex items-center justify-center">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-64" align="end">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Filters</span>
+                  {activeFilterCount > 0 && (
+                    <button onClick={clearFilters} className="text-xs text-muted-foreground hover:text-foreground">
+                      Clear
+                    </button>
+                  )}
+                </div>
+                
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Status</Label>
+                  <RadioGroup value={filterStatus} onValueChange={(v) => setFilterStatus(v as typeof filterStatus)}>
+                    {[
+                      { value: 'all', label: 'All' },
+                      { value: 'supported', label: 'Supported' },
+                      { value: 'coming-soon', label: 'Coming Soon' },
+                    ].map(opt => (
+                      <div key={opt.value} className="flex items-center space-x-2">
+                        <RadioGroupItem value={opt.value} id={`status-${opt.value}`} />
+                        <Label htmlFor={`status-${opt.value}`} className="text-sm font-normal">{opt.label}</Label>
+                      </div>
+                    ))}
+                  </RadioGroup>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Formats</Label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {['json', 'terraform', 'bicep', 'powershell'].map(format => (
+                      <button
+                        key={format}
+                        onClick={() => toggleFormatFilter(format)}
+                        className={cn(
+                          "text-xs px-2 py-1 rounded border transition-colors",
+                          filterFormats.includes(format)
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "border-border text-muted-foreground hover:border-primary/50"
+                        )}
+                      >
+                        {format.toUpperCase()}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+
+          {/* Templates Popover */}
+          <Popover open={templatesOpen} onOpenChange={setTemplatesOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-muted-foreground">
+                <Layers className="w-3.5 h-3.5" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-72" align="end">
+              <div className="space-y-3 max-h-80 overflow-y-auto">
+                {/* Save current selection */}
+                {selectedResources.length > 0 && onSetResources && (
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    className="w-full gap-2 text-xs" 
+                    onClick={() => {
+                      setTemplatesOpen(false);
+                      setSaveDialogOpen(true);
+                    }}
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    Save Selection ({selectedResources.length})
                   </Button>
                 )}
-              </div>
-              
-              <div className="space-y-2">
-                <Label className="text-sm">Support Status</Label>
-                <RadioGroup value={filterStatus} onValueChange={(v) => setFilterStatus(v as typeof filterStatus)}>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="all" id="status-all" />
-                    <Label htmlFor="status-all" className="text-sm font-normal">All resources</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="supported" id="status-supported" />
-                    <Label htmlFor="status-supported" className="text-sm font-normal">Supported only</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="coming-soon" id="status-coming" />
-                    <Label htmlFor="status-coming" className="text-sm font-normal">Coming Soon</Label>
-                  </div>
-                </RadioGroup>
-              </div>
-              
-              <div className="space-y-2">
-                <Label className="text-sm">Export Formats</Label>
-                <div className="space-y-2">
-                  {['json', 'terraform', 'bicep', 'powershell'].map(format => (
-                    <div key={format} className="flex items-center space-x-2">
-                      <Checkbox 
-                        id={`format-${format}`}
-                        checked={filterFormats.includes(format)}
-                        onCheckedChange={() => toggleFormatFilter(format)}
-                      />
-                      <Label htmlFor={`format-${format}`} className="text-sm font-normal">
-                        {format.toUpperCase()}
-                      </Label>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </PopoverContent>
-        </Popover>
 
-        {/* Templates Popover */}
-        <Popover open={templatesOpen} onOpenChange={setTemplatesOpen}>
-          <PopoverTrigger asChild>
-            <Button variant="outline" className="gap-2">
-              <Layers className="w-4 h-4" />
-              Templates
-              {customTemplates.length > 0 && (
-                <Badge variant="secondary" className="ml-1 h-5 w-5 p-0 flex items-center justify-center text-xs">
-                  {customTemplates.length}
-                </Badge>
-              )}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-80" align="end">
-            <div className="space-y-4 max-h-96 overflow-y-auto">
-              {/* Save current selection as template */}
-              {selectedResources.length > 0 && onSetResources && (
-                <Button 
-                  variant="outline" 
-                  className="w-full gap-2" 
-                  onClick={() => {
-                    setTemplatesOpen(false);
-                    setSaveDialogOpen(true);
-                  }}
-                >
-                  <Save className="w-4 h-4" />
-                  Save Current Selection ({selectedResources.length})
-                </Button>
-              )}
-
-              {/* Custom Templates */}
-              {customTemplates.length > 0 && (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <h4 className="font-medium text-foreground text-sm">My Templates</h4>
+                {/* Custom Templates */}
+                {customTemplates.length > 0 && (
+                  <div className="space-y-1.5">
+                    <span className="text-xs text-muted-foreground font-medium">My Templates</span>
+                    {customTemplates.map(template => (
+                      <div
+                        key={template.id}
+                        className="flex items-center gap-2 p-2 rounded border border-border hover:bg-secondary/50 transition-colors group"
+                      >
+                        <button
+                          onClick={() => handleApplyCustomTemplate(template)}
+                          className="flex-1 text-left"
+                        >
+                          <div className="text-sm font-medium">{template.name}</div>
+                          <div className="text-xs text-muted-foreground">{template.resource_ids.length} resources</div>
+                        </button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 opacity-0 group-hover:opacity-100 text-destructive"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteCustomTemplate(template.id, template.name);
+                          }}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    ))}
                   </div>
-                  {customTemplates.map(template => (
-                    <div
+                )}
+
+                {/* Built-in Templates */}
+                <div className="space-y-1.5">
+                  <span className="text-xs text-muted-foreground font-medium">Quick Select</span>
+                  {RESOURCE_TEMPLATES.filter(t => 
+                    filterProvider === 'all' || t.provider === filterProvider
+                  ).map(template => (
+                    <button
                       key={template.id}
-                      className="flex items-center gap-2 p-3 rounded-lg border border-border hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
+                      onClick={() => handleApplyTemplate(template.id)}
+                      className="w-full text-left p-2 rounded border border-border hover:bg-secondary/50 transition-colors"
                     >
-                      <button
-                        onClick={() => handleApplyCustomTemplate(template)}
-                        className="flex-1 text-left"
-                      >
-                        <div className="font-medium text-sm text-foreground">{template.name}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {template.description || `${template.resource_ids.length} resources`}
-                        </div>
-                      </button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive hover:bg-destructive/10"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteCustomTemplate(template.id, template.name);
-                        }}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
+                      <div className="text-sm font-medium">{template.name}</div>
+                      <div className="text-xs text-muted-foreground">{template.description}</div>
+                    </button>
                   ))}
                 </div>
-              )}
-
-              {/* Built-in Templates */}
-              <div className="space-y-2">
-                <h4 className="font-medium text-foreground text-sm">Built-in Templates</h4>
-                <p className="text-xs text-muted-foreground">
-                  Pre-defined resource selections
-                </p>
-                {RESOURCE_TEMPLATES.map(template => (
-                  <button
-                    key={template.id}
-                    onClick={() => handleApplyTemplate(template.id)}
-                    className="w-full text-left p-3 rounded-lg border border-border hover:bg-secondary/50 hover:border-primary/50 transition-colors"
-                  >
-                    <div className="font-medium text-sm text-foreground">{template.name}</div>
-                    <div className="text-xs text-muted-foreground">{template.description}</div>
-                  </button>
-                ))}
               </div>
-            </div>
-          </PopoverContent>
-        </Popover>
+            </PopoverContent>
+          </Popover>
+        </div>
       </div>
 
       {/* Save Template Dialog */}
@@ -662,26 +656,22 @@ export const ResourcesView = ({
       </Dialog>
 
       {/* Resource Tree */}
-      <Card className="glass-panel">
+      <Card className="border-border/50">
         <CardContent className="p-0">
-          <div className="divide-y divide-border">
+          <div className="divide-y divide-border/50">
             {filteredCategories.map((category, categoryIndex) => {
               const Icon = getIcon(category.icon);
               const isExpanded = expandedCategories.includes(category.id);
               const isSelected = isCategorySelected(category);
               const isPartial = isCategoryPartiallySelected(category);
+              const supportedFormats = category.exportFormats.filter(f => f.supported);
 
               return (
-                <motion.div
-                  key={category.id}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: categoryIndex * 0.05 }}
-                >
-                  {/* Category Header */}
+                <div key={category.id}>
+                  {/* Category Header - Compact */}
                   <div 
                     className={cn(
-                      "flex items-center gap-3 p-4 cursor-pointer transition-colors",
+                      "flex items-center gap-2 px-3 py-2.5 cursor-pointer transition-colors",
                       "hover:bg-secondary/30",
                       isSelected && "bg-primary/5"
                     )}
@@ -695,115 +685,98 @@ export const ResourcesView = ({
                       className="flex-shrink-0"
                     >
                       <div className={cn(
-                        "w-5 h-5 rounded border-2 flex items-center justify-center transition-colors",
+                        "w-4 h-4 rounded border-2 flex items-center justify-center transition-colors",
                         isSelected 
                           ? "bg-primary border-primary" 
                           : isPartial 
                             ? "border-primary bg-primary/20" 
-                            : "border-muted-foreground"
+                            : "border-muted-foreground/50"
                       )}>
-                        {isSelected && <Check className="w-3 h-3 text-primary-foreground" />}
-                        {isPartial && !isSelected && <div className="w-2 h-2 bg-primary rounded-sm" />}
+                        {isSelected && <Check className="w-2.5 h-2.5 text-primary-foreground" />}
+                        {isPartial && !isSelected && <div className="w-1.5 h-1.5 bg-primary rounded-sm" />}
                       </div>
                     </button>
                     
-                    <div className="p-2 rounded-lg bg-primary/10">
-                      <Icon className="w-5 h-5 text-primary" />
+                    <div className="p-1.5 rounded bg-primary/10">
+                      <Icon className="w-4 h-4 text-primary" />
                     </div>
                     
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-medium text-foreground">{category.name}</h3>
-                        <Badge variant="secondary" className="text-xs">
-                          {category.subcategories.length}
-                        </Badge>
-                      </div>
-                      <p className="text-sm text-muted-foreground truncate">
-                        {category.description}
-                      </p>
+                    <div className="flex-1 min-w-0 flex items-center gap-2">
+                      <span className="font-medium text-sm text-foreground">{category.name}</span>
+                      <span className="text-xs text-muted-foreground">({category.subcategories.length})</span>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      {category.exportFormats.filter(f => f.supported).map(format => (
+                    {/* Format badges - only show first 2 on desktop */}
+                    <div className="hidden sm:flex items-center gap-1">
+                      {supportedFormats.slice(0, 2).map(format => (
                         <span 
                           key={format.id}
-                          className={`export-format-badge export-format-${format.id}`}
+                          className="text-[10px] px-1.5 py-0.5 rounded bg-secondary text-muted-foreground"
                         >
                           {format.id.toUpperCase()}
                         </span>
                       ))}
+                      {supportedFormats.length > 2 && (
+                        <span className="text-[10px] text-muted-foreground">+{supportedFormats.length - 2}</span>
+                      )}
                     </div>
 
-                    <motion.div
-                      animate={{ rotate: isExpanded ? 90 : 0 }}
-                      transition={{ duration: 0.2 }}
-                    >
-                      <ChevronRight className="w-5 h-5 text-muted-foreground" />
-                    </motion.div>
+                    <ChevronRight className={cn(
+                      "w-4 h-4 text-muted-foreground transition-transform",
+                      isExpanded && "rotate-90"
+                    )} />
                   </div>
 
-                  {/* Subcategories */}
+                  {/* Subcategories - Compact */}
                   <AnimatePresence>
                     {isExpanded && (
                       <motion.div
                         initial={{ height: 0, opacity: 0 }}
                         animate={{ height: 'auto', opacity: 1 }}
                         exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.2 }}
-                        className="overflow-hidden bg-secondary/10"
+                        transition={{ duration: 0.15 }}
+                        className="overflow-hidden bg-secondary/5"
                       >
-                        <div className="py-2">
-                          {category.subcategories.map((sub) => {
-                            const resourceId = `${category.id}/${sub.id}`;
-                            const isSubSelected = selectedResources.includes(resourceId);
-                            const isSupported = isResourceSupported(category.id, sub.id);
+                        <div className="py-1 px-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-0.5">
+                            {category.subcategories.map((sub) => {
+                              const resourceId = `${category.id}/${sub.id}`;
+                              const isSubSelected = selectedResources.includes(resourceId);
+                              const isSupported = isResourceSupported(category.id, sub.id);
 
-                            return (
-                              <div
-                                key={sub.id}
-                                className={cn(
-                                  "flex items-center gap-3 px-6 py-2 pl-14 transition-colors",
-                                  isSupported ? "cursor-pointer hover:bg-secondary/30" : "cursor-not-allowed opacity-60",
-                                  isSubSelected && isSupported && "bg-primary/5"
-                                )}
-                                onClick={() => isSupported && onResourceSelect(resourceId)}
-                              >
-                                <Checkbox 
-                                  checked={isSubSelected}
-                                  disabled={!isSupported}
-                                  className="border-muted-foreground data-[state=checked]:bg-primary data-[state=checked]:border-primary"
-                                />
-                                <span className={cn("text-sm", isSupported ? "text-foreground" : "text-muted-foreground")}>
-                                  {sub.name}
-                                </span>
-                                {isSupported && sub.graphEndpoint && (
-                                  <code className="text-xs text-muted-foreground font-mono bg-secondary/50 px-2 py-0.5 rounded">
-                                    Graph API
-                                  </code>
-                                )}
-                                {isSupported && sub.azureResourceType && (
-                                  <code className="text-xs text-blue-500 font-mono bg-blue-500/10 px-2 py-0.5 rounded">
-                                    Azure ARM
-                                  </code>
-                                )}
-                                {!isSupported && (
-                                  <Badge variant="outline" className="text-xs text-warning border-warning/50 bg-warning/10">
-                                    Coming Soon
-                                  </Badge>
-                                )}
-                                {!isSupported && sub.comingSoonReason && (
-                                  <span className="text-xs text-muted-foreground">
-                                    ({sub.comingSoonReason})
+                              return (
+                                <div
+                                  key={sub.id}
+                                  className={cn(
+                                    "flex items-center gap-2 px-2 py-1.5 rounded transition-colors",
+                                    isSupported ? "cursor-pointer hover:bg-secondary/50" : "cursor-not-allowed opacity-50",
+                                    isSubSelected && isSupported && "bg-primary/10"
+                                  )}
+                                  onClick={() => isSupported && onResourceSelect(resourceId)}
+                                >
+                                  <Checkbox 
+                                    checked={isSubSelected}
+                                    disabled={!isSupported}
+                                    className="h-3.5 w-3.5 border-muted-foreground/50 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                                  />
+                                  <span className={cn(
+                                    "text-xs truncate flex-1",
+                                    isSupported ? "text-foreground" : "text-muted-foreground"
+                                  )}>
+                                    {sub.name}
                                   </span>
-                                )}
-                              </div>
-                            );
-                          })}
+                                  {!isSupported && (
+                                    <span className="text-[10px] text-warning">Soon</span>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
                       </motion.div>
                     )}
                   </AnimatePresence>
-                </motion.div>
+                </div>
               );
             })}
           </div>
