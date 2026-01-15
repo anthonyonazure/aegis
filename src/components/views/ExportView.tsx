@@ -8,7 +8,8 @@ import {
   Download,
   Check,
   AlertCircle,
-  Loader2
+  Loader2,
+  Shield
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -19,6 +20,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 import { ExportFormat } from '@/types/tenant';
+import { PreflightCheckDialog } from '@/components/PreflightCheckDialog';
 
 const exportFormats = [
   {
@@ -62,6 +64,9 @@ interface ExportViewProps {
   onStartExport: () => void;
   isExporting?: boolean;
   progress?: number;
+  accessToken?: string | null;
+  azureRoles?: string[];
+  onRefreshToken?: () => Promise<string | null>;
 }
 
 export const ExportView = ({
@@ -71,12 +76,31 @@ export const ExportView = ({
   onStartExport,
   isExporting = false,
   progress = 0,
+  accessToken = null,
+  azureRoles = [],
+  onRefreshToken,
 }: ExportViewProps) => {
   const [outputPath, setOutputPath] = useState('./exports');
   const [separateFiles, setSeparateFiles] = useState(true);
   const [includeMetadata, setIncludeMetadata] = useState(true);
+  const [preflightOpen, setPreflightOpen] = useState(false);
 
   const canExport = selectedResources.length > 0 && selectedFormats.length > 0 && !isExporting;
+
+  const handleStartExport = () => {
+    if (accessToken) {
+      // Run preflight check first
+      setPreflightOpen(true);
+    } else {
+      // No token - proceed directly (will fail at API level)
+      onStartExport();
+    }
+  };
+
+  const handlePreflightProceed = () => {
+    setPreflightOpen(false);
+    onStartExport();
+  };
 
   return (
     <div className="space-y-6">
@@ -92,8 +116,20 @@ export const ExportView = ({
           <Badge variant="outline" className="px-3 py-1">
             {selectedResources.length} resources selected
           </Badge>
+          {accessToken && (
+            <Button 
+              variant="outline"
+              size="sm"
+              onClick={() => setPreflightOpen(true)}
+              disabled={selectedResources.length === 0}
+              className="gap-2"
+            >
+              <Shield className="w-4 h-4" />
+              Check Permissions
+            </Button>
+          )}
           <Button 
-            onClick={onStartExport} 
+            onClick={handleStartExport} 
             disabled={!canExport}
             className="gap-2"
           >
@@ -111,6 +147,18 @@ export const ExportView = ({
           </Button>
         </div>
       </div>
+
+      {/* Preflight Check Dialog */}
+      <PreflightCheckDialog
+        open={preflightOpen}
+        onOpenChange={setPreflightOpen}
+        accessToken={accessToken}
+        azureRoles={azureRoles}
+        selectedResources={selectedResources}
+        onProceed={handlePreflightProceed}
+        onCancel={() => setPreflightOpen(false)}
+        onRefreshToken={onRefreshToken}
+      />
 
       {/* Export Progress */}
       {isExporting && (
