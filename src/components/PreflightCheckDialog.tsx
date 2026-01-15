@@ -10,6 +10,8 @@ import {
   ExternalLink,
   ChevronDown,
   ChevronUp,
+  Cloud,
+  Server,
 } from 'lucide-react';
 import {
   Dialog,
@@ -35,6 +37,7 @@ interface PreflightCheckDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   accessToken: string | null;
+  azureRoles?: string[];
   selectedResources: string[];
   onProceed: () => void;
   onCancel: () => void;
@@ -45,6 +48,7 @@ export function PreflightCheckDialog({
   open,
   onOpenChange,
   accessToken,
+  azureRoles = [],
   selectedResources,
   onProceed,
   onCancel,
@@ -54,15 +58,16 @@ export function PreflightCheckDialog({
   const [refreshing, setRefreshing] = useState(false);
   const [result, setResult] = useState<PreflightCheckResult | null>(null);
   const [showGrantedPermissions, setShowGrantedPermissions] = useState(false);
+  const [filterProvider, setFilterProvider] = useState<'all' | 'graph' | 'azure'>('all');
   const [currentToken, setCurrentToken] = useState<string | null>(accessToken);
   const { toast } = useToast();
 
   // Run preflight check
-  const runPreflightCheck = useCallback((token: string | null) => {
+  const runPreflightCheck = useCallback((token: string | null, roles: string[]) => {
     if (token && selectedResources.length > 0) {
       setChecking(true);
       setTimeout(() => {
-        const checkResult = performPreflightCheck(token, selectedResources);
+        const checkResult = performPreflightCheck(token, selectedResources, roles);
         setResult(checkResult);
         setChecking(false);
       }, 500);
@@ -72,9 +77,9 @@ export function PreflightCheckDialog({
   useEffect(() => {
     if (open && accessToken && selectedResources.length > 0) {
       setCurrentToken(accessToken);
-      runPreflightCheck(accessToken);
+      runPreflightCheck(accessToken, azureRoles);
     }
-  }, [open, accessToken, selectedResources, runPreflightCheck]);
+  }, [open, accessToken, azureRoles, selectedResources, runPreflightCheck]);
 
   // Handle refresh permissions button
   const handleRefreshPermissions = async () => {
@@ -92,7 +97,7 @@ export function PreflightCheckDialog({
       const newToken = await onRefreshToken();
       if (newToken) {
         setCurrentToken(newToken);
-        runPreflightCheck(newToken);
+        runPreflightCheck(newToken, azureRoles);
         toast({
           title: 'Permissions Refreshed',
           description: 'Token refreshed. Checking permissions with new token...',
@@ -138,7 +143,7 @@ export function PreflightCheckDialog({
             Permission Preflight Check
           </DialogTitle>
           <DialogDescription>
-            Validating Microsoft Graph API permissions for selected resources
+            Validating permissions for {result?.graphResources || 0} Graph API and {result?.azureResources || 0} Azure resources
           </DialogDescription>
         </DialogHeader>
 
@@ -246,12 +251,36 @@ export function PreflightCheckDialog({
               </motion.div>
             )}
 
+            {/* Provider Filter */}
+            {result && (result.graphResources > 0 && result.azureResources > 0) && (
+              <div className="flex rounded-lg border border-border overflow-hidden">
+                {[
+                  { id: 'all', label: 'All' },
+                  { id: 'graph', label: `M365 (${result.graphResources})`, icon: Cloud },
+                  { id: 'azure', label: `Azure (${result.azureResources})`, icon: Server },
+                ].map((option) => (
+                  <button
+                    key={option.id}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-1.5 text-xs transition-colors",
+                      filterProvider === option.id 
+                        ? "bg-primary text-primary-foreground" 
+                        : "bg-card hover:bg-secondary/50 text-muted-foreground"
+                    )}
+                    onClick={() => setFilterProvider(option.id as typeof filterProvider)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
             {/* Resource List - Failed resources first */}
-            <ScrollArea className="h-[280px] -mx-6 px-6">
+            <ScrollArea className="h-[250px] -mx-6 px-6">
               <div className="space-y-2 pr-4">
                 <p className="text-sm font-medium text-foreground">Resource Status</p>
-                {/* Show failed resources first */}
                 {result.results
+                  .filter(r => filterProvider === 'all' || r.provider === filterProvider)
                   .slice()
                   .sort((a, b) => (a.hasPermission === b.hasPermission ? 0 : a.hasPermission ? 1 : -1))
                   .map((res, idx) => (
@@ -261,52 +290,59 @@ export function PreflightCheckDialog({
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: idx * 0.02 }}
                     className={cn(
-                      "flex items-start justify-between p-3 rounded-lg gap-4",
+                      "flex items-start justify-between p-2.5 rounded-lg gap-3",
                       res.hasPermission ? "bg-success/5" : "bg-destructive/5"
                     )}
                   >
-                    <div className="flex items-start gap-3 min-w-0 flex-1">
+                    <div className="flex items-start gap-2.5 min-w-0 flex-1">
                       {res.hasPermission ? (
                         <CheckCircle2 className="w-4 h-4 text-success flex-shrink-0 mt-0.5" />
                       ) : (
                         <XCircle className="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" />
                       )}
                       <div className="min-w-0">
-                        <p className="font-medium text-sm text-foreground">{res.resourceName}</p>
-                        <p className="text-xs text-muted-foreground font-mono truncate">{res.resourceId}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-sm text-foreground">{res.resourceName}</p>
+                          {res.provider === 'azure' ? (
+                            <Server className="w-3 h-3 text-blue-500" />
+                          ) : (
+                            <Cloud className="w-3 h-3 text-muted-foreground" />
+                          )}
+                        </div>
                         {!res.hasPermission && res.missingPermissions.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-2">
-                            {res.missingPermissions.map((perm) => (
+                          <div className="flex flex-wrap gap-1 mt-1.5">
+                            {res.missingPermissions.slice(0, 2).map((perm) => (
                               <code 
                                 key={perm} 
-                                className="text-xs text-destructive font-mono bg-destructive/10 px-1.5 py-0.5 rounded cursor-pointer hover:bg-destructive/20 transition-colors"
+                                className="text-[10px] text-destructive font-mono bg-destructive/10 px-1 py-0.5 rounded cursor-pointer"
                                 onClick={() => {
                                   navigator.clipboard.writeText(perm);
-                                  toast({
-                                    title: 'Copied!',
-                                    description: `${perm} copied to clipboard`,
-                                  });
+                                  toast({ title: 'Copied!' });
                                 }}
-                                title="Click to copy"
                               >
                                 {perm}
                               </code>
                             ))}
+                            {res.missingPermissions.length > 2 && (
+                              <span className="text-[10px] text-muted-foreground">
+                                +{res.missingPermissions.length - 2} more
+                              </span>
+                            )}
                           </div>
                         )}
                       </div>
                     </div>
-                    <div className="flex-shrink-0">
-                      {res.hasPermission ? (
-                        <Badge variant="outline" className="text-success border-success/30 text-xs">
-                          Ready
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline" className="text-destructive border-destructive/30 text-xs">
-                          Missing
-                        </Badge>
+                    <Badge 
+                      variant="outline" 
+                      className={cn(
+                        "text-[10px] flex-shrink-0",
+                        res.hasPermission 
+                          ? "text-success border-success/30" 
+                          : "text-destructive border-destructive/30"
                       )}
-                    </div>
+                    >
+                      {res.hasPermission ? 'Ready' : 'Missing'}
+                    </Badge>
                   </motion.div>
                 ))}
               </div>

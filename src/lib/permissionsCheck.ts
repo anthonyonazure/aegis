@@ -250,21 +250,202 @@ export const PERMISSION_REQUIREMENTS: PermissionRequirement[] = [
   },
 ];
 
+// Azure ARM permission requirements
+export const AZURE_PERMISSION_REQUIREMENTS: PermissionRequirement[] = [
+  // Compute
+  {
+    resourceId: 'azure-compute/virtual-machines',
+    resourceName: 'Virtual Machines',
+    requiredPermissions: ['Microsoft.Compute/virtualMachines/read'],
+    alternativePermissions: ['*/read', 'Reader'],
+  },
+  {
+    resourceId: 'azure-compute/vm-scale-sets',
+    resourceName: 'VM Scale Sets',
+    requiredPermissions: ['Microsoft.Compute/virtualMachineScaleSets/read'],
+    alternativePermissions: ['*/read', 'Reader'],
+  },
+  {
+    resourceId: 'azure-compute/disks',
+    resourceName: 'Managed Disks',
+    requiredPermissions: ['Microsoft.Compute/disks/read'],
+    alternativePermissions: ['*/read', 'Reader'],
+  },
+  {
+    resourceId: 'azure-compute/availability-sets',
+    resourceName: 'Availability Sets',
+    requiredPermissions: ['Microsoft.Compute/availabilitySets/read'],
+    alternativePermissions: ['*/read', 'Reader'],
+  },
+  
+  // Networking
+  {
+    resourceId: 'azure-networking/virtual-networks',
+    resourceName: 'Virtual Networks',
+    requiredPermissions: ['Microsoft.Network/virtualNetworks/read'],
+    alternativePermissions: ['*/read', 'Reader'],
+  },
+  {
+    resourceId: 'azure-networking/network-security-groups',
+    resourceName: 'Network Security Groups',
+    requiredPermissions: ['Microsoft.Network/networkSecurityGroups/read'],
+    alternativePermissions: ['*/read', 'Reader'],
+  },
+  {
+    resourceId: 'azure-networking/load-balancers',
+    resourceName: 'Load Balancers',
+    requiredPermissions: ['Microsoft.Network/loadBalancers/read'],
+    alternativePermissions: ['*/read', 'Reader'],
+  },
+  {
+    resourceId: 'azure-networking/application-gateways',
+    resourceName: 'Application Gateways',
+    requiredPermissions: ['Microsoft.Network/applicationGateways/read'],
+    alternativePermissions: ['*/read', 'Reader'],
+  },
+  {
+    resourceId: 'azure-networking/public-ips',
+    resourceName: 'Public IP Addresses',
+    requiredPermissions: ['Microsoft.Network/publicIPAddresses/read'],
+    alternativePermissions: ['*/read', 'Reader'],
+  },
+  {
+    resourceId: 'azure-networking/dns-zones',
+    resourceName: 'DNS Zones',
+    requiredPermissions: ['Microsoft.Network/dnsZones/read'],
+    alternativePermissions: ['*/read', 'Reader'],
+  },
+  
+  // Storage
+  {
+    resourceId: 'azure-storage/storage-accounts',
+    resourceName: 'Storage Accounts',
+    requiredPermissions: ['Microsoft.Storage/storageAccounts/read'],
+    alternativePermissions: ['*/read', 'Reader'],
+  },
+  {
+    resourceId: 'azure-storage/blob-containers',
+    resourceName: 'Blob Containers',
+    requiredPermissions: ['Microsoft.Storage/storageAccounts/blobServices/containers/read'],
+    alternativePermissions: ['*/read', 'Reader'],
+  },
+  {
+    resourceId: 'azure-storage/file-shares',
+    resourceName: 'File Shares',
+    requiredPermissions: ['Microsoft.Storage/storageAccounts/fileServices/shares/read'],
+    alternativePermissions: ['*/read', 'Reader'],
+  },
+  
+  // Identity & Security
+  {
+    resourceId: 'azure-identity/key-vaults',
+    resourceName: 'Key Vaults',
+    requiredPermissions: ['Microsoft.KeyVault/vaults/read'],
+    alternativePermissions: ['*/read', 'Reader'],
+  },
+  {
+    resourceId: 'azure-identity/managed-identities',
+    resourceName: 'Managed Identities',
+    requiredPermissions: ['Microsoft.ManagedIdentity/userAssignedIdentities/read'],
+    alternativePermissions: ['*/read', 'Reader'],
+  },
+  {
+    resourceId: 'azure-identity/policy-assignments',
+    resourceName: 'Policy Assignments',
+    requiredPermissions: ['Microsoft.Authorization/policyAssignments/read'],
+    alternativePermissions: ['*/read', 'Reader'],
+  },
+  {
+    resourceId: 'azure-identity/role-assignments',
+    resourceName: 'Role Assignments',
+    requiredPermissions: ['Microsoft.Authorization/roleAssignments/read'],
+    alternativePermissions: ['*/read', 'Reader'],
+  },
+  
+  // PaaS
+  {
+    resourceId: 'azure-paas/app-services',
+    resourceName: 'App Services',
+    requiredPermissions: ['Microsoft.Web/sites/read'],
+    alternativePermissions: ['*/read', 'Reader'],
+  },
+  {
+    resourceId: 'azure-paas/function-apps',
+    resourceName: 'Function Apps',
+    requiredPermissions: ['Microsoft.Web/sites/read'],
+    alternativePermissions: ['*/read', 'Reader'],
+  },
+  {
+    resourceId: 'azure-paas/sql-databases',
+    resourceName: 'SQL Databases',
+    requiredPermissions: ['Microsoft.Sql/servers/databases/read'],
+    alternativePermissions: ['*/read', 'Reader'],
+  },
+  {
+    resourceId: 'azure-paas/cosmos-db',
+    resourceName: 'Cosmos DB Accounts',
+    requiredPermissions: ['Microsoft.DocumentDB/databaseAccounts/read'],
+    alternativePermissions: ['*/read', 'Reader'],
+  },
+  {
+    resourceId: 'azure-paas/container-registry',
+    resourceName: 'Container Registries',
+    requiredPermissions: ['Microsoft.ContainerRegistry/registries/read'],
+    alternativePermissions: ['*/read', 'Reader'],
+  },
+  {
+    resourceId: 'azure-paas/aks-clusters',
+    resourceName: 'AKS Clusters',
+    requiredPermissions: ['Microsoft.ContainerService/managedClusters/read'],
+    alternativePermissions: ['*/read', 'Reader'],
+  },
+  
+  // Monitoring
+  {
+    resourceId: 'azure-monitoring/log-analytics',
+    resourceName: 'Log Analytics Workspaces',
+    requiredPermissions: ['Microsoft.OperationalInsights/workspaces/read'],
+    alternativePermissions: ['*/read', 'Reader'],
+  },
+  {
+    resourceId: 'azure-monitoring/app-insights',
+    resourceName: 'Application Insights',
+    requiredPermissions: ['Microsoft.Insights/components/read'],
+    alternativePermissions: ['*/read', 'Reader'],
+  },
+  {
+    resourceId: 'azure-monitoring/diagnostic-settings',
+    resourceName: 'Diagnostic Settings',
+    requiredPermissions: ['Microsoft.Insights/diagnosticSettings/read'],
+    alternativePermissions: ['*/read', 'Reader'],
+  },
+  {
+    resourceId: 'azure-monitoring/alerts',
+    resourceName: 'Alert Rules',
+    requiredPermissions: ['Microsoft.Insights/alertRules/read'],
+    alternativePermissions: ['*/read', 'Reader'],
+  },
+];
+
 export interface PreflightResult {
   resourceId: string;
   resourceName: string;
   hasPermission: boolean;
   grantedPermissions: string[];
   missingPermissions: string[];
+  provider: 'graph' | 'azure';
 }
 
 export interface PreflightCheckResult {
   success: boolean;
   grantedRoles: string[];
+  azureRoles: string[];
   results: PreflightResult[];
   totalResources: number;
   accessibleResources: number;
   deniedResources: number;
+  graphResources: number;
+  azureResources: number;
 }
 
 /**
@@ -331,17 +512,23 @@ function hasPermission(
 
 /**
  * Perform a preflight check for the selected resources
+ * Supports both Graph API and Azure ARM resources
  */
 export function performPreflightCheck(
   accessToken: string,
-  selectedResources: string[]
+  selectedResources: string[],
+  azureRoles: string[] = []
 ): PreflightCheckResult {
   const grantedRoles = extractRolesFromToken(accessToken);
+  
+  // Combine all permission requirements
+  const allRequirements = [...PERMISSION_REQUIREMENTS, ...AZURE_PERMISSION_REQUIREMENTS];
   
   const results: PreflightResult[] = [];
 
   for (const resourceId of selectedResources) {
-    const requirement = PERMISSION_REQUIREMENTS.find(r => r.resourceId === resourceId);
+    const isAzureResource = resourceId.startsWith('azure-');
+    const requirement = allRequirements.find(r => r.resourceId === resourceId);
     
     if (!requirement) {
       // Unknown resource - assume it will work
@@ -351,12 +538,16 @@ export function performPreflightCheck(
         hasPermission: true,
         grantedPermissions: [],
         missingPermissions: [],
+        provider: isAzureResource ? 'azure' : 'graph',
       });
       continue;
     }
 
+    // Use appropriate roles based on provider
+    const rolesToCheck = isAzureResource ? azureRoles : grantedRoles;
+    
     const check = hasPermission(
-      grantedRoles,
+      rolesToCheck,
       requirement.requiredPermissions,
       requirement.alternativePermissions
     );
@@ -367,19 +558,25 @@ export function performPreflightCheck(
       hasPermission: check.hasPermission,
       grantedPermissions: check.granted,
       missingPermissions: check.missing,
+      provider: isAzureResource ? 'azure' : 'graph',
     });
   }
 
   const accessibleResources = results.filter(r => r.hasPermission).length;
   const deniedResources = results.filter(r => !r.hasPermission).length;
+  const graphResources = results.filter(r => r.provider === 'graph').length;
+  const azureResourceCount = results.filter(r => r.provider === 'azure').length;
 
   return {
     success: deniedResources === 0,
     grantedRoles,
+    azureRoles,
     results,
     totalResources: results.length,
     accessibleResources,
     deniedResources,
+    graphResources,
+    azureResources: azureResourceCount,
   };
 }
 
