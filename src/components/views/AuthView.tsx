@@ -12,7 +12,8 @@ import {
   Loader2,
   CheckCircle2,
   Cloud,
-  Server
+  Server,
+  Save,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -25,6 +26,7 @@ import { cn } from '@/lib/utils';
 import { testAzureConnection } from '@/lib/azureApi';
 import { AzureSubscription } from '@/types/tenant';
 import { useToast } from '@/hooks/use-toast';
+import { ServicePrincipalManager, ServicePrincipalConfig } from '@/components/ServicePrincipalManager';
 
 const graphPermissions = [
   // Intune / Device Management
@@ -65,6 +67,8 @@ export const AuthView = () => {
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
   const [copied, setCopied] = useState<string | null>(null);
+  const [selectedConfig, setSelectedConfig] = useState<ServicePrincipalConfig | null>(null);
+  const [showSavePrompt, setShowSavePrompt] = useState(false);
   
   // Azure-specific state
   const [azureConnecting, setAzureConnecting] = useState(false);
@@ -171,6 +175,27 @@ export const AuthView = () => {
 
   const isAnyConnected = isConnected || azureConnected;
 
+  const handleSelectSavedConfig = (config: ServicePrincipalConfig | null) => {
+    setSelectedConfig(config);
+    if (config) {
+      setTenantId(config.tenant_id);
+      setClientId(config.client_id);
+      // Determine connection type from saved config
+      if (config.connection_types.includes('graph') && config.connection_types.includes('azure')) {
+        setConnectionType('both');
+      } else if (config.connection_types.includes('azure')) {
+        setConnectionType('azure');
+      } else {
+        setConnectionType('graph');
+      }
+      setClientSecret(''); // Always clear secret - user must re-enter
+      toast({
+        title: 'Configuration Loaded',
+        description: `Loaded "${config.name}". Enter your client secret to connect.`,
+      });
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -263,15 +288,36 @@ export const AuthView = () => {
         </TabsList>
 
         <TabsContent value="app" className="space-y-6 mt-6">
+          {/* Saved Configurations */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
+          >
+            <Card className="glass-panel">
+              <CardContent className="pt-6">
+                <ServicePrincipalManager 
+                  onSelect={handleSelectSavedConfig}
+                  selectedId={selectedConfig?.id}
+                />
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
           >
             <Card className="glass-panel">
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
                   <Key className="w-5 h-5 text-primary" />
                   Service Principal Configuration
+                  {selectedConfig && (
+                    <span className="text-sm font-normal text-muted-foreground">
+                      (from: {selectedConfig.name})
+                    </span>
+                  )}
                 </CardTitle>
                 <CardDescription>
                   Best for CI/CD pipelines and automated exports. Uses client credentials flow.
@@ -319,25 +365,36 @@ export const AuthView = () => {
                   </p>
                 </div>
 
-                <Button 
-                  onClick={handleConnect} 
-                  disabled={isConnecting || azureConnecting || isAnyConnected || !tenantId || !clientId || !clientSecret}
-                  className="w-full md:w-auto"
-                >
-                  {isConnecting || azureConnecting ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Connecting...
-                    </>
-                  ) : isAnyConnected ? (
-                    <>
-                      <CheckCircle2 className="w-4 h-4 mr-2" />
-                      Connected
-                    </>
-                  ) : (
-                    'Connect'
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button 
+                    onClick={handleConnect} 
+                    disabled={isConnecting || azureConnecting || isAnyConnected || !tenantId || !clientId || !clientSecret}
+                  >
+                    {isConnecting || azureConnecting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Connecting...
+                      </>
+                    ) : isAnyConnected ? (
+                      <>
+                        <CheckCircle2 className="w-4 h-4 mr-2" />
+                        Connected
+                      </>
+                    ) : (
+                      'Connect'
+                    )}
+                  </Button>
+                  {!isAnyConnected && tenantId && clientId && !selectedConfig && (
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setShowSavePrompt(true)}
+                      className="gap-2"
+                    >
+                      <Save className="w-4 h-4" />
+                      Save Configuration
+                    </Button>
                   )}
-                </Button>
+                </div>
               </CardContent>
             </Card>
           </motion.div>

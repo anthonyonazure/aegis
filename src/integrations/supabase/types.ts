@@ -432,6 +432,7 @@ export type Database = {
           run_count: number
           schedule_cron: string
           schedule_description: string | null
+          service_principal_config_id: string | null
           tenant_connection_id: string | null
           updated_at: string
           user_id: string
@@ -449,6 +450,7 @@ export type Database = {
           run_count?: number
           schedule_cron: string
           schedule_description?: string | null
+          service_principal_config_id?: string | null
           tenant_connection_id?: string | null
           updated_at?: string
           user_id: string
@@ -466,11 +468,19 @@ export type Database = {
           run_count?: number
           schedule_cron?: string
           schedule_description?: string | null
+          service_principal_config_id?: string | null
           tenant_connection_id?: string | null
           updated_at?: string
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "scheduled_exports_service_principal_config_id_fkey"
+            columns: ["service_principal_config_id"]
+            isOneToOne: false
+            referencedRelation: "service_principal_configs"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "scheduled_exports_tenant_connection_id_fkey"
             columns: ["tenant_connection_id"]
@@ -479,6 +489,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      service_principal_configs: {
+        Row: {
+          client_id: string
+          connection_types: string[]
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          tenant_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          client_id: string
+          connection_types?: string[]
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          tenant_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          client_id?: string
+          connection_types?: string[]
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          tenant_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       tenant_connections: {
         Row: {
