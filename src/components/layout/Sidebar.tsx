@@ -19,6 +19,7 @@ import {
   Webhook,
   BarChart3,
   Building2,
+  FileCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -32,6 +33,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'customers', label: 'Customers', icon: Building2 },
+  { id: 'policies', label: 'Policy Templates', icon: FileCheck },
   { id: 'resources', label: 'Resources', icon: FolderTree },
   { id: 'export', label: 'Export', icon: Download },
   { id: 'import', label: 'Import / Restore', icon: Upload },
