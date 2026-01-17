@@ -207,6 +207,9 @@ const Index = () => {
         );
       case 'customers':
         return <CustomersView />;
+      case 'policies':
+        return <PoliciesView />;
+      case 'resources':
         return (
           <ResourcesView 
             selectedResources={selectedResources}
