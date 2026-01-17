@@ -653,6 +653,176 @@ export type Database = {
         }
         Relationships: []
       }
+      scheduled_drift_configs: {
+        Row: {
+          baseline_export_id: string | null
+          created_at: string
+          description: string | null
+          drift_threshold_percent: number | null
+          id: string
+          is_active: boolean
+          last_drift_detected: boolean | null
+          last_run_at: string | null
+          name: string
+          next_run_at: string | null
+          notify_on_drift: boolean
+          resource_ids: string[]
+          run_count: number
+          schedule_cron: string
+          schedule_description: string | null
+          service_principal_config_id: string | null
+          target_customer_id: string | null
+          target_group_id: string | null
+          target_tenant_ids: string[]
+          target_type: string
+          updated_at: string
+          user_id: string
+          webhook_config_id: string | null
+        }
+        Insert: {
+          baseline_export_id?: string | null
+          created_at?: string
+          description?: string | null
+          drift_threshold_percent?: number | null
+          id?: string
+          is_active?: boolean
+          last_drift_detected?: boolean | null
+          last_run_at?: string | null
+          name: string
+          next_run_at?: string | null
+          notify_on_drift?: boolean
+          resource_ids?: string[]
+          run_count?: number
+          schedule_cron: string
+          schedule_description?: string | null
+          service_principal_config_id?: string | null
+          target_customer_id?: string | null
+          target_group_id?: string | null
+          target_tenant_ids?: string[]
+          target_type?: string
+          updated_at?: string
+          user_id: string
+          webhook_config_id?: string | null
+        }
+        Update: {
+          baseline_export_id?: string | null
+          created_at?: string
+          description?: string | null
+          drift_threshold_percent?: number | null
+          id?: string
+          is_active?: boolean
+          last_drift_detected?: boolean | null
+          last_run_at?: string | null
+          name?: string
+          next_run_at?: string | null
+          notify_on_drift?: boolean
+          resource_ids?: string[]
+          run_count?: number
+          schedule_cron?: string
+          schedule_description?: string | null
+          service_principal_config_id?: string | null
+          target_customer_id?: string | null
+          target_group_id?: string | null
+          target_tenant_ids?: string[]
+          target_type?: string
+          updated_at?: string
+          user_id?: string
+          webhook_config_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scheduled_drift_configs_baseline_export_id_fkey"
+            columns: ["baseline_export_id"]
+            isOneToOne: false
+            referencedRelation: "export_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scheduled_drift_configs_service_principal_config_id_fkey"
+            columns: ["service_principal_config_id"]
+            isOneToOne: false
+            referencedRelation: "service_principal_configs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scheduled_drift_configs_target_customer_id_fkey"
+            columns: ["target_customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scheduled_drift_configs_target_group_id_fkey"
+            columns: ["target_group_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scheduled_drift_configs_webhook_config_id_fkey"
+            columns: ["webhook_config_id"]
+            isOneToOne: false
+            referencedRelation: "webhook_configs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      scheduled_drift_runs: {
+        Row: {
+          completed_at: string | null
+          completed_tenants: number
+          created_at: string
+          error_message: string | null
+          failed_tenants: number
+          id: string
+          results: Json | null
+          scheduled_config_id: string
+          started_at: string | null
+          status: string
+          tenants_with_drift: number
+          total_tenants: number
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          completed_tenants?: number
+          created_at?: string
+          error_message?: string | null
+          failed_tenants?: number
+          id?: string
+          results?: Json | null
+          scheduled_config_id: string
+          started_at?: string | null
+          status?: string
+          tenants_with_drift?: number
+          total_tenants?: number
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          completed_tenants?: number
+          created_at?: string
+          error_message?: string | null
+          failed_tenants?: number
+          id?: string
+          results?: Json | null
+          scheduled_config_id?: string
+          started_at?: string | null
+          status?: string
+          tenants_with_drift?: number
+          total_tenants?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scheduled_drift_runs_scheduled_config_id_fkey"
+            columns: ["scheduled_config_id"]
+            isOneToOne: false
+            referencedRelation: "scheduled_drift_configs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       scheduled_exports: {
         Row: {
           created_at: string

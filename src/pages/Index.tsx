@@ -16,6 +16,7 @@ import { AuditView } from '@/components/views/AuditView';
 import { ScheduledExportsView } from '@/components/views/ScheduledExportsView';
 import { WebhooksView } from '@/components/views/WebhooksView';
 import { CustomersView } from '@/components/views/CustomersView';
+import { ScheduledDriftView } from '@/components/views/ScheduledDriftView';
 import { PoliciesView } from '@/components/views/PoliciesView';
 import { PreflightCheckDialog } from '@/components/PreflightCheckDialog';
 import { RESOURCE_CATEGORIES, ExportFormat } from '@/types/tenant';
@@ -239,6 +240,8 @@ const Index = () => {
         return <ValidationView />;
       case 'drift':
         return <DriftDetectionView />;
+      case 'scheduled-drift':
+        return <ScheduledDriftView />;
       case 'compliance':
         return <ComplianceView />;
       case 'compliance-dashboard':
