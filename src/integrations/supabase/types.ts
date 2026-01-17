@@ -145,6 +145,63 @@ export type Database = {
         }
         Relationships: []
       }
+      deployment_results: {
+        Row: {
+          applied_changes: Json | null
+          completed_at: string | null
+          created_at: string
+          deployment_id: string
+          dry_run_result: Json | null
+          error_message: string | null
+          id: string
+          rollback_data: Json | null
+          started_at: string | null
+          status: Database["public"]["Enums"]["deployment_status"]
+          tenant_connection_id: string
+        }
+        Insert: {
+          applied_changes?: Json | null
+          completed_at?: string | null
+          created_at?: string
+          deployment_id: string
+          dry_run_result?: Json | null
+          error_message?: string | null
+          id?: string
+          rollback_data?: Json | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["deployment_status"]
+          tenant_connection_id: string
+        }
+        Update: {
+          applied_changes?: Json | null
+          completed_at?: string | null
+          created_at?: string
+          deployment_id?: string
+          dry_run_result?: Json | null
+          error_message?: string | null
+          id?: string
+          rollback_data?: Json | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["deployment_status"]
+          tenant_connection_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deployment_results_deployment_id_fkey"
+            columns: ["deployment_id"]
+            isOneToOne: false
+            referencedRelation: "policy_deployments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deployment_results_tenant_connection_id_fkey"
+            columns: ["tenant_connection_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       drift_detections: {
         Row: {
           added_count: number
@@ -429,6 +486,142 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      policy_deployments: {
+        Row: {
+          completed_at: string | null
+          completed_tenants: number
+          created_at: string
+          description: string | null
+          dry_run: boolean
+          failed_tenants: number
+          id: string
+          name: string
+          policy_template_id: string
+          scheduled_at: string | null
+          started_at: string | null
+          status: Database["public"]["Enums"]["deployment_status"]
+          target_customer_id: string | null
+          target_group_id: string | null
+          target_tenant_ids: string[]
+          target_type: string
+          total_tenants: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          completed_tenants?: number
+          created_at?: string
+          description?: string | null
+          dry_run?: boolean
+          failed_tenants?: number
+          id?: string
+          name: string
+          policy_template_id: string
+          scheduled_at?: string | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["deployment_status"]
+          target_customer_id?: string | null
+          target_group_id?: string | null
+          target_tenant_ids?: string[]
+          target_type?: string
+          total_tenants?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          completed_tenants?: number
+          created_at?: string
+          description?: string | null
+          dry_run?: boolean
+          failed_tenants?: number
+          id?: string
+          name?: string
+          policy_template_id?: string
+          scheduled_at?: string | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["deployment_status"]
+          target_customer_id?: string | null
+          target_group_id?: string | null
+          target_tenant_ids?: string[]
+          target_type?: string
+          total_tenants?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "policy_deployments_policy_template_id_fkey"
+            columns: ["policy_template_id"]
+            isOneToOne: false
+            referencedRelation: "policy_templates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "policy_deployments_target_customer_id_fkey"
+            columns: ["target_customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "policy_deployments_target_group_id_fkey"
+            columns: ["target_group_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      policy_templates: {
+        Row: {
+          baseline_type: Database["public"]["Enums"]["baseline_type"]
+          category: string
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          is_default: boolean
+          name: string
+          policy_data: Json
+          resource_types: string[]
+          updated_at: string
+          user_id: string
+          version: number
+        }
+        Insert: {
+          baseline_type?: Database["public"]["Enums"]["baseline_type"]
+          category: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          is_default?: boolean
+          name: string
+          policy_data?: Json
+          resource_types?: string[]
+          updated_at?: string
+          user_id: string
+          version?: number
+        }
+        Update: {
+          baseline_type?: Database["public"]["Enums"]["baseline_type"]
+          category?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          is_default?: boolean
+          name?: string
+          policy_data?: Json
+          resource_types?: string[]
+          updated_at?: string
+          user_id?: string
+          version?: number
+        }
+        Relationships: []
       }
       resource_templates: {
         Row: {
@@ -894,6 +1087,7 @@ export type Database = {
         }[]
       }
       owns_customer: { Args: { p_customer_id: string }; Returns: boolean }
+      owns_deployment: { Args: { p_deployment_id: string }; Returns: boolean }
       store_encrypted_credential: {
         Args: {
           p_client_id: string
@@ -904,7 +1098,22 @@ export type Database = {
       }
     }
     Enums: {
+      baseline_type:
+        | "cis"
+        | "nist"
+        | "hipaa"
+        | "iso27001"
+        | "zero_trust"
+        | "microsoft_security"
+        | "custom"
       customer_tier: "starter" | "professional" | "enterprise"
+      deployment_status:
+        | "pending"
+        | "running"
+        | "completed"
+        | "failed"
+        | "cancelled"
+        | "rolled_back"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1032,7 +1241,24 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      baseline_type: [
+        "cis",
+        "nist",
+        "hipaa",
+        "iso27001",
+        "zero_trust",
+        "microsoft_security",
+        "custom",
+      ],
       customer_tier: ["starter", "professional", "enterprise"],
+      deployment_status: [
+        "pending",
+        "running",
+        "completed",
+        "failed",
+        "cancelled",
+        "rolled_back",
+      ],
     },
   },
 } as const
