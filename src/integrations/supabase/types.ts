@@ -103,6 +103,48 @@ export type Database = {
           },
         ]
       }
+      customers: {
+        Row: {
+          created_at: string
+          id: string
+          industry: string | null
+          is_active: boolean
+          name: string
+          notes: string | null
+          primary_contact_email: string | null
+          primary_contact_name: string | null
+          tier: Database["public"]["Enums"]["customer_tier"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          industry?: string | null
+          is_active?: boolean
+          name: string
+          notes?: string | null
+          primary_contact_email?: string | null
+          primary_contact_name?: string | null
+          tier?: Database["public"]["Enums"]["customer_tier"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          industry?: string | null
+          is_active?: boolean
+          name?: string
+          notes?: string | null
+          primary_contact_email?: string | null
+          primary_contact_name?: string | null
+          tier?: Database["public"]["Enums"]["customer_tier"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       drift_detections: {
         Row: {
           added_count: number
@@ -531,9 +573,16 @@ export type Database = {
           auth_method: string
           client_id: string | null
           created_at: string
+          customer_id: string | null
+          display_name: string | null
+          environment: string | null
+          health_status: string | null
           id: string
+          last_health_check: string | null
           last_sync: string | null
           status: string
+          tags: string[] | null
+          tenant_group_id: string | null
           tenant_id: string
           tenant_name: string | null
           updated_at: string
@@ -543,9 +592,16 @@ export type Database = {
           auth_method: string
           client_id?: string | null
           created_at?: string
+          customer_id?: string | null
+          display_name?: string | null
+          environment?: string | null
+          health_status?: string | null
           id?: string
+          last_health_check?: string | null
           last_sync?: string | null
           status?: string
+          tags?: string[] | null
+          tenant_group_id?: string | null
           tenant_id: string
           tenant_name?: string | null
           updated_at?: string
@@ -555,15 +611,37 @@ export type Database = {
           auth_method?: string
           client_id?: string | null
           created_at?: string
+          customer_id?: string | null
+          display_name?: string | null
+          environment?: string | null
+          health_status?: string | null
           id?: string
+          last_health_check?: string | null
           last_sync?: string | null
           status?: string
+          tags?: string[] | null
+          tenant_group_id?: string | null
           tenant_id?: string
           tenant_name?: string | null
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "tenant_connections_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_connections_tenant_group_id_fkey"
+            columns: ["tenant_group_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_groups"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       tenant_credentials: {
         Row: {
@@ -605,6 +683,44 @@ export type Database = {
             columns: ["tenant_connection_id"]
             isOneToOne: true
             referencedRelation: "tenant_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_groups: {
+        Row: {
+          color: string | null
+          created_at: string
+          customer_id: string
+          description: string | null
+          id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          customer_id: string
+          description?: string | null
+          id?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          customer_id?: string
+          description?: string | null
+          id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_groups_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
             referencedColumns: ["id"]
           },
         ]
@@ -777,6 +893,7 @@ export type Database = {
           tenant_id: string
         }[]
       }
+      owns_customer: { Args: { p_customer_id: string }; Returns: boolean }
       store_encrypted_credential: {
         Args: {
           p_client_id: string
@@ -787,7 +904,7 @@ export type Database = {
       }
     }
     Enums: {
-      [_ in never]: never
+      customer_tier: "starter" | "professional" | "enterprise"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -914,6 +1031,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      customer_tier: ["starter", "professional", "enterprise"],
+    },
   },
 } as const
