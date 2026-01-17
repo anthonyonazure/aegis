@@ -15,6 +15,7 @@ import { ComplianceDashboardView } from '@/components/views/ComplianceDashboardV
 import { AuditView } from '@/components/views/AuditView';
 import { ScheduledExportsView } from '@/components/views/ScheduledExportsView';
 import { WebhooksView } from '@/components/views/WebhooksView';
+import { CustomersView } from '@/components/views/CustomersView';
 import { PreflightCheckDialog } from '@/components/PreflightCheckDialog';
 import { RESOURCE_CATEGORIES, ExportFormat } from '@/types/tenant';
 import { filterSupportedResourceIds } from '@/lib/resourceSupport';
@@ -203,7 +204,8 @@ const Index = () => {
             selectedFormatsCount={selectedFormats.length}
           />
         );
-      case 'resources':
+      case 'customers':
+        return <CustomersView />;
         return (
           <ResourcesView 
             selectedResources={selectedResources}

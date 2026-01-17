@@ -1,3 +1,33 @@
+// Customer hierarchy types for MSP multi-tenant management
+export type CustomerTier = 'starter' | 'professional' | 'enterprise';
+
+export interface Customer {
+  id: string;
+  userId: string;
+  name: string;
+  industry?: string;
+  tier: CustomerTier;
+  primaryContactName?: string;
+  primaryContactEmail?: string;
+  notes?: string;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface TenantGroup {
+  id: string;
+  customerId: string;
+  name: string;
+  description?: string;
+  color?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type TenantEnvironment = 'production' | 'development' | 'staging' | 'test';
+export type TenantHealthStatus = 'healthy' | 'warning' | 'critical' | 'unknown';
+
 export type ResourceProvider = 'graph' | 'azure';
 
 export interface ResourceCategory {
@@ -49,8 +79,16 @@ export interface TenantConnection {
   status: 'connected' | 'disconnected' | 'error';
   lastSync?: Date;
   clientId?: string;
-  connectionType?: 'graph' | 'azure' | 'both'; // Type of connection
-  subscriptionIds?: string[]; // Selected Azure subscriptions
+  connectionType?: 'graph' | 'azure' | 'both';
+  subscriptionIds?: string[];
+  // New MSP hierarchy fields
+  customerId?: string;
+  tenantGroupId?: string;
+  displayName?: string;
+  environment?: TenantEnvironment;
+  tags?: string[];
+  healthStatus?: TenantHealthStatus;
+  lastHealthCheck?: Date;
 }
 
 export interface AzureSubscription {

@@ -19,7 +19,8 @@ import {
   GitBranch,
   BarChart3,
   FileText,
-  FolderTree
+  FolderTree,
+  Building2
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -45,6 +46,8 @@ interface DashboardStats {
   complianceChecks: number;
   lastExportDate: string | null;
   importJobs: number;
+  totalCustomers: number;
+  totalTenants: number;
 }
 
 export const DashboardView = ({ 
@@ -62,7 +65,9 @@ export const DashboardView = ({
     driftDetections: 0,
     complianceChecks: 0,
     lastExportDate: null,
-    importJobs: 0
+    importJobs: 0,
+    totalCustomers: 0,
+    totalTenants: 0
   });
   const [loading, setLoading] = useState(true);
 
@@ -84,14 +89,18 @@ export const DashboardView = ({
         webhooksResult,
         driftResult,
         complianceResult,
-        importsResult
+        importsResult,
+        customersResult,
+        tenantsResult
       ] = await Promise.all([
         supabase.from('export_jobs').select('id, status, completed_at').eq('user_id', user.id).order('completed_at', { ascending: false }),
         supabase.from('scheduled_exports').select('id, is_active').eq('user_id', user.id),
         supabase.from('webhook_configs').select('id, is_active').eq('user_id', user.id),
         supabase.from('drift_detections').select('id').eq('user_id', user.id),
         supabase.from('compliance_results').select('id').eq('user_id', user.id),
-        supabase.from('import_jobs').select('id').eq('user_id', user.id)
+        supabase.from('import_jobs').select('id').eq('user_id', user.id),
+        supabase.from('customers').select('id').eq('user_id', user.id),
+        supabase.from('tenant_connections').select('id').eq('user_id', user.id)
       ]);
 
       const exports = exportsResult.data || [];
@@ -100,6 +109,8 @@ export const DashboardView = ({
       const drifts = driftResult.data || [];
       const compliance = complianceResult.data || [];
       const imports = importsResult.data || [];
+      const customers = customersResult.data || [];
+      const tenants = tenantsResult.data || [];
 
       setStats({
         totalExports: exports.length,
@@ -109,7 +120,9 @@ export const DashboardView = ({
         driftDetections: drifts.length,
         complianceChecks: compliance.length,
         lastExportDate: exports[0]?.completed_at || null,
-        importJobs: imports.length
+        importJobs: imports.length,
+        totalCustomers: customers.length,
+        totalTenants: tenants.length
       });
     } catch (error) {
       console.error('Error loading dashboard stats:', error);
@@ -123,9 +136,9 @@ export const DashboardView = ({
   const step4Complete = hasGitConfig;
 
   const statCards = [
+    { label: 'Customers', value: stats.totalCustomers.toString(), icon: Building2, trend: `${stats.totalTenants} tenants` },
     { label: 'Total Exports', value: stats.totalExports.toString(), icon: Download, trend: `${stats.successfulExports} successful` },
     { label: 'Scheduled Jobs', value: stats.scheduledExports.toString(), icon: Calendar, trend: 'Active schedules' },
-    { label: 'Active Webhooks', value: stats.activeWebhooks.toString(), icon: Webhook, trend: 'Configured endpoints' },
     { 
       label: 'Connection', 
       value: isConnected ? 'Online' : 'Offline', 
@@ -135,6 +148,14 @@ export const DashboardView = ({
   ];
 
   const featureCards = [
+    { 
+      id: 'customers', 
+      title: 'Customer Management', 
+      description: 'Manage MSP customer organizations and organize tenants into groups.',
+      icon: Building2,
+      stats: `${stats.totalCustomers} customers, ${stats.totalTenants} tenants`,
+      color: 'primary'
+    },
     { 
       id: 'resources', 
       title: 'Resource Explorer', 
