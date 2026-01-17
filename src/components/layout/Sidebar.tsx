@@ -39,6 +39,7 @@ const navItems: NavItem[] = [
   { id: 'import', label: 'Import / Restore', icon: Upload },
   { id: 'validation', label: 'Validation', icon: ShieldCheck },
   { id: 'drift', label: 'Drift Detection', icon: GitCompare },
+  { id: 'scheduled-drift', label: 'Scheduled Drift', icon: Calendar },
   { id: 'compliance', label: 'Compliance', icon: AlertTriangle },
   { id: 'compliance-dashboard', label: 'Compliance Dashboard', icon: BarChart3 },
   { id: 'audit', label: 'Audit Trail', icon: FileText },
