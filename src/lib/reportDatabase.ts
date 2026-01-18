@@ -1,6 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 
-export type ReportType = 'executive_summary' | 'compliance' | 'drift' | 'billing' | 'security';
+export type ReportType = 'executive_summary' | 'compliance' | 'drift' | 'billing' | 'security' | 'tenant_summary' | 'psa_tickets';
 export type ReportStatus = 'pending' | 'generating' | 'completed' | 'failed';
 
 export interface Report {
@@ -36,10 +36,12 @@ export interface BillingUsage {
 
 export const REPORT_TYPES = [
   { id: 'executive_summary' as const, name: 'Executive Summary', description: 'High-level overview for stakeholders' },
+  { id: 'tenant_summary' as const, name: 'Tenant Summary', description: 'Per-tenant status and health overview' },
   { id: 'compliance' as const, name: 'Compliance Report', description: 'Detailed compliance check results' },
   { id: 'drift' as const, name: 'Drift Report', description: 'Configuration drift analysis' },
-  { id: 'billing' as const, name: 'Billing Report', description: 'Resource usage and billing summary' },
   { id: 'security' as const, name: 'Security Report', description: 'Security posture assessment' },
+  { id: 'psa_tickets' as const, name: 'PSA Tickets Report', description: 'Summary of PSA tickets created' },
+  { id: 'billing' as const, name: 'Billing Report', description: 'Resource usage and billing summary' },
 ] as const;
 
 // Reports CRUD

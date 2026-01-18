@@ -58,7 +58,6 @@ const navItems: NavItem[] = [
   { id: 'audit', label: 'Audit Trail', icon: FileText },
   { id: 'git', label: 'Git & CI/CD', icon: GitBranch },
   { id: 'auth', label: 'Authentication', icon: Key },
-  { id: 'settings', label: 'Settings', icon: Settings },
 ];
 
 interface SidebarProps {
