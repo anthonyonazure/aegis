@@ -20,6 +20,7 @@ import {
   BarChart3,
   Building2,
   FileCheck,
+  Activity,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -48,6 +49,7 @@ const navItems: NavItem[] = [
   { id: 'psa', label: 'PSA Integrations', icon: Webhook },
   { id: 'reports', label: 'Reports', icon: FileText },
   { id: 'billing', label: 'Billing & Usage', icon: BarChart3 },
+  { id: 'health-dashboard', label: 'Health Dashboard', icon: Activity },
   { id: 'jobs', label: 'Export Jobs', icon: History },
   { id: 'git', label: 'Git & CI/CD', icon: GitBranch },
   { id: 'auth', label: 'Authentication', icon: Key },
