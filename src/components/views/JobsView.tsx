@@ -11,7 +11,8 @@ import {
   RefreshCw,
   AlertTriangle,
   Radio,
-  StopCircle
+  StopCircle,
+  Building2
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -21,6 +22,7 @@ import { cn } from '@/lib/utils';
 import { getExportJobs, deleteExportJob, cancelExportJob } from '@/lib/database';
 import { downloadExportAsZip } from '@/lib/exportUtils';
 import { useToast } from '@/hooks/use-toast';
+import { useTenant } from '@/contexts/TenantContext';
 import { supabase } from '@/integrations/supabase/client';
 import {
   Dialog,
@@ -42,6 +44,7 @@ interface ExportJobRecord {
   output_path: string | null;
   error: string | null;
   metadata: { results?: Array<{ resource: string; success: boolean; error?: string }> } | null;
+  tenant_connection_id: string | null;
 }
 
 type JobStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
@@ -94,11 +97,16 @@ export const JobsView = () => {
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
   const [lastRealtimeUpdate, setLastRealtimeUpdate] = useState<Date | null>(null);
   const { toast } = useToast();
+  const { selectedTenantId, selectedCustomerId, tenants } = useTenant();
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
+  // Get tenant name for display
+  const selectedTenant = tenants.find(t => t.id === selectedTenantId);
+  const tenantDisplayName = selectedTenant?.displayName || selectedTenant?.tenantName || 'All Tenants';
 
   const fetchJobs = useCallback(async () => {
     try {
-      const data = await getExportJobs();
+      const data = await getExportJobs(selectedTenantId || undefined);
       setJobs(data as ExportJobRecord[]);
     } catch (error) {
       console.error('Failed to fetch jobs:', error);
@@ -110,7 +118,7 @@ export const JobsView = () => {
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [toast, selectedTenantId]);
 
   useEffect(() => {
     fetchJobs();
@@ -247,6 +255,14 @@ export const JobsView = () => {
           <p className="text-muted-foreground mt-1">
             View, download, and manage your export history
           </p>
+          {selectedTenantId && (
+            <div className="flex items-center gap-2 mt-2">
+              <Building2 className="w-4 h-4 text-primary" />
+              <span className="text-sm text-primary font-medium">
+                Filtered to: {tenantDisplayName}
+              </span>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-3">
           {/* Realtime Indicator */}
