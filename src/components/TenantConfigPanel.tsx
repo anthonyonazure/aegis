@@ -251,7 +251,7 @@ export const TenantConfigPanel = ({ customer, onBack }: TenantConfigPanelProps) 
             environment: formEnvironment,
             customer_id: customer.id,
             tenant_group_id: formGroupId || null,
-            auth_method: 'service_principal',
+            auth_method: 'app',
             status: 'disconnected',
             client_id: formClientId.trim(),
           })
