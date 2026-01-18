@@ -133,17 +133,28 @@ export async function refreshSecureScores(
   tenantConnectionIds?: string[]
 ): Promise<{ processed: number; failed: number; errors?: any[] }> {
   const { data: { session } } = await supabase.auth.getSession();
-  
+
   if (!session) {
     throw new Error('Not authenticated');
   }
 
-  const { data, error } = await supabase.functions.invoke('fetch-secure-scores', {
+  // Supabase function calls can occasionally hang due to network/runtime hiccups.
+  // We add a client-side timeout so the UI never spins forever.
+  const invokePromise = supabase.functions.invoke('fetch-secure-scores', {
     body: {
       tenantConnectionIds,
       refreshAll: !tenantConnectionIds || tenantConnectionIds.length === 0,
     },
   });
+
+  const timeoutMs = 20000;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => {
+      reject(new Error('Refresh request timed out. It may still be running; try again in a moment.'));
+    }, timeoutMs);
+  });
+
+  const { data, error } = await Promise.race([invokePromise, timeoutPromise]);
 
   if (error) {
     console.error('Error refreshing secure scores:', error);
