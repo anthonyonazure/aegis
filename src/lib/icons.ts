@@ -10,6 +10,15 @@ import {
   Github,
   Cloud,
   GitBranch,
+  CreditCard,
+  TrendingUp,
+  Sparkles,
+  Server,
+  Network,
+  HardDrive,
+  Database,
+  Globe,
+  Cpu,
   LucideIcon
 } from 'lucide-react';
 
@@ -25,6 +34,15 @@ export const iconMap: Record<string, LucideIcon> = {
   Github,
   Cloud,
   GitBranch,
+  CreditCard,
+  TrendingUp,
+  Sparkles,
+  Server,
+  Network,
+  HardDrive,
+  Database,
+  Globe,
+  Cpu,
 };
 
 export const getIcon = (iconName: string): LucideIcon => {

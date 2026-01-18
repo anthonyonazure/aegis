@@ -272,6 +272,66 @@ export const RESOURCE_CATEGORIES: ResourceCategory[] = [
       { id: 'bicep', name: 'Bicep', extension: '.bicep', supported: false },
     ],
   },
+  {
+    id: 'licensing',
+    name: 'License Management',
+    icon: 'CreditCard',
+    description: 'License assignments, subscriptions, and service plans',
+    subcategories: [
+      { id: 'subscribed-skus', name: 'Subscribed SKUs', graphEndpoint: '/subscribedSkus', supported: true },
+      { id: 'user-licenses', name: 'User License Assignments', graphEndpoint: '/users?$select=id,displayName,assignedLicenses', supported: true },
+      { id: 'group-licenses', name: 'Group-Based Licensing', graphEndpoint: '/groups?$filter=assignedLicenses/$count ne 0&$count=true', supported: true },
+      { id: 'service-plans', name: 'Service Plan Status', graphEndpoint: '/subscribedSkus', supported: true },
+      { id: 'license-details', name: 'License Details by User', graphEndpoint: '/users?$expand=licenseDetails', supported: true },
+    ],
+    exportFormats: [
+      { id: 'json', name: 'JSON', extension: '.json', supported: true },
+      { id: 'powershell', name: 'PowerShell', extension: '.ps1', supported: true },
+      { id: 'terraform', name: 'Terraform', extension: '.tf', supported: false },
+      { id: 'bicep', name: 'Bicep', extension: '.bicep', supported: false },
+    ],
+  },
+  {
+    id: 'license-optimization',
+    name: 'License Optimization',
+    icon: 'TrendingUp',
+    description: 'License usage analytics, inactive users, and optimization recommendations',
+    subcategories: [
+      { id: 'inactive-users', name: 'Inactive Licensed Users', graphEndpoint: '/users?$filter=signInActivity/lastSignInDateTime le {30daysago}&$select=id,displayName,userPrincipalName,signInActivity,assignedLicenses', supported: true },
+      { id: 'duplicate-licenses', name: 'Duplicate License Detection', graphEndpoint: '/users?$select=id,displayName,assignedLicenses', supported: true },
+      { id: 'unused-services', name: 'Unused Service Plans', graphEndpoint: '/users?$expand=licenseDetails($select=servicePlans)', supported: true },
+      { id: 'license-utilization', name: 'License Utilization Report', graphEndpoint: '/reports/getOffice365ActiveUserDetail(period=\'D30\')', supported: true },
+      { id: 'mailbox-usage', name: 'Mailbox Usage Report', graphEndpoint: '/reports/getMailboxUsageDetail(period=\'D30\')', supported: true },
+      { id: 'onedrive-usage', name: 'OneDrive Usage Report', graphEndpoint: '/reports/getOneDriveUsageAccountDetail(period=\'D30\')', supported: true },
+      { id: 'teams-usage', name: 'Teams Usage Report', graphEndpoint: '/reports/getTeamsUserActivityUserDetail(period=\'D30\')', supported: true },
+    ],
+    exportFormats: [
+      { id: 'json', name: 'JSON', extension: '.json', supported: true },
+      { id: 'powershell', name: 'PowerShell', extension: '.ps1', supported: true },
+      { id: 'terraform', name: 'Terraform', extension: '.tf', supported: false },
+      { id: 'bicep', name: 'Bicep', extension: '.bicep', supported: false },
+    ],
+  },
+  {
+    id: 'copilot',
+    name: 'Microsoft Copilot',
+    icon: 'Sparkles',
+    description: 'Copilot licensing, policies, and usage analytics',
+    subcategories: [
+      { id: 'copilot-licenses', name: 'Copilot License Assignments', graphEndpoint: '/users?$filter=assignedLicenses/any(l:l/skuId eq \'639dec6b-bb19-468b-871c-c5c441c4b0cb\')&$select=id,displayName,assignedLicenses', supported: true },
+      { id: 'copilot-usage', name: 'Copilot Usage Report', graphEndpoint: '/reports/getMicrosoft365CopilotUsageUserDetail(period=\'D30\')', supported: true },
+      { id: 'copilot-readiness', name: 'Copilot Readiness Assessment', graphEndpoint: '/users?$select=id,displayName,assignedLicenses,licenseDetails', supported: true },
+      { id: 'semantic-index', name: 'Semantic Index Status', powershellModule: 'Microsoft.Graph', supported: false, comingSoonReason: 'Requires admin consent for advanced APIs' },
+      { id: 'copilot-plugins', name: 'Copilot Plugins & Extensions', graphEndpoint: '/appCatalogs/teamsApps?$filter=distributionMethod eq \'organization\'', supported: true },
+      { id: 'copilot-data-controls', name: 'Copilot Data & Privacy Controls', powershellModule: 'ExchangeOnlineManagement', supported: false, comingSoonReason: 'Requires PowerShell module' },
+    ],
+    exportFormats: [
+      { id: 'json', name: 'JSON', extension: '.json', supported: true },
+      { id: 'powershell', name: 'PowerShell', extension: '.ps1', supported: true },
+      { id: 'terraform', name: 'Terraform', extension: '.tf', supported: false },
+      { id: 'bicep', name: 'Bicep', extension: '.bicep', supported: false },
+    ],
+  },
 ];
 
 // Azure Resource Manager Categories
