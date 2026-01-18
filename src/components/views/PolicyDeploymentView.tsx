@@ -61,12 +61,21 @@ import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { executeFullDeployment, rollbackFullDeployment, DeploymentChange, getChangeActionBadgeVariant } from '@/lib/deploymentApi';
 
+export interface RemediationContext {
+  actionTitle: string;
+  actionDescription: string;
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  category: 'security' | 'compliance' | 'identity' | 'licensing';
+  suggestedTenantIds?: string[];
+}
+
 interface PolicyDeploymentViewProps {
   templateId?: string;
+  remediationContext?: RemediationContext;
   onBack?: () => void;
 }
 
-export const PolicyDeploymentView = ({ templateId, onBack }: PolicyDeploymentViewProps) => {
+export const PolicyDeploymentView = ({ templateId, remediationContext, onBack }: PolicyDeploymentViewProps) => {
   const { selectedCustomerId: contextCustomerId, selectedTenantId: contextTenantId, customers: contextCustomers } = useTenant();
   const [template, setTemplate] = useState<PolicyTemplate | null>(null);
   const [allDeployments, setAllDeployments] = useState<PolicyDeployment[]>([]);
@@ -104,6 +113,14 @@ export const PolicyDeploymentView = ({ templateId, onBack }: PolicyDeploymentVie
   useEffect(() => {
     loadData();
   }, [templateId]);
+
+  // Pre-select tenants from remediation context
+  useEffect(() => {
+    if (remediationContext?.suggestedTenantIds && remediationContext.suggestedTenantIds.length > 0) {
+      setSelectedTenantIds(remediationContext.suggestedTenantIds);
+      setTargetType('selected');
+    }
+  }, [remediationContext]);
 
   // Load tenant connections for context customer filter
   useEffect(() => {
@@ -464,12 +481,44 @@ export const PolicyDeploymentView = ({ templateId, onBack }: PolicyDeploymentVie
       </div>
 
       {/* Customer filter indicator */}
-      {contextCustomerId && (
+      {contextCustomerId && !remediationContext && (
         <Alert className="border-primary/50 bg-primary/5">
           <Filter className="h-4 w-4" />
           <AlertDescription>
             Showing deployments for <strong>{contextCustomerName}</strong>
             {contextTenantId && ' (filtered by selected tenant)'}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Remediation Context Banner */}
+      {remediationContext && (
+        <Alert className={cn(
+          "border-l-4",
+          remediationContext.severity === 'critical' && "border-l-red-500 bg-red-500/5",
+          remediationContext.severity === 'high' && "border-l-orange-500 bg-orange-500/5",
+          remediationContext.severity === 'medium' && "border-l-yellow-500 bg-yellow-500/5",
+          remediationContext.severity === 'low' && "border-l-blue-500 bg-blue-500/5",
+        )}>
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <Badge variant={remediationContext.severity === 'critical' ? 'destructive' : 'secondary'} className="text-xs">
+                  {remediationContext.severity.toUpperCase()}
+                </Badge>
+                <Badge variant="outline" className="text-xs">
+                  {remediationContext.category}
+                </Badge>
+                <span className="font-medium">Remediation: {remediationContext.actionTitle}</span>
+              </div>
+              <p className="text-sm text-muted-foreground">{remediationContext.actionDescription}</p>
+              {remediationContext.suggestedTenantIds && remediationContext.suggestedTenantIds.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  {remediationContext.suggestedTenantIds.length} tenant(s) pre-selected for remediation
+                </p>
+              )}
+            </div>
           </AlertDescription>
         </Alert>
       )}
