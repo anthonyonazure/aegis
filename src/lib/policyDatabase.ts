@@ -35,6 +35,18 @@ export async function createPolicyTemplate(template: {
 }): Promise<PolicyTemplate> {
   const userId = await getCurrentUserId();
 
+  // Check if a template with this name already exists for this user
+  const { data: existing } = await supabase
+    .from('policy_templates')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('name', template.name)
+    .maybeSingle();
+
+  if (existing) {
+    throw new Error(`A template named "${template.name}" already exists`);
+  }
+
   const { data, error } = await supabase
     .from('policy_templates')
     .insert([{
@@ -69,6 +81,22 @@ export async function updatePolicyTemplate(
   if (updates.isDefault !== undefined) updateData.is_default = updates.isDefault;
   if (updates.isActive !== undefined) updateData.is_active = updates.isActive;
   if (updates.version !== undefined) updateData.version = updates.version;
+
+  // If renaming, check that the new name doesn't conflict with another template
+  if (updates.name !== undefined) {
+    const userId = await getCurrentUserId();
+    const { data: existing } = await supabase
+      .from('policy_templates')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('name', updates.name)
+      .neq('id', id)
+      .maybeSingle();
+
+    if (existing) {
+      throw new Error(`A template named "${updates.name}" already exists`);
+    }
+  }
 
   const { data, error } = await supabase
     .from('policy_templates')
