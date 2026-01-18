@@ -26,7 +26,7 @@ import {
   Loader2,
   ExternalLink,
 } from 'lucide-react';
-import { useTenantContext } from '@/contexts/TenantContext';
+import { useTenant } from '@/contexts/TenantContext';
 import {
   AutomationConfig,
   getAutomationConfigs,
@@ -38,7 +38,7 @@ import {
 } from '@/lib/automationApi';
 
 export function AzureAutomationManager() {
-  const { currentTenant } = useTenantContext();
+  const { connectionId: currentTenantId } = useTenant();
   const [configs, setConfigs] = useState<AutomationConfig[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -101,13 +101,13 @@ export function AzureAutomationManager() {
   };
 
   const handleTest = async (configId: string) => {
-    if (!currentTenant) {
+    if (!currentTenantId) {
       toast.error('Please select a tenant first');
       return;
     }
 
     setTestingId(configId);
-    const result = await testAutomationConnection(configId, currentTenant.id);
+    const result = await testAutomationConnection(configId, currentTenantId);
     setTestingId(null);
 
     if (result.success) {
@@ -315,7 +315,7 @@ export function AzureAutomationManager() {
                           variant="outline"
                           size="sm"
                           onClick={() => handleTest(config.id)}
-                          disabled={testingId === config.id || !currentTenant}
+                          disabled={testingId === config.id || !currentTenantId}
                         >
                           {testingId === config.id ? (
                             <Loader2 className="w-4 h-4 animate-spin" />

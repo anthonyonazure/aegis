@@ -35,3 +35,15 @@ verify_jwt = false
 
 [functions.run-scheduled-deployment]
 verify_jwt = false
+
+[functions.run-automation-job]
+verify_jwt = false
+
+[functions.run-automated-backup]
+verify_jwt = false
+
+[functions.fetch-secure-scores]
+verify_jwt = false
+
+[functions.validate-permissions]
+verify_jwt = false
