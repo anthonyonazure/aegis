@@ -14,6 +14,7 @@ import {
   Cloud,
   Server,
   Save,
+  Cog,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -27,6 +28,7 @@ import { testAzureConnection } from '@/lib/azureApi';
 import { AzureSubscription } from '@/types/tenant';
 import { useToast } from '@/hooks/use-toast';
 import { ServicePrincipalManager, ServicePrincipalConfig } from '@/components/ServicePrincipalManager';
+import { AzureAutomationManager } from '@/components/AzureAutomationManager';
 
 // Graph API permissions - organized by read-only vs read-write
 const graphPermissions = {
@@ -488,6 +490,29 @@ export const AuthView = () => {
                       Clear All
                     </Button>
                   </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
+
+          {/* Azure Automation for PowerShell Resources */}
+          {isAnyConnected && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+            >
+              <Card className="glass-panel">
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Cog className="w-5 h-5 text-primary" />
+                    Azure Automation for PowerShell Resources
+                  </CardTitle>
+                  <CardDescription>
+                    Configure Azure Automation to export Exchange, Teams, and SharePoint policies that require PowerShell
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <AzureAutomationManager />
                 </CardContent>
               </Card>
             </motion.div>
