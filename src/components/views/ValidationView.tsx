@@ -19,7 +19,9 @@ import {
   Link,
   List,
   Eye,
-  Download
+  Download,
+  Building2,
+  Filter
 } from 'lucide-react';
 import { saveAs } from 'file-saver';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -27,6 +29,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   Select,
   SelectContent,
@@ -41,6 +44,7 @@ import {
 } from '@/components/ui/collapsible';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useTenant } from '@/contexts/TenantContext';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 
@@ -230,8 +234,11 @@ const VALIDATION_RULES = [
 
 export const ValidationView = () => {
   const { toast } = useToast();
+  const { selectedCustomerId, selectedTenantId, customers } = useTenant();
   
+  const [allExportJobs, setAllExportJobs] = useState<ExportJob[]>([]);
   const [exportJobs, setExportJobs] = useState<ExportJob[]>([]);
+  const [allValidationResults, setAllValidationResults] = useState<ValidationResult[]>([]);
   const [validationResults, setValidationResults] = useState<ValidationResult[]>([]);
   const [selectedExportJob, setSelectedExportJob] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
@@ -241,6 +248,63 @@ export const ValidationView = () => {
   const [currentResult, setCurrentResult] = useState<ValidationResult | null>(null);
   const [resourceData, setResourceData] = useState<Map<string, Record<string, unknown>>>(new Map());
   const [showDataFor, setShowDataFor] = useState<Set<string>>(new Set());
+  const [tenantConnectionIds, setTenantConnectionIds] = useState<string[]>([]);
+  const [exportJobTenantMap, setExportJobTenantMap] = useState<Map<string, string | null>>(new Map());
+
+  const selectedCustomerName = customers.find(c => c.id === selectedCustomerId)?.name;
+
+  // Load tenant connection IDs for the selected customer
+  useEffect(() => {
+    const loadTenantConnections = async () => {
+      if (!selectedCustomerId) {
+        setTenantConnectionIds([]);
+        return;
+      }
+      
+      const { data } = await supabase
+        .from('tenant_connections')
+        .select('id')
+        .eq('customer_id', selectedCustomerId);
+      
+      setTenantConnectionIds((data || []).map(t => t.id));
+    };
+    
+    loadTenantConnections();
+  }, [selectedCustomerId]);
+
+  // Filter export jobs and validation results when selection changes
+  useEffect(() => {
+    if (selectedTenantId) {
+      const filteredJobs = allExportJobs.filter(job => 
+        exportJobTenantMap.get(job.id) === selectedTenantId
+      );
+      setExportJobs(filteredJobs);
+      
+      const filteredJobIds = filteredJobs.map(j => j.id);
+      setValidationResults(allValidationResults.filter(r => 
+        filteredJobIds.includes(r.export_job_id)
+      ));
+    } else if (selectedCustomerId && tenantConnectionIds.length > 0) {
+      const filteredJobs = allExportJobs.filter(job => {
+        const tenantId = exportJobTenantMap.get(job.id);
+        return tenantId && tenantConnectionIds.includes(tenantId);
+      });
+      setExportJobs(filteredJobs);
+      
+      const filteredJobIds = filteredJobs.map(j => j.id);
+      setValidationResults(allValidationResults.filter(r => 
+        filteredJobIds.includes(r.export_job_id)
+      ));
+    } else {
+      setExportJobs(allExportJobs);
+      setValidationResults(allValidationResults);
+    }
+    
+    // Clear selection if no longer valid
+    if (selectedExportJob && !exportJobs.find(j => j.id === selectedExportJob)) {
+      setSelectedExportJob('');
+    }
+  }, [selectedCustomerId, selectedTenantId, tenantConnectionIds, allExportJobs, allValidationResults, exportJobTenantMap]);
 
   useEffect(() => {
     loadData();
@@ -252,7 +316,7 @@ export const ValidationView = () => {
       const [exportRes, validationRes] = await Promise.all([
         supabase
           .from('export_jobs')
-          .select('id, name, status, created_at')
+          .select('id, name, status, created_at, tenant_connection_id')
           .eq('status', 'completed')
           .order('created_at', { ascending: false }),
         supabase
@@ -265,8 +329,15 @@ export const ValidationView = () => {
       if (exportRes.error) throw exportRes.error;
       if (validationRes.error) throw validationRes.error;
 
-      setExportJobs(exportRes.data || []);
-      setValidationResults((validationRes.data || []).map(r => ({
+      // Build tenant map for filtering
+      const tenantMap = new Map<string, string | null>();
+      (exportRes.data || []).forEach(job => {
+        tenantMap.set(job.id, job.tenant_connection_id);
+      });
+      setExportJobTenantMap(tenantMap);
+
+      setAllExportJobs(exportRes.data || []);
+      setAllValidationResults((validationRes.data || []).map(r => ({
         ...r,
         validation_details: Array.isArray(r.validation_details) ? r.validation_details as unknown as ValidationDetail[] : []
       })));
@@ -754,6 +825,19 @@ export const ValidationView = () => {
           Refresh
         </Button>
       </div>
+
+      {/* Customer/Tenant Filter Alert */}
+      {(selectedCustomerId || selectedTenantId) && (
+        <Alert className="border-primary/50 bg-primary/5">
+          <Building2 className="h-4 w-4" />
+          <AlertDescription>
+            {selectedTenantId 
+              ? 'Showing validation data for the selected tenant only.'
+              : `Showing validation data for customer: ${selectedCustomerName || 'Selected Customer'}`
+            }
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Validation Controls */}
       <Card className="glass-panel border-border/50">

@@ -24,8 +24,10 @@ import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { useTenant } from '@/contexts/TenantContext';
 import {
   getTenantHealthSummaries,
   getHealthStats,
@@ -53,6 +55,8 @@ const HEALTH_ICONS: Record<TenantHealthStatus, React.ElementType> = {
 };
 
 export function TenantHealthDashboardView() {
+  const { selectedCustomerId, customers: tenantCustomers } = useTenant();
+  const [allTenants, setAllTenants] = useState<TenantHealthSummary[]>([]);
   const [tenants, setTenants] = useState<TenantHealthSummary[]>([]);
   const [stats, setStats] = useState({ healthy: 0, warning: 0, critical: 0, unknown: 0, total: 0 });
   const [recentActivity, setRecentActivity] = useState<(TenantHealthCheck & { tenantName: string })[]>([]);
@@ -63,6 +67,8 @@ export function TenantHealthDashboardView() {
   const [filterCustomer, setFilterCustomer] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'name' | 'status' | 'lastCheck'>('status');
 
+  const selectedCustomerName = tenantCustomers.find(c => c.id === selectedCustomerId)?.name;
+
   const loadData = useCallback(async () => {
     try {
       const [summaries, healthStats, activity] = await Promise.all([
@@ -70,8 +76,7 @@ export function TenantHealthDashboardView() {
         getHealthStats(),
         getRecentHealthActivity(20),
       ]);
-      setTenants(summaries);
-      setStats(healthStats);
+      setAllTenants(summaries);
       setRecentActivity(activity);
     } catch (error) {
       console.error('Error loading health data:', error);
@@ -80,6 +85,33 @@ export function TenantHealthDashboardView() {
       setLoading(false);
     }
   }, []);
+
+  // Filter tenants when customer selection changes
+  useEffect(() => {
+    if (selectedCustomerId) {
+      const filtered = allTenants.filter(t => t.customerId === selectedCustomerId);
+      setTenants(filtered);
+      
+      // Recalculate stats for filtered tenants
+      setStats({
+        healthy: filtered.filter(t => t.healthStatus === 'healthy').length,
+        warning: filtered.filter(t => t.healthStatus === 'warning').length,
+        critical: filtered.filter(t => t.healthStatus === 'critical').length,
+        unknown: filtered.filter(t => t.healthStatus === 'unknown').length,
+        total: filtered.length,
+      });
+    } else {
+      setTenants(allTenants);
+      // Recalculate stats for all tenants
+      setStats({
+        healthy: allTenants.filter(t => t.healthStatus === 'healthy').length,
+        warning: allTenants.filter(t => t.healthStatus === 'warning').length,
+        critical: allTenants.filter(t => t.healthStatus === 'critical').length,
+        unknown: allTenants.filter(t => t.healthStatus === 'unknown').length,
+        total: allTenants.length,
+      });
+    }
+  }, [selectedCustomerId, allTenants]);
 
   useEffect(() => {
     loadData();
@@ -265,7 +297,15 @@ export function TenantHealthDashboardView() {
         </div>
       </div>
 
-      {/* Stats Overview */}
+      {/* Global Customer filter indicator */}
+      {selectedCustomerId && (
+        <Alert className="border-primary/50 bg-primary/5">
+          <Filter className="h-4 w-4" />
+          <AlertDescription>
+            Showing health data for customer: <strong>{selectedCustomerName || 'Selected Customer'}</strong>
+          </AlertDescription>
+        </Alert>
+      )}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 }}>
           <Card className="glass-panel">

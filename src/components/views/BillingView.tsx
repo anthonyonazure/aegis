@@ -8,7 +8,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
+import { useTenant } from '@/contexts/TenantContext';
 import { 
   RefreshCw,
   DollarSign,
@@ -22,7 +24,8 @@ import {
   Loader2,
   Zap,
   Trash2,
-  Edit
+  Edit,
+  Filter
 } from 'lucide-react';
 import { 
   getBillingUsage,
@@ -41,6 +44,8 @@ const COLORS = ['hsl(var(--primary))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3
 
 export const BillingView = () => {
   const { toast } = useToast();
+  const { selectedCustomerId, customers: tenantCustomers } = useTenant();
+  const [allUsage, setAllUsage] = useState<BillingUsage[]>([]);
   const [usage, setUsage] = useState<BillingUsage[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,9 +62,20 @@ export const BillingView = () => {
     notes: '',
   });
 
+  const selectedCustomerName = tenantCustomers.find(c => c.id === selectedCustomerId)?.name;
+
   useEffect(() => {
     loadData();
   }, [selectedPeriod]);
+
+  // Filter usage when customer selection changes
+  useEffect(() => {
+    if (selectedCustomerId) {
+      setUsage(allUsage.filter(u => u.customer_id === selectedCustomerId));
+    } else {
+      setUsage(allUsage);
+    }
+  }, [selectedCustomerId, allUsage]);
 
   const getPeriodDates = () => {
     const now = new Date();
@@ -91,7 +107,7 @@ export const BillingView = () => {
         }),
         getCustomers(),
       ]);
-      setUsage(usageData);
+      setAllUsage(usageData);
       setCustomers(customersData);
     } catch (error) {
       console.error('Failed to load billing data:', error);
@@ -409,6 +425,16 @@ export const BillingView = () => {
           </Dialog>
         </div>
       </div>
+
+      {/* Customer filter indicator */}
+      {selectedCustomerId && (
+        <Alert className="border-primary/50 bg-primary/5">
+          <Filter className="h-4 w-4" />
+          <AlertDescription>
+            Showing billing data for customer: <strong>{selectedCustomerName || 'Selected Customer'}</strong>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
