@@ -31,6 +31,7 @@ import { PermissionHealthView } from '@/components/views/PermissionHealthView';
 import { PermissionsReferenceView } from '@/components/views/PermissionsReferenceView';
 import { DocumentationView } from '@/components/views/DocumentationView';
 import { GovernanceCenterView, RemediationContext } from '@/components/views/GovernanceCenterView';
+import { SettingsView } from '@/components/views/SettingsView';
 import { PreflightCheckDialog } from '@/components/PreflightCheckDialog';
 import { ALL_RESOURCE_CATEGORIES, ExportFormat } from '@/types/tenant';
 import { filterSupportedResourceIds } from '@/lib/resourceSupport';
@@ -318,6 +319,8 @@ const Index = () => {
         return <DocumentationView />;
       case 'auth':
         return <AuthView />;
+      case 'settings':
+        return <SettingsView />;
       default:
         return (
           <DashboardView 
