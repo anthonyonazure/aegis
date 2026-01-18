@@ -885,6 +885,160 @@ export type Database = {
         }
         Relationships: []
       }
+      scheduled_deployment_configs: {
+        Row: {
+          created_at: string
+          description: string | null
+          dry_run: boolean
+          id: string
+          is_active: boolean
+          last_run_at: string | null
+          last_run_success: boolean | null
+          name: string
+          next_run_at: string | null
+          notify_on_completion: boolean
+          policy_template_id: string
+          run_count: number
+          schedule_cron: string
+          schedule_description: string | null
+          target_customer_id: string | null
+          target_group_id: string | null
+          target_tenant_ids: string[] | null
+          target_type: string
+          updated_at: string
+          user_id: string
+          webhook_config_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          dry_run?: boolean
+          id?: string
+          is_active?: boolean
+          last_run_at?: string | null
+          last_run_success?: boolean | null
+          name: string
+          next_run_at?: string | null
+          notify_on_completion?: boolean
+          policy_template_id: string
+          run_count?: number
+          schedule_cron: string
+          schedule_description?: string | null
+          target_customer_id?: string | null
+          target_group_id?: string | null
+          target_tenant_ids?: string[] | null
+          target_type?: string
+          updated_at?: string
+          user_id: string
+          webhook_config_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          dry_run?: boolean
+          id?: string
+          is_active?: boolean
+          last_run_at?: string | null
+          last_run_success?: boolean | null
+          name?: string
+          next_run_at?: string | null
+          notify_on_completion?: boolean
+          policy_template_id?: string
+          run_count?: number
+          schedule_cron?: string
+          schedule_description?: string | null
+          target_customer_id?: string | null
+          target_group_id?: string | null
+          target_tenant_ids?: string[] | null
+          target_type?: string
+          updated_at?: string
+          user_id?: string
+          webhook_config_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scheduled_deployment_configs_policy_template_id_fkey"
+            columns: ["policy_template_id"]
+            isOneToOne: false
+            referencedRelation: "policy_templates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scheduled_deployment_configs_target_customer_id_fkey"
+            columns: ["target_customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scheduled_deployment_configs_target_group_id_fkey"
+            columns: ["target_group_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scheduled_deployment_configs_webhook_config_id_fkey"
+            columns: ["webhook_config_id"]
+            isOneToOne: false
+            referencedRelation: "webhook_configs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      scheduled_deployment_runs: {
+        Row: {
+          completed_at: string | null
+          completed_tenants: number
+          created_at: string
+          error_message: string | null
+          failed_tenants: number
+          id: string
+          results: Json | null
+          scheduled_config_id: string
+          started_at: string | null
+          status: string
+          total_tenants: number
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          completed_tenants?: number
+          created_at?: string
+          error_message?: string | null
+          failed_tenants?: number
+          id?: string
+          results?: Json | null
+          scheduled_config_id: string
+          started_at?: string | null
+          status?: string
+          total_tenants?: number
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          completed_tenants?: number
+          created_at?: string
+          error_message?: string | null
+          failed_tenants?: number
+          id?: string
+          results?: Json | null
+          scheduled_config_id?: string
+          started_at?: string | null
+          status?: string
+          total_tenants?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scheduled_deployment_runs_scheduled_config_id_fkey"
+            columns: ["scheduled_config_id"]
+            isOneToOne: false
+            referencedRelation: "scheduled_deployment_configs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       scheduled_drift_configs: {
         Row: {
           baseline_export_id: string | null
