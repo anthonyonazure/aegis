@@ -202,12 +202,18 @@ export function SecureScoreDashboardView() {
       if (result.failed > 0) {
         toast.warning(`${result.failed} tenants failed to refresh`);
       }
-      await loadData();
     } catch (error) {
       console.error('Error refreshing scores:', error);
-      toast.error('Failed to refresh secure scores');
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.toLowerCase().includes('timed out')) {
+        toast.warning(message);
+      } else {
+        toast.error('Failed to refresh secure scores');
+      }
     } finally {
+      // Stop the spinner immediately; reload in the background so the button never spins forever.
       setRefreshing(false);
+      loadData().catch((e) => console.error('Error reloading secure score data:', e));
     }
   };
 
