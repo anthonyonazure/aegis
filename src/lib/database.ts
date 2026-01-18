@@ -15,7 +15,7 @@ function sanitizeDatabaseError(error: unknown, operation: string): Error {
 }
 
 // Tenant Connections
-export async function createTenantConnection(connection: Omit<TenantConnection, 'id'>) {
+export async function createTenantConnection(connection: Omit<TenantConnection, 'id'> & { customerId?: string }) {
   const userId = await getCurrentUserId();
   
   const { data, error } = await supabase
@@ -27,6 +27,7 @@ export async function createTenantConnection(connection: Omit<TenantConnection, 
       auth_method: connection.authMethod,
       client_id: connection.clientId,
       status: connection.status,
+      customer_id: connection.customerId || null,
     })
     .select()
     .single();
@@ -71,6 +72,18 @@ export async function getActiveTenantConnection() {
     .maybeSingle();
 
   if (error) throw sanitizeDatabaseError(error, 'fetch active connection');
+  return data;
+}
+
+// Get tenant connections for a specific customer
+export async function getTenantConnectionsByCustomerId(customerId: string) {
+  const { data, error } = await supabase
+    .from('tenant_connections')
+    .select('*')
+    .eq('customer_id', customerId)
+    .order('created_at', { ascending: false });
+
+  if (error) throw sanitizeDatabaseError(error, 'fetch tenant connections for customer');
   return data;
 }
 
@@ -152,11 +165,17 @@ export async function updateExportJob(id: string, updates: Partial<ExportJob>) {
   return data;
 }
 
-export async function getExportJobs() {
-  const { data, error } = await supabase
+export async function getExportJobs(tenantConnectionId?: string) {
+  let query = supabase
     .from('export_jobs')
     .select('*')
     .order('created_at', { ascending: false });
+
+  if (tenantConnectionId) {
+    query = query.eq('tenant_connection_id', tenantConnectionId);
+  }
+
+  const { data, error } = await query;
 
   if (error) throw sanitizeDatabaseError(error, 'fetch export jobs');
   return data;
