@@ -49,6 +49,7 @@ import { compareExports, DriftResult, ResourceProvider, filterResultsByProvider,
 import { logAuditEvent } from '@/lib/auditLog';
 import { DiffViewer } from '@/components/DiffViewer';
 import { notifyDriftDetected } from '@/lib/webhookNotifications';
+import { createDriftTickets } from '@/lib/autoTicketing';
 
 interface ExportedResource {
   id: string;
@@ -234,6 +235,22 @@ export const DriftDetectionView = () => {
             baselineExport,
             { added, removed, modified }
           );
+
+          // Auto-create PSA tickets for drift detection
+          const ticketResult = await createDriftTickets({
+            driftDetectionId: driftDetection.id,
+            baselineExportId: baselineExport,
+            added,
+            removed,
+            modified,
+          });
+
+          if (ticketResult.ticketsCreated > 0) {
+            toast({
+              title: 'Tickets Created',
+              description: `${ticketResult.ticketsCreated} PSA ticket(s) created for detected drift`,
+            });
+          }
         }
       }
 
