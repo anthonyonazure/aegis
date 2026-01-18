@@ -14,6 +14,9 @@ import {
   Play,
   Eye,
   RotateCcw,
+  Plus,
+  Minus,
+  RefreshCw,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -23,6 +26,8 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
 import { Progress } from '@/components/ui/progress';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import {
   Select,
   SelectContent,
@@ -46,10 +51,12 @@ import {
   createPolicyDeployment,
   createDeploymentResults,
   getDeploymentResults,
+  updatePolicyDeployment,
 } from '@/lib/policyDatabase';
 import { getCustomers, getTenantGroups, getTenantConnectionsByCustomer, getTenantConnectionsByGroup } from '@/lib/customerDatabase';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
+import { executeFullDeployment, DeploymentChange, getChangeActionBadgeVariant } from '@/lib/deploymentApi';
 
 interface PolicyDeploymentViewProps {
   templateId?: string;
@@ -64,8 +71,12 @@ export const PolicyDeploymentView = ({ templateId, onBack }: PolicyDeploymentVie
   const [tenants, setTenants] = useState<{ id: string; name: string; tenantId: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [deploying, setDeploying] = useState(false);
+  const [executing, setExecuting] = useState(false);
   const [selectedDeployment, setSelectedDeployment] = useState<PolicyDeployment | null>(null);
   const [deploymentResults, setDeploymentResults] = useState<DeploymentResult[]>([]);
+  const [executionProgress, setExecutionProgress] = useState({ current: 0, total: 0, tenant: '' });
+  const [showChangesDialog, setShowChangesDialog] = useState(false);
+  const [selectedResultChanges, setSelectedResultChanges] = useState<DeploymentChange[]>([]);
   
   // Form state
   const [deploymentName, setDeploymentName] = useState('');
@@ -214,13 +225,15 @@ export const PolicyDeploymentView = ({ templateId, onBack }: PolicyDeploymentVie
 
       toast({
         title: 'Deployment Created',
-        description: dryRun 
-          ? 'Dry run deployment created. No changes will be applied.'
-          : 'Deployment started. Changes will be applied to selected tenants.',
+        description: 'Starting deployment execution...',
       });
 
-      loadData();
       setSelectedDeployment(deployment);
+      loadData();
+
+      // Start execution
+      await handleExecuteDeployment(deployment);
+
     } catch (error) {
       toast({
         title: 'Error',
@@ -230,6 +243,75 @@ export const PolicyDeploymentView = ({ templateId, onBack }: PolicyDeploymentVie
     } finally {
       setDeploying(false);
     }
+  };
+
+  const handleExecuteDeployment = async (deployment: PolicyDeployment) => {
+    if (!template) return;
+
+    try {
+      setExecuting(true);
+
+      const result = await executeFullDeployment(
+        deployment.id,
+        template.policyData,
+        template.resourceTypes,
+        deployment.dryRun,
+        (completed, total, tenant) => {
+          setExecutionProgress({ current: completed + 1, total, tenant });
+        }
+      );
+
+      toast({
+        title: deployment.dryRun ? 'Dry Run Complete' : 'Deployment Complete',
+        description: `${result.completed} succeeded, ${result.failed} failed`,
+        variant: result.failed > 0 ? 'destructive' : 'default',
+      });
+
+      loadData();
+      loadDeploymentResults(deployment.id);
+
+    } catch (error) {
+      toast({
+        title: 'Execution Error',
+        description: error instanceof Error ? error.message : 'Failed to execute deployment',
+        variant: 'destructive',
+      });
+    } finally {
+      setExecuting(false);
+      setExecutionProgress({ current: 0, total: 0, tenant: '' });
+    }
+  };
+
+  const handleRerunDeployment = async () => {
+    if (!selectedDeployment || !template) return;
+
+    // Reset deployment status
+    await updatePolicyDeployment(selectedDeployment.id, {
+      status: 'pending',
+      completedTenants: 0,
+      failedTenants: 0,
+    });
+
+    // Reset all results
+    const { data: results } = await supabase
+      .from('deployment_results')
+      .select('id')
+      .eq('deployment_id', selectedDeployment.id);
+
+    if (results) {
+      await supabase
+        .from('deployment_results')
+        .update({ status: 'pending', error_message: null, dry_run_result: null, applied_changes: null })
+        .eq('deployment_id', selectedDeployment.id);
+    }
+
+    await handleExecuteDeployment(selectedDeployment);
+  };
+
+  const viewResultChanges = (result: DeploymentResult) => {
+    const changes = (result.dryRunResult?.changes || result.appliedChanges?.changes || []) as DeploymentChange[];
+    setSelectedResultChanges(changes);
+    setShowChangesDialog(true);
   };
 
   const toggleTenant = (tenantId: string) => {
@@ -444,8 +526,29 @@ export const PolicyDeploymentView = ({ templateId, onBack }: PolicyDeploymentVie
             </Card>
           )}
 
+          {/* Execution Progress */}
+          {executing && (
+            <Card className="glass-panel border-primary">
+              <CardContent className="p-6">
+                <div className="flex items-center gap-4 mb-4">
+                  <Loader2 className="w-8 h-8 text-primary animate-spin" />
+                  <div>
+                    <h3 className="font-semibold">Executing Deployment...</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Processing: {executionProgress.tenant}
+                    </p>
+                  </div>
+                </div>
+                <Progress value={(executionProgress.current / executionProgress.total) * 100} />
+                <p className="text-sm text-muted-foreground mt-2 text-center">
+                  {executionProgress.current} of {executionProgress.total} tenants
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Deployment Results */}
-          {selectedDeployment && (
+          {selectedDeployment && !executing && (
             <Card className="glass-panel">
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -455,45 +558,86 @@ export const PolicyDeploymentView = ({ templateId, onBack }: PolicyDeploymentVie
                       {selectedDeployment.dryRun ? 'Dry Run' : 'Live Deployment'} • {selectedDeployment.totalTenants} tenants
                     </CardDescription>
                   </div>
-                  <Badge className={DEPLOYMENT_STATUS_CONFIG[selectedDeployment.status].color}>
-                    {DEPLOYMENT_STATUS_CONFIG[selectedDeployment.status].label}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge className={DEPLOYMENT_STATUS_CONFIG[selectedDeployment.status].color}>
+                      {DEPLOYMENT_STATUS_CONFIG[selectedDeployment.status].label}
+                    </Badge>
+                    {(selectedDeployment.status === 'completed' || selectedDeployment.status === 'failed') && (
+                      <Button variant="outline" size="sm" onClick={handleRerunDeployment}>
+                        <RefreshCw className="w-4 h-4 mr-1" />
+                        Rerun
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
                 <Progress
-                  value={(selectedDeployment.completedTenants / selectedDeployment.totalTenants) * 100}
+                  value={((selectedDeployment.completedTenants + selectedDeployment.failedTenants) / selectedDeployment.totalTenants) * 100}
                 />
                 <div className="flex justify-between text-sm text-muted-foreground">
-                  <span>{selectedDeployment.completedTenants} completed</span>
-                  <span>{selectedDeployment.failedTenants} failed</span>
+                  <span className="text-green-500">{selectedDeployment.completedTenants} completed</span>
+                  <span className="text-red-500">{selectedDeployment.failedTenants} failed</span>
                 </div>
 
                 {deploymentResults.length > 0 && (
-                  <div className="space-y-2 max-h-64 overflow-y-auto">
-                    {deploymentResults.map((result) => (
-                      <div
-                        key={result.id}
-                        className="flex items-center justify-between p-3 rounded-lg bg-secondary/30"
-                      >
-                        <div className="flex items-center gap-3">
-                          {result.status === 'completed' && <CheckCircle2 className="w-4 h-4 text-success" />}
-                          {result.status === 'failed' && <XCircle className="w-4 h-4 text-destructive" />}
-                          {result.status === 'running' && <Loader2 className="w-4 h-4 text-primary animate-spin" />}
-                          {result.status === 'pending' && <Clock className="w-4 h-4 text-muted-foreground" />}
-                          <div>
-                            <p className="text-sm font-medium">{result.tenantName || result.tenantId}</p>
-                            {result.errorMessage && (
-                              <p className="text-xs text-destructive">{result.errorMessage}</p>
-                            )}
+                  <ScrollArea className="h-64">
+                    <div className="space-y-2">
+                      {deploymentResults.map((result) => {
+                        const hasChanges = result.dryRunResult || result.appliedChanges;
+                        const summary = (result.dryRunResult?.summary || result.appliedChanges?.summary) as { create?: number; update?: number; skip?: number } | undefined;
+                        
+                        return (
+                          <div
+                            key={result.id}
+                            className="flex items-center justify-between p-3 rounded-lg bg-secondary/30"
+                          >
+                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                              {result.status === 'completed' && <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />}
+                              {result.status === 'failed' && <XCircle className="w-4 h-4 text-destructive shrink-0" />}
+                              {result.status === 'running' && <Loader2 className="w-4 h-4 text-primary animate-spin shrink-0" />}
+                              {result.status === 'pending' && <Clock className="w-4 h-4 text-muted-foreground shrink-0" />}
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-medium truncate">{result.tenantName || result.tenantId}</p>
+                                {result.errorMessage && (
+                                  <p className="text-xs text-destructive truncate">{result.errorMessage}</p>
+                                )}
+                                {summary && (
+                                  <div className="flex gap-2 text-xs mt-1">
+                                    {(summary.create ?? 0) > 0 && (
+                                      <span className="text-green-500 flex items-center gap-0.5">
+                                        <Plus className="w-3 h-3" />{summary.create}
+                                      </span>
+                                    )}
+                                    {(summary.update ?? 0) > 0 && (
+                                      <span className="text-blue-500 flex items-center gap-0.5">
+                                        <RefreshCw className="w-3 h-3" />{summary.update}
+                                      </span>
+                                    )}
+                                    {(summary.skip ?? 0) > 0 && (
+                                      <span className="text-muted-foreground flex items-center gap-0.5">
+                                        <Minus className="w-3 h-3" />{summary.skip}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {hasChanges && (
+                                <Button variant="ghost" size="sm" onClick={() => viewResultChanges(result)}>
+                                  <Eye className="w-4 h-4" />
+                                </Button>
+                              )}
+                              <Badge variant="secondary" className="text-xs">
+                                {result.status}
+                              </Badge>
+                            </div>
                           </div>
-                        </div>
-                        <Badge variant="secondary" className="text-xs">
-                          {result.status}
-                        </Badge>
-                      </div>
-                    ))}
-                  </div>
+                        );
+                      })}
+                    </div>
+                  </ScrollArea>
                 )}
               </CardContent>
             </Card>
@@ -575,6 +719,61 @@ export const PolicyDeploymentView = ({ templateId, onBack }: PolicyDeploymentVie
           )}
         </div>
       </div>
+
+      {/* Changes Dialog */}
+      <Dialog open={showChangesDialog} onOpenChange={setShowChangesDialog}>
+        <DialogContent className="max-w-2xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle>Policy Changes</DialogTitle>
+            <DialogDescription>
+              {selectedResultChanges.length} change(s) detected
+            </DialogDescription>
+          </DialogHeader>
+          <ScrollArea className="max-h-[60vh]">
+            <div className="space-y-3">
+              {selectedResultChanges.map((change, idx) => (
+                <div key={idx} className="p-4 rounded-lg border bg-muted/30">
+                  <div className="flex items-center gap-3 mb-2">
+                    <Badge variant={getChangeActionBadgeVariant(change.action)}>
+                      {change.action.toUpperCase()}
+                    </Badge>
+                    <span className="font-medium">{change.resourceName || change.resourceId}</span>
+                    <Badge variant="outline" className="text-xs">
+                      {change.resourceType}
+                    </Badge>
+                  </div>
+                  {change.reason && (
+                    <p className="text-sm text-muted-foreground mb-2">{change.reason}</p>
+                  )}
+                  {(change.action === 'create' || change.action === 'update') && change.newValue && (
+                    <details className="text-xs">
+                      <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                        View configuration
+                      </summary>
+                      <pre className="mt-2 p-2 rounded bg-secondary overflow-x-auto">
+                        {JSON.stringify(change.newValue, null, 2)}
+                      </pre>
+                    </details>
+                  )}
+                  {change.action === 'update' && change.currentValue && (
+                    <details className="text-xs mt-2">
+                      <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                        View current value
+                      </summary>
+                      <pre className="mt-2 p-2 rounded bg-secondary overflow-x-auto">
+                        {JSON.stringify(change.currentValue, null, 2)}
+                      </pre>
+                    </details>
+                  )}
+                </div>
+              ))}
+              {selectedResultChanges.length === 0 && (
+                <p className="text-center text-muted-foreground py-8">No changes to display</p>
+              )}
+            </div>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
