@@ -683,47 +683,56 @@ export type Database = {
         Row: {
           api_url: string
           auto_create_tickets: boolean
+          connection_status: string | null
           created_at: string
           default_priority: string | null
           default_ticket_type: string | null
           id: string
           is_active: boolean
+          last_connection_test: string | null
           name: string
           provider: string
           ticket_on_compliance_fail: boolean
           ticket_on_drift: boolean
           updated_at: string
           user_id: string
+          vault_secret_id: string | null
         }
         Insert: {
           api_url: string
           auto_create_tickets?: boolean
+          connection_status?: string | null
           created_at?: string
           default_priority?: string | null
           default_ticket_type?: string | null
           id?: string
           is_active?: boolean
+          last_connection_test?: string | null
           name: string
           provider: string
           ticket_on_compliance_fail?: boolean
           ticket_on_drift?: boolean
           updated_at?: string
           user_id: string
+          vault_secret_id?: string | null
         }
         Update: {
           api_url?: string
           auto_create_tickets?: boolean
+          connection_status?: string | null
           created_at?: string
           default_priority?: string | null
           default_ticket_type?: string | null
           id?: string
           is_active?: boolean
+          last_connection_test?: string | null
           name?: string
           provider?: string
           ticket_on_compliance_fail?: boolean
           ticket_on_drift?: boolean
           updated_at?: string
           user_id?: string
+          vault_secret_id?: string | null
         }
         Relationships: []
       }
@@ -1523,6 +1532,13 @@ export type Database = {
           tenant_id: string
         }[]
       }
+      get_psa_credential: {
+        Args: { p_integration_id: string }
+        Returns: {
+          api_key: string
+          api_secret: string
+        }[]
+      }
       owns_customer: { Args: { p_customer_id: string }; Returns: boolean }
       owns_deployment: { Args: { p_deployment_id: string }; Returns: boolean }
       store_encrypted_credential: {
@@ -1530,6 +1546,14 @@ export type Database = {
           p_client_id: string
           p_client_secret: string
           p_tenant_connection_id: string
+        }
+        Returns: string
+      }
+      store_psa_credential: {
+        Args: {
+          p_api_key: string
+          p_api_secret?: string
+          p_integration_id: string
         }
         Returns: string
       }
