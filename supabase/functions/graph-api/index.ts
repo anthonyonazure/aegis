@@ -642,7 +642,13 @@ serve(async (req) => {
         status: 'completed',
         progress: 100,
         completed_at: new Date().toISOString(),
-        metadata: { results },
+        metadata: {
+          results,
+          completed,
+          total,
+          currentResource: null,
+          lastUpdate: new Date().toISOString(),
+        },
         error: hasErrors ? 'Completed with errors. See results in metadata.' : null,
       };
 

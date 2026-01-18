@@ -45,7 +45,13 @@ interface ExportJobRecord {
   completed_at: string | null;
   output_path: string | null;
   error: string | null;
-  metadata: { results?: Array<{ resource: string; success: boolean; error?: string }> } | null;
+  metadata: {
+    results?: Array<{ resource: string; success: boolean; error?: string }>;
+    currentResource?: string;
+    completed?: number;
+    total?: number;
+    lastUpdate?: string;
+  } | null;
   tenant_connection_id: string | null;
 }
 
@@ -103,6 +109,7 @@ export const JobsView = () => {
   const { toast } = useToast();
   const { selectedTenantId, selectedCustomerId, tenants, customers } = useTenant();
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const pollRef = useRef<NodeJS.Timeout | null>(null);
 
   // Get tenant/customer name for display
   const selectedTenant = tenants.find(t => t.id === selectedTenantId);
@@ -163,6 +170,32 @@ export const JobsView = () => {
     fetchJobs();
   }, [fetchJobs]);
 
+  // Fallback polling: keep progress updating even if realtime isn't available
+  useEffect(() => {
+    const hasActiveJobs = jobs.some((j) => j.status === 'running' || j.status === 'pending');
+
+    if (!hasActiveJobs) {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+      return;
+    }
+
+    if (pollRef.current) return;
+
+    pollRef.current = setInterval(() => {
+      fetchJobs();
+    }, 1000);
+
+    return () => {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    };
+  }, [jobs, fetchJobs]);
+
   // Subscribe to realtime updates for export_jobs
   useEffect(() => {
     const channel = supabase
@@ -202,6 +235,10 @@ export const JobsView = () => {
     return () => {
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current);
+      }
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
       }
     };
   }, []);
@@ -433,8 +470,16 @@ export const JobsView = () => {
                           ))}
                         </div>
 
-                        {job.status === 'running' && (
+                        {(job.status === 'running' || job.status === 'pending') && (
                           <div className="space-y-1">
+                            {job.metadata?.currentResource && (
+                              <p className="text-xs text-muted-foreground font-mono truncate">
+                                Exporting {job.metadata.currentResource}
+                                {typeof job.metadata.completed === 'number' && typeof job.metadata.total === 'number'
+                                  ? ` (${job.metadata.completed}/${job.metadata.total})`
+                                  : ''}
+                              </p>
+                            )}
                             <Progress value={job.progress} className="h-2" />
                             <p className="text-xs text-muted-foreground">{job.progress}% complete</p>
                           </div>
