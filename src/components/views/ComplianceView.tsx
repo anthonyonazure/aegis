@@ -160,8 +160,7 @@ export const ComplianceView = () => {
         supabase
           .from('compliance_results')
           .select('*')
-          .order('created_at', { ascending: false })
-          .limit(50),
+          .order('created_at', { ascending: false }),
       ]);
 
       if (exportRes.error) throw exportRes.error;
@@ -524,7 +523,7 @@ export const ComplianceView = () => {
           {history.length === 0 ? (
             <p className="text-center py-4 text-muted-foreground">No compliance checks yet</p>
           ) : (
-            <ScrollArea className="h-[200px]">
+            <ScrollArea className="h-[400px]">
               <div className="space-y-2">
                 {history.map(check => (
                   <div key={check.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
