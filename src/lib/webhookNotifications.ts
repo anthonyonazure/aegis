@@ -4,6 +4,7 @@ export type WebhookEventType =
   | 'export.completed'
   | 'export.failed'
   | 'drift.detected'
+  | 'scheduled.drift'
   | 'compliance.failed'
   | 'compliance.warning'
   | 'import.completed'
@@ -116,5 +117,24 @@ export async function notifyImportFailed(importJobId: string, importName: string
     import_name: importName,
     error,
     failed_at: new Date().toISOString(),
+  });
+}
+
+export async function notifyScheduledDrift(
+  scheduleId: string,
+  scheduleName: string,
+  driftRunId: string,
+  tenantsChecked: number,
+  tenantsWithDrift: number,
+  summary: Array<{ tenant: string; added: number; removed: number; modified: number }>
+) {
+  return triggerWebhook('scheduled.drift', {
+    schedule_id: scheduleId,
+    schedule_name: scheduleName,
+    drift_run_id: driftRunId,
+    tenants_checked: tenantsChecked,
+    tenants_with_drift: tenantsWithDrift,
+    summary,
+    detected_at: new Date().toISOString(),
   });
 }

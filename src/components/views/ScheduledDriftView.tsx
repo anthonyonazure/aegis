@@ -315,18 +315,32 @@ export const ScheduledDriftView = () => {
     }
   };
 
+  const [isRunning, setIsRunning] = useState(false);
+
   const handleRunNow = async () => {
     if (!selectedConfigForRun) return;
 
     try {
-      await createScheduledDriftRun(selectedConfigForRun.id);
+      setIsRunning(true);
+      
+      // Call the edge function to run drift detection immediately
+      const { data, error } = await supabase.functions.invoke('run-scheduled-drift', {
+        body: { configId: selectedConfigForRun.id },
+      });
+
+      if (error) {
+        throw error;
+      }
+
       toast({
         title: 'Run Started',
-        description: 'Drift detection run has been queued',
+        description: `Drift detection started for "${selectedConfigForRun.name}"`,
       });
       setIsRunDialogOpen(false);
       setSelectedConfigForRun(null);
-      loadData();
+      
+      // Reload data after a short delay to show the new run
+      setTimeout(() => loadData(), 1000);
     } catch (error) {
       console.error('Error starting run:', error);
       toast({
@@ -334,6 +348,8 @@ export const ScheduledDriftView = () => {
         description: 'Failed to start drift detection run',
         variant: 'destructive',
       });
+    } finally {
+      setIsRunning(false);
     }
   };
 
@@ -830,7 +846,9 @@ export const ScheduledDriftView = () => {
       </Dialog>
 
       {/* Run Now Confirmation */}
-      <AlertDialog open={isRunDialogOpen} onOpenChange={setIsRunDialogOpen}>
+      <AlertDialog open={isRunDialogOpen} onOpenChange={(open) => {
+        if (!isRunning) setIsRunDialogOpen(open);
+      }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Run Drift Detection Now?</AlertDialogTitle>
@@ -840,10 +858,19 @@ export const ScheduledDriftView = () => {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleRunNow}>
-              <Play className="h-4 w-4 mr-2" />
-              Run Now
+            <AlertDialogCancel disabled={isRunning}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleRunNow} disabled={isRunning}>
+              {isRunning ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Running...
+                </>
+              ) : (
+                <>
+                  <Play className="h-4 w-4 mr-2" />
+                  Run Now
+                </>
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
