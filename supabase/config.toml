@@ -14,3 +14,18 @@ verify_jwt = false
 
 [functions.send-webhook]
 verify_jwt = false
+
+[functions.run-scheduled-drift]
+verify_jwt = false
+
+[functions.health-check]
+verify_jwt = false
+
+[functions.create-psa-ticket]
+verify_jwt = false
+
+[functions.generate-report]
+verify_jwt = false
+
+[functions.collect-usage]
+verify_jwt = false
