@@ -215,6 +215,11 @@ serve(async (req) => {
           fetchImprovementActions(accessToken),
         ]);
 
+        // Calculate score percentage
+        const scorePercentage = scoreData.maxScore > 0 
+          ? (scoreData.currentScore / scoreData.maxScore) * 100 
+          : 0;
+
         // Upsert the secure score
         const { error: upsertError } = await supabase
           .from('tenant_secure_scores')
@@ -223,6 +228,7 @@ serve(async (req) => {
             tenant_connection_id: tenant.id,
             current_score: scoreData.currentScore,
             max_score: scoreData.maxScore,
+            score_percentage: scorePercentage,
             control_scores: scoreData.controlScores,
             improvement_actions: improvementActions,
             updated_at: new Date().toISOString(),
@@ -239,6 +245,7 @@ serve(async (req) => {
               tenant_connection_id: tenant.id,
               current_score: scoreData.currentScore,
               max_score: scoreData.maxScore,
+              score_percentage: scorePercentage,
               control_scores: scoreData.controlScores,
               improvement_actions: improvementActions,
             });
