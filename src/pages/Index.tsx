@@ -29,6 +29,7 @@ import { SecureScoreDashboardView } from '@/components/views/SecureScoreDashboar
 import { AutomatedBackupsView } from '@/components/views/AutomatedBackupsView';
 import { PermissionHealthView } from '@/components/views/PermissionHealthView';
 import { PermissionsReferenceView } from '@/components/views/PermissionsReferenceView';
+import { GovernanceCenterView } from '@/components/views/GovernanceCenterView';
 import { PreflightCheckDialog } from '@/components/PreflightCheckDialog';
 import { ALL_RESOURCE_CATEGORIES, ExportFormat } from '@/types/tenant';
 import { filterSupportedResourceIds } from '@/lib/resourceSupport';
@@ -217,6 +218,8 @@ const Index = () => {
             selectedFormatsCount={selectedFormats.length}
           />
         );
+      case 'governance':
+        return <GovernanceCenterView />;
       case 'customers':
         return <CustomersView />;
       case 'health-dashboard':
