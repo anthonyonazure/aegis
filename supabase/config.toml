@@ -47,3 +47,6 @@ verify_jwt = false
 
 [functions.validate-permissions]
 verify_jwt = false
+
+[functions.fetch-governance-metrics]
+verify_jwt = false
