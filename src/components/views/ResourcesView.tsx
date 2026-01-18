@@ -752,11 +752,22 @@ export const ResourcesView = ({
                                     isSupported ? "cursor-pointer hover:bg-secondary/50" : "cursor-not-allowed opacity-50",
                                     isSubSelected && isSupported && "bg-primary/10"
                                   )}
-                                  onClick={() => isSupported && onResourceSelect(resourceId)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (isSupported) {
+                                      onResourceSelect(resourceId);
+                                    }
+                                  }}
                                 >
                                   <Checkbox 
                                     checked={isSubSelected}
                                     disabled={!isSupported}
+                                    onCheckedChange={() => {
+                                      if (isSupported) {
+                                        onResourceSelect(resourceId);
+                                      }
+                                    }}
+                                    onClick={(e) => e.stopPropagation()}
                                     className="h-3.5 w-3.5 border-muted-foreground/50 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
                                   />
                                   <span className={cn(
