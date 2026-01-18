@@ -25,6 +25,7 @@ import { PSAIntegrationsView } from '@/components/views/PSAIntegrationsView';
 import { ReportsView } from '@/components/views/ReportsView';
 import { BillingView } from '@/components/views/BillingView';
 import { TenantHealthDashboardView } from '@/components/views/TenantHealthDashboardView';
+import { SecureScoreDashboardView } from '@/components/views/SecureScoreDashboardView';
 import { PreflightCheckDialog } from '@/components/PreflightCheckDialog';
 import { RESOURCE_CATEGORIES, ExportFormat } from '@/types/tenant';
 import { filterSupportedResourceIds } from '@/lib/resourceSupport';
@@ -218,6 +219,8 @@ const Index = () => {
       case 'health-dashboard':
       case 'tenant-health':
         return <TenantHealthDashboardView />;
+      case 'secure-score':
+        return <SecureScoreDashboardView />;
       case 'policies':
       case 'policy-templates':
         return <PolicyTemplatesView />;
