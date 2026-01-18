@@ -54,6 +54,7 @@ import {
   BaselineType,
   BASELINE_CONFIG,
   BASELINE_TEMPLATES,
+  GOVERNANCE_ACTION_TEMPLATES,
 } from '@/types/policy';
 import {
   createPolicyTemplate,
@@ -61,6 +62,7 @@ import {
   deletePolicyTemplate,
   getPolicyTemplates,
   getPolicyStats,
+  seedGovernanceTemplates,
 } from '@/lib/policyDatabase';
 import { cn } from '@/lib/utils';
 
@@ -105,6 +107,13 @@ export const PolicyTemplatesView = ({ onNavigateToDeployment }: PolicyTemplatesV
   const loadData = async () => {
     try {
       setLoading(true);
+      
+      // Seed governance templates if they don't exist
+      const seedResult = await seedGovernanceTemplates();
+      if (seedResult.seeded > 0) {
+        console.log(`Seeded ${seedResult.seeded} governance policy templates`);
+      }
+      
       const [templatesData, statsData] = await Promise.all([
         getPolicyTemplates(),
         getPolicyStats(),

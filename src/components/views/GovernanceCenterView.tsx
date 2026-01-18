@@ -13,6 +13,7 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { useTenant } from '@/contexts/TenantContext';
 import { supabase } from '@/integrations/supabase/client';
+import { getPolicyTemplateByName } from '@/lib/policyDatabase';
 import { motion } from 'framer-motion';
 import {
   Shield,
@@ -103,7 +104,7 @@ const CATEGORY_ICONS = {
   licensing: CreditCard,
 };
 
-// Action items with links to policy templates and reports
+// Action items with links to policy templates (by name) and reports
 const GOVERNANCE_ACTIONS: ActionItem[] = [
   {
     id: 'enable-mfa-admins',
@@ -114,7 +115,7 @@ const GOVERNANCE_ACTIONS: ActionItem[] = [
     impact: 'Prevents 99.9% of account compromise attacks',
     effort: 'low',
     actionType: 'policy',
-    policyTemplateId: 'mfa-enforcement',
+    policyTemplateId: 'MFA Enforcement Policy', // Template name, will be looked up
   },
   {
     id: 'configure-conditional-access',
@@ -125,7 +126,7 @@ const GOVERNANCE_ACTIONS: ActionItem[] = [
     impact: 'Enforces security controls based on user, device, and location',
     effort: 'medium',
     actionType: 'config',
-    policyTemplateId: 'conditional-access-baseline',
+    policyTemplateId: 'Conditional Access Baseline',
     reportTemplateId: 'sec-conditional-access-summary',
   },
   {
@@ -137,6 +138,7 @@ const GOVERNANCE_ACTIONS: ActionItem[] = [
     impact: 'Reduces attack surface and maintains clean directory',
     effort: 'low',
     actionType: 'remediate',
+    policyTemplateId: 'Guest User Access Restriction',
     reportTemplateId: 'id-guest-users',
   },
   {
@@ -148,6 +150,7 @@ const GOVERNANCE_ACTIONS: ActionItem[] = [
     impact: 'Potential savings of $3,450/month',
     effort: 'medium',
     actionType: 'review',
+    policyTemplateId: 'License Optimization Policy',
     reportTemplateId: 'lic-e5-usage',
   },
   {
@@ -170,7 +173,7 @@ const GOVERNANCE_ACTIONS: ActionItem[] = [
     impact: 'Legacy auth bypasses MFA and is a common attack vector',
     effort: 'low',
     actionType: 'policy',
-    policyTemplateId: 'block-legacy-auth',
+    policyTemplateId: 'Block Legacy Authentication',
   },
   {
     id: 'review-privileged-roles',
@@ -181,6 +184,7 @@ const GOVERNANCE_ACTIONS: ActionItem[] = [
     impact: 'Reduces standing privilege and improves security posture',
     effort: 'medium',
     actionType: 'review',
+    policyTemplateId: 'Privileged Identity Management',
     reportTemplateId: 'id-privileged-users',
   },
   {
@@ -192,6 +196,7 @@ const GOVERNANCE_ACTIONS: ActionItem[] = [
     impact: 'Potential savings of $1,870/month',
     effort: 'low',
     actionType: 'remediate',
+    policyTemplateId: 'License Optimization Policy',
     reportTemplateId: 'lic-inactive-users',
   },
 ];
@@ -355,20 +360,34 @@ export function GovernanceCenterView({ onNavigate, onDeployPolicy }: GovernanceC
     setShowActionDialog(true);
   };
 
-  const handleExecuteAction = () => {
+  const handleExecuteAction = async () => {
     if (!selectedAction) return;
 
     if (actionWorkflow === 'deploy' && selectedAction.policyTemplateId) {
-      // Navigate to policy deployment with template
-      if (onDeployPolicy) {
-        onDeployPolicy(selectedAction.policyTemplateId);
-      } else if (onNavigate) {
-        onNavigate('policy-deployment');
+      // Look up the template by name to get its database ID
+      const template = await getPolicyTemplateByName(selectedAction.policyTemplateId);
+      
+      if (template) {
+        if (onDeployPolicy) {
+          onDeployPolicy(template.id);
+        } else if (onNavigate) {
+          onNavigate('policy-deployment');
+        }
+        toast({
+          title: 'Navigating to Policy Deployment',
+          description: `Deploy "${template.name}" to remediate: ${selectedAction.title}`,
+        });
+      } else {
+        // Template not found - navigate to templates view to create it
+        if (onNavigate) {
+          onNavigate('policy-templates');
+        }
+        toast({
+          title: 'Template Not Found',
+          description: `Navigate to Policy Templates to create "${selectedAction.policyTemplateId}"`,
+          variant: 'destructive',
+        });
       }
-      toast({
-        title: 'Navigating to Policy Deployment',
-        description: `Deploy policy to remediate: ${selectedAction.title}`,
-      });
     } else if (actionWorkflow === 'report' && selectedAction.reportTemplateId) {
       // Navigate to reports
       if (onNavigate) {
