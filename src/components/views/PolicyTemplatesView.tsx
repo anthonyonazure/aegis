@@ -62,8 +62,10 @@ import {
   deletePolicyTemplate,
   getPolicyTemplates,
   getPolicyStats,
-  seedGovernanceTemplates,
 } from '@/lib/policyDatabase';
+
+// Combine baseline and governance templates for the built-in tab
+const ALL_BUILTIN_TEMPLATES = [...BASELINE_TEMPLATES, ...GOVERNANCE_ACTION_TEMPLATES];
 import { cn } from '@/lib/utils';
 
 const iconMap: Record<string, React.ElementType> = {
@@ -108,17 +110,12 @@ export const PolicyTemplatesView = ({ onNavigateToDeployment }: PolicyTemplatesV
     try {
       setLoading(true);
       
-      // Seed governance templates if they don't exist
-      const seedResult = await seedGovernanceTemplates();
-      if (seedResult.seeded > 0) {
-        console.log(`Seeded ${seedResult.seeded} governance policy templates`);
-      }
-      
       const [templatesData, statsData] = await Promise.all([
         getPolicyTemplates(),
         getPolicyStats(),
       ]);
-      setTemplates(templatesData);
+      // Filter out default/built-in templates - those are shown in the Built-in tab
+      setTemplates(templatesData.filter(t => !t.isDefault));
       setStats(statsData);
     } catch (error) {
       toast({
@@ -245,7 +242,7 @@ export const PolicyTemplatesView = ({ onNavigateToDeployment }: PolicyTemplatesV
     return matchesSearch && matchesBaseline;
   });
 
-  const filteredBuiltIn = BASELINE_TEMPLATES.filter((t) => {
+  const filteredBuiltIn = ALL_BUILTIN_TEMPLATES.filter((t) => {
     const matchesSearch = t.name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesBaseline = baselineFilter === 'all' || t.baselineType === baselineFilter;
     return matchesSearch && matchesBaseline;
