@@ -1,0 +1,642 @@
+import { useState, useMemo } from 'react';
+import { motion } from 'framer-motion';
+import {
+  FileKey,
+  Search,
+  Copy,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Download,
+  Filter,
+  Shield,
+  Cloud,
+  ClipboardList,
+} from 'lucide-react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { useToast } from '@/hooks/use-toast';
+import {
+  PERMISSION_REQUIREMENTS,
+  AZURE_PERMISSION_REQUIREMENTS,
+  PermissionRequirement,
+} from '@/lib/permissionsCheck';
+
+interface CategoryGroup {
+  id: string;
+  name: string;
+  resources: PermissionRequirement[];
+}
+
+// Group Graph API permissions by category
+function groupGraphPermissions(): CategoryGroup[] {
+  const categories: Record<string, { name: string; resources: PermissionRequirement[] }> = {
+    'intune': { name: 'Intune / Endpoint Manager', resources: [] },
+    'conditional-access': { name: 'Conditional Access', resources: [] },
+    'entra-id': { name: 'Entra ID (Azure AD)', resources: [] },
+    'defender': { name: 'Microsoft Defender', resources: [] },
+    'purview': { name: 'Microsoft Purview', resources: [] },
+    'exchange': { name: 'Exchange Online', resources: [] },
+    'sharepoint': { name: 'SharePoint Online', resources: [] },
+    'teams': { name: 'Microsoft Teams', resources: [] },
+  };
+
+  for (const req of PERMISSION_REQUIREMENTS) {
+    const category = req.resourceId.split('/')[0];
+    if (categories[category]) {
+      categories[category].resources.push(req);
+    }
+  }
+
+  return Object.entries(categories)
+    .filter(([_, v]) => v.resources.length > 0)
+    .map(([id, v]) => ({ id, name: v.name, resources: v.resources }));
+}
+
+// Group Azure permissions by category
+function groupAzurePermissions(): CategoryGroup[] {
+  const categories: Record<string, { name: string; resources: PermissionRequirement[] }> = {
+    'azure-compute': { name: 'Compute', resources: [] },
+    'azure-networking': { name: 'Networking', resources: [] },
+    'azure-storage': { name: 'Storage', resources: [] },
+    'azure-identity': { name: 'Identity & Security', resources: [] },
+    'azure-paas': { name: 'Platform Services (PaaS)', resources: [] },
+    'azure-monitoring': { name: 'Monitoring', resources: [] },
+  };
+
+  for (const req of AZURE_PERMISSION_REQUIREMENTS) {
+    const category = req.resourceId.split('/')[0];
+    if (categories[category]) {
+      categories[category].resources.push(req);
+    }
+  }
+
+  return Object.entries(categories)
+    .filter(([_, v]) => v.resources.length > 0)
+    .map(([id, v]) => ({ id, name: v.name, resources: v.resources }));
+}
+
+// Convert read permission to write permission
+function getWritePermission(readPermission: string): string {
+  if (readPermission.includes('.Read.')) {
+    return readPermission.replace('.Read.', '.ReadWrite.');
+  }
+  if (readPermission.includes('.Read')) {
+    return readPermission.replace('.Read', '.ReadWrite');
+  }
+  if (readPermission === 'Reader') {
+    return 'Contributor';
+  }
+  if (readPermission.endsWith('/read')) {
+    return readPermission.replace('/read', '/*');
+  }
+  return readPermission;
+}
+
+// Get unique permissions for a category
+function getUniquePermissions(resources: PermissionRequirement[], writeMode: boolean): string[] {
+  const perms = new Set<string>();
+  for (const resource of resources) {
+    for (const perm of resource.requiredPermissions) {
+      perms.add(writeMode ? getWritePermission(perm) : perm);
+    }
+  }
+  return Array.from(perms).sort();
+}
+
+// Get all unique Graph permissions
+function getAllGraphPermissions(writeMode: boolean): string[] {
+  const perms = new Set<string>();
+  for (const req of PERMISSION_REQUIREMENTS) {
+    for (const perm of req.requiredPermissions) {
+      perms.add(writeMode ? getWritePermission(perm) : perm);
+    }
+  }
+  return Array.from(perms).sort();
+}
+
+export const PermissionsReferenceView = () => {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [writeMode, setWriteMode] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const { toast } = useToast();
+
+  const graphCategories = useMemo(() => groupGraphPermissions(), []);
+  const azureCategories = useMemo(() => groupAzurePermissions(), []);
+
+  const allGraphPermissions = useMemo(() => getAllGraphPermissions(writeMode), [writeMode]);
+  const totalGraphResources = PERMISSION_REQUIREMENTS.length;
+  const totalAzureResources = AZURE_PERMISSION_REQUIREMENTS.length;
+
+  // Filter categories based on search
+  const filterCategories = (categories: CategoryGroup[]) => {
+    if (!searchQuery.trim()) return categories;
+    
+    const query = searchQuery.toLowerCase();
+    return categories.map(cat => ({
+      ...cat,
+      resources: cat.resources.filter(r => 
+        r.resourceName.toLowerCase().includes(query) ||
+        r.requiredPermissions.some(p => p.toLowerCase().includes(query))
+      ),
+    })).filter(cat => cat.resources.length > 0);
+  };
+
+  const filteredGraphCategories = useMemo(() => filterCategories(graphCategories), [graphCategories, searchQuery]);
+  const filteredAzureCategories = useMemo(() => filterCategories(azureCategories), [azureCategories, searchQuery]);
+
+  const copyToClipboard = async (text: string, id: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2000);
+      toast({
+        title: 'Copied!',
+        description: 'Permissions copied to clipboard',
+      });
+    } catch {
+      toast({
+        title: 'Failed to copy',
+        description: 'Could not copy to clipboard',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const toggleCategory = (categoryId: string) => {
+    setExpandedCategories(prev => {
+      const next = new Set(prev);
+      if (next.has(categoryId)) {
+        next.delete(categoryId);
+      } else {
+        next.add(categoryId);
+      }
+      return next;
+    });
+  };
+
+  const expandAll = (categories: CategoryGroup[]) => {
+    setExpandedCategories(new Set(categories.map(c => c.id)));
+  };
+
+  const collapseAll = () => {
+    setExpandedCategories(new Set());
+  };
+
+  const copyAllGraphPermissions = () => {
+    const text = allGraphPermissions.join('\n');
+    copyToClipboard(text, 'all-graph');
+  };
+
+  const copyAzureInstructions = () => {
+    const role = writeMode ? 'Contributor' : 'Reader';
+    const text = `Azure RBAC Role Assignment Instructions
+
+Required Role: ${role}
+
+Steps to assign the role:
+1. Go to Azure Portal → Subscriptions
+2. Select your subscription
+3. Click "Access control (IAM)" in the left menu
+4. Click "Add" → "Add role assignment"
+5. Select "${role}" role
+6. Click "Members" tab → "Select members"
+7. Search for your App Registration name and select it
+8. Click "Review + assign"
+
+Repeat for each subscription you want to ${writeMode ? 'manage' : 'export'}.`;
+
+    copyToClipboard(text, 'all-azure');
+  };
+
+  const copyCategoryPermissions = (category: CategoryGroup) => {
+    const perms = getUniquePermissions(category.resources, writeMode);
+    copyToClipboard(perms.join('\n'), category.id);
+  };
+
+  const generatePowerShellScript = () => {
+    const permissions = allGraphPermissions;
+    const script = `# PowerShell script to add Microsoft Graph API permissions to an App Registration
+# Run this in Azure Cloud Shell or with Azure PowerShell module installed
+
+# Variables - Update these
+$AppId = "YOUR_APP_ID"  # Replace with your App (Client) ID
+$TenantId = "YOUR_TENANT_ID"  # Replace with your Tenant ID
+
+# Connect to Microsoft Graph
+Connect-MgGraph -TenantId $TenantId -Scopes "Application.ReadWrite.All"
+
+# Get the service principal
+$ServicePrincipal = Get-MgServicePrincipal -Filter "appId eq '$AppId'"
+
+# Microsoft Graph API App ID (constant)
+$GraphApiId = "00000003-0000-0000-c000-000000000000"
+
+# Get Microsoft Graph Service Principal
+$GraphSP = Get-MgServicePrincipal -Filter "appId eq '$GraphApiId'"
+
+# Required permissions
+$RequiredPermissions = @(
+${permissions.map(p => `    "${p}"`).join(',\n')}
+)
+
+# Find the AppRole IDs for each permission
+$AppRoles = @()
+foreach ($PermissionName in $RequiredPermissions) {
+    $Role = $GraphSP.AppRoles | Where-Object { $_.Value -eq $PermissionName }
+    if ($Role) {
+        $AppRoles += @{
+            Id = $Role.Id
+            Type = "Role"
+            ResourceId = $GraphSP.Id
+        }
+    } else {
+        Write-Warning "Permission not found: $PermissionName"
+    }
+}
+
+# Output the App Roles to add
+Write-Host "Found $($AppRoles.Count) permissions to add" -ForegroundColor Green
+$AppRoles | ForEach-Object { Write-Host "  - $($_.Id)" }
+
+Write-Host ""
+Write-Host "After running this script, you still need to grant admin consent in the Azure Portal." -ForegroundColor Yellow
+Write-Host "Go to: Azure Portal → App Registrations → Your App → API Permissions → Grant admin consent" -ForegroundColor Yellow
+`;
+    
+    copyToClipboard(script, 'powershell');
+    toast({
+      title: 'PowerShell Script Copied',
+      description: 'Script copied to clipboard. Update the variables before running.',
+    });
+  };
+
+  const renderResourceCard = (resource: PermissionRequirement) => {
+    const readPerm = resource.requiredPermissions[0];
+    const writePerm = getWritePermission(readPerm);
+    const currentPerm = writeMode ? writePerm : readPerm;
+    const alternatives = resource.alternativePermissions?.map(p => writeMode ? getWritePermission(p) : p) || [];
+
+    return (
+      <div
+        key={resource.resourceId}
+        className="p-3 rounded-lg bg-muted/30 border border-border/50"
+      >
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex-1 min-w-0">
+            <p className="font-medium text-sm text-foreground">{resource.resourceName}</p>
+            <div className="mt-1 flex flex-wrap gap-1">
+              <Badge variant="secondary" className="font-mono text-xs">
+                {currentPerm}
+              </Badge>
+              {alternatives.length > 0 && (
+                <span className="text-xs text-muted-foreground">
+                  or: {alternatives.slice(0, 2).join(', ')}
+                  {alternatives.length > 2 && ` +${alternatives.length - 2} more`}
+                </span>
+              )}
+            </div>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 flex-shrink-0"
+            onClick={() => copyToClipboard(currentPerm, resource.resourceId)}
+          >
+            {copiedId === resource.resourceId ? (
+              <Check className="h-3.5 w-3.5 text-green-500" />
+            ) : (
+              <Copy className="h-3.5 w-3.5" />
+            )}
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
+  const renderCategorySection = (category: CategoryGroup, isAzure: boolean = false) => {
+    const isExpanded = expandedCategories.has(category.id);
+    const uniquePerms = getUniquePermissions(category.resources, writeMode);
+
+    return (
+      <Collapsible
+        key={category.id}
+        open={isExpanded}
+        onOpenChange={() => toggleCategory(category.id)}
+      >
+        <div className="border border-border rounded-lg overflow-hidden">
+          <CollapsibleTrigger className="w-full p-4 flex items-center justify-between hover:bg-muted/50 transition-colors">
+            <div className="flex items-center gap-3">
+              {isExpanded ? (
+                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              ) : (
+                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+              )}
+              <span className="font-medium">{category.name}</span>
+              <Badge variant="outline" className="ml-2">
+                {category.resources.length} resource{category.resources.length !== 1 ? 's' : ''}
+              </Badge>
+              {!isAzure && (
+                <Badge variant="secondary" className="ml-1">
+                  {uniquePerms.length} permission{uniquePerms.length !== 1 ? 's' : ''}
+                </Badge>
+              )}
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1.5"
+              onClick={(e) => {
+                e.stopPropagation();
+                copyCategoryPermissions(category);
+              }}
+            >
+              {copiedId === category.id ? (
+                <Check className="h-3.5 w-3.5 text-green-500" />
+              ) : (
+                <Copy className="h-3.5 w-3.5" />
+              )}
+              Copy All
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="p-4 pt-0 space-y-2">
+              {category.resources.map(resource => renderResourceCard(resource))}
+            </div>
+          </CollapsibleContent>
+        </div>
+      </Collapsible>
+    );
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+      className="space-y-6"
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground flex items-center gap-3">
+            <FileKey className="h-7 w-7 text-primary" />
+            Permissions Reference
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Complete list of permissions required for all resource types
+          </p>
+        </div>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card className="bg-gradient-to-br from-primary/10 to-primary/5 border-primary/20">
+          <CardHeader className="pb-2">
+            <CardDescription>Graph API Permissions</CardDescription>
+            <CardTitle className="text-2xl">{allGraphPermissions.length}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-muted-foreground">unique scopes required</p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-blue-500/10 to-blue-500/5 border-blue-500/20">
+          <CardHeader className="pb-2">
+            <CardDescription>Graph Resources</CardDescription>
+            <CardTitle className="text-2xl">{totalGraphResources}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-muted-foreground">M365 resource types</p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-orange-500/10 to-orange-500/5 border-orange-500/20">
+          <CardHeader className="pb-2">
+            <CardDescription>Azure Resources</CardDescription>
+            <CardTitle className="text-2xl">{totalAzureResources}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-muted-foreground">ARM resource types</p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-green-500/10 to-green-500/5 border-green-500/20">
+          <CardHeader className="pb-2">
+            <CardDescription>Azure Role</CardDescription>
+            <CardTitle className="text-2xl">{writeMode ? 'Contributor' : 'Reader'}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-muted-foreground">recommended RBAC role</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Controls */}
+      <Card>
+        <CardContent className="py-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="write-mode"
+                  checked={writeMode}
+                  onCheckedChange={setWriteMode}
+                />
+                <Label htmlFor="write-mode" className="cursor-pointer">
+                  {writeMode ? 'Export + Import (Read-Write)' : 'Export Only (Read)'}
+                </Label>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search resources or permissions..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9 w-64"
+                />
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Tabs */}
+      <Tabs defaultValue="graph" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="graph" className="gap-2">
+            <Shield className="h-4 w-4" />
+            Microsoft 365 ({totalGraphResources})
+          </TabsTrigger>
+          <TabsTrigger value="azure" className="gap-2">
+            <Cloud className="h-4 w-4" />
+            Azure ({totalAzureResources})
+          </TabsTrigger>
+        </TabsList>
+
+        {/* Graph API Tab */}
+        <TabsContent value="graph" className="space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-lg">Microsoft Graph API Permissions</CardTitle>
+                  <CardDescription>
+                    Add these permissions in Azure Portal → App Registrations → API Permissions
+                  </CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => expandAll(filteredGraphCategories)}
+                  >
+                    Expand All
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={collapseAll}
+                  >
+                    Collapse All
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={generatePowerShellScript}
+                  >
+                    <ClipboardList className="h-4 w-4" />
+                    PowerShell Script
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={copyAllGraphPermissions}
+                  >
+                    {copiedId === 'all-graph' ? (
+                      <Check className="h-4 w-4" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                    Copy All ({allGraphPermissions.length})
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <ScrollArea className="h-[500px] pr-4">
+                <div className="space-y-3">
+                  {filteredGraphCategories.length > 0 ? (
+                    filteredGraphCategories.map(category => renderCategorySection(category))
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No resources match your search
+                    </div>
+                  )}
+                </div>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Azure Tab */}
+        <TabsContent value="azure" className="space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-lg">Azure RBAC Permissions</CardTitle>
+                  <CardDescription>
+                    Assign the "{writeMode ? 'Contributor' : 'Reader'}" role to your Service Principal on each subscription
+                  </CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => expandAll(filteredAzureCategories)}
+                  >
+                    Expand All
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={collapseAll}
+                  >
+                    Collapse All
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={copyAzureInstructions}
+                  >
+                    {copiedId === 'all-azure' ? (
+                      <Check className="h-4 w-4" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                    Copy Instructions
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {/* Azure Role Info */}
+              <div className="mb-4 p-4 rounded-lg bg-orange-500/10 border border-orange-500/20">
+                <h4 className="font-medium text-foreground mb-2">
+                  {writeMode ? '🔧 Contributor Role Required' : '👁️ Reader Role Required'}
+                </h4>
+                <p className="text-sm text-muted-foreground">
+                  Unlike Graph API permissions which are granular, Azure uses role-based access control (RBAC).
+                  Assigning the "{writeMode ? 'Contributor' : 'Reader'}" role on a subscription grants access to all resource types listed below.
+                </p>
+              </div>
+
+              <ScrollArea className="h-[400px] pr-4">
+                <div className="space-y-3">
+                  {filteredAzureCategories.length > 0 ? (
+                    filteredAzureCategories.map(category => renderCategorySection(category, true))
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No resources match your search
+                    </div>
+                  )}
+                </div>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      {/* Quick Reference Footer */}
+      <Card className="bg-muted/30">
+        <CardContent className="py-4">
+          <div className="flex items-start gap-4">
+            <div className="p-2 rounded-lg bg-primary/10">
+              <FileKey className="h-5 w-5 text-primary" />
+            </div>
+            <div className="flex-1">
+              <h4 className="font-medium text-foreground mb-1">Need Help Setting Up?</h4>
+              <p className="text-sm text-muted-foreground">
+                Go to the <strong>Authentication</strong> page to configure your App Registration credentials. 
+                Use the <strong>Preflight Check</strong> before exporting to verify your permissions are correctly configured.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
+};
