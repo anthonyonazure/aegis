@@ -18,6 +18,9 @@ import { WebhooksView } from '@/components/views/WebhooksView';
 import { CustomersView } from '@/components/views/CustomersView';
 import { ScheduledDriftView } from '@/components/views/ScheduledDriftView';
 import { PoliciesView } from '@/components/views/PoliciesView';
+import { PolicyTemplatesView } from '@/components/views/PolicyTemplatesView';
+import { PolicyDeploymentView } from '@/components/views/PolicyDeploymentView';
+import { ScheduledDeploymentsView } from '@/components/views/ScheduledDeploymentsView';
 import { PSAIntegrationsView } from '@/components/views/PSAIntegrationsView';
 import { ReportsView } from '@/components/views/ReportsView';
 import { BillingView } from '@/components/views/BillingView';
@@ -212,8 +215,16 @@ const Index = () => {
         );
       case 'customers':
         return <CustomersView />;
+      case 'health-dashboard':
+      case 'tenant-health':
+        return <TenantHealthDashboardView />;
       case 'policies':
-        return <PoliciesView />;
+      case 'policy-templates':
+        return <PolicyTemplatesView />;
+      case 'policy-deployment':
+        return <PolicyDeploymentView />;
+      case 'scheduled-deployments':
+        return <ScheduledDeploymentsView />;
       case 'resources':
         return (
           <ResourcesView 
@@ -257,13 +268,12 @@ const Index = () => {
       case 'webhooks':
         return <WebhooksView />;
       case 'psa':
+      case 'psa-integrations':
         return <PSAIntegrationsView />;
       case 'reports':
         return <ReportsView />;
       case 'billing':
         return <BillingView />;
-      case 'health-dashboard':
-        return <TenantHealthDashboardView />;
       case 'git':
         return <GitView />;
       case 'auth':
