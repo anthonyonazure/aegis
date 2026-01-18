@@ -50,6 +50,62 @@ export type Database = {
         }
         Relationships: []
       }
+      billing_usage: {
+        Row: {
+          billable_amount: number | null
+          created_at: string
+          customer_id: string | null
+          id: string
+          notes: string | null
+          period_end: string
+          period_start: string
+          resource_counts: Json
+          total_devices: number
+          total_resources: number
+          total_users: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          billable_amount?: number | null
+          created_at?: string
+          customer_id?: string | null
+          id?: string
+          notes?: string | null
+          period_end: string
+          period_start: string
+          resource_counts?: Json
+          total_devices?: number
+          total_resources?: number
+          total_users?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          billable_amount?: number | null
+          created_at?: string
+          customer_id?: string | null
+          id?: string
+          notes?: string | null
+          period_end?: string
+          period_start?: string
+          resource_counts?: Json
+          total_devices?: number
+          total_resources?: number
+          total_users?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_usage_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       compliance_results: {
         Row: {
           baseline_name: string
@@ -622,6 +678,173 @@ export type Database = {
           version?: number
         }
         Relationships: []
+      }
+      psa_integrations: {
+        Row: {
+          api_url: string
+          auto_create_tickets: boolean
+          created_at: string
+          default_priority: string | null
+          default_ticket_type: string | null
+          id: string
+          is_active: boolean
+          name: string
+          provider: string
+          ticket_on_compliance_fail: boolean
+          ticket_on_drift: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          api_url: string
+          auto_create_tickets?: boolean
+          created_at?: string
+          default_priority?: string | null
+          default_ticket_type?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          provider: string
+          ticket_on_compliance_fail?: boolean
+          ticket_on_drift?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          api_url?: string
+          auto_create_tickets?: boolean
+          created_at?: string
+          default_priority?: string | null
+          default_ticket_type?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          provider?: string
+          ticket_on_compliance_fail?: boolean
+          ticket_on_drift?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      psa_tickets: {
+        Row: {
+          created_at: string
+          customer_id: string | null
+          description: string | null
+          external_ticket_id: string | null
+          id: string
+          priority: string
+          psa_integration_id: string
+          source_id: string | null
+          source_type: string
+          status: string
+          ticket_type: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          customer_id?: string | null
+          description?: string | null
+          external_ticket_id?: string | null
+          id?: string
+          priority?: string
+          psa_integration_id: string
+          source_id?: string | null
+          source_type: string
+          status?: string
+          ticket_type: string
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          customer_id?: string | null
+          description?: string | null
+          external_ticket_id?: string | null
+          id?: string
+          priority?: string
+          psa_integration_id?: string
+          source_id?: string | null
+          source_type?: string
+          status?: string
+          ticket_type?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "psa_tickets_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "psa_tickets_psa_integration_id_fkey"
+            columns: ["psa_integration_id"]
+            isOneToOne: false
+            referencedRelation: "psa_integrations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reports: {
+        Row: {
+          created_at: string
+          customer_id: string | null
+          data: Json
+          date_range_end: string | null
+          date_range_start: string | null
+          file_url: string | null
+          generated_at: string
+          id: string
+          name: string
+          report_type: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          customer_id?: string | null
+          data?: Json
+          date_range_end?: string | null
+          date_range_start?: string | null
+          file_url?: string | null
+          generated_at?: string
+          id?: string
+          name: string
+          report_type: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          customer_id?: string | null
+          data?: Json
+          date_range_end?: string | null
+          date_range_start?: string | null
+          file_url?: string | null
+          generated_at?: string
+          id?: string
+          name?: string
+          report_type?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reports_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       resource_templates: {
         Row: {
