@@ -33,6 +33,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
 import { TenantSelector } from '@/components/TenantSelector';
+import { Separator } from '@/components/ui/separator';
 
 interface NavItem {
   id: string;
@@ -40,37 +41,82 @@ interface NavItem {
   icon: React.ElementType;
 }
 
-const navItems: NavItem[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'governance', label: 'Governance Center', icon: Gauge },
-  { id: 'customers', label: 'Customers', icon: Building2 },
-  { id: 'health-dashboard', label: 'Tenant Health', icon: Activity },
-  { id: 'secure-score', label: 'Secure Score', icon: Shield },
-  { id: 'resources', label: 'Resources', icon: FolderTree },
-  { id: 'export', label: 'Export', icon: Download },
-  { id: 'import', label: 'Import / Restore', icon: Upload },
-  { id: 'policy-templates', label: 'Policy Templates', icon: FileCheck },
-  { id: 'policy-deployment', label: 'Policy Deployment', icon: Rocket },
-  { id: 'scheduled-deployments', label: 'Scheduled Deployments', icon: CalendarClock },
-  { id: 'drift', label: 'Drift Detection', icon: GitCompare },
-  { id: 'scheduled-drift', label: 'Scheduled Drift', icon: CalendarClock },
-  { id: 'validation', label: 'Validation', icon: ShieldCheck },
-  { id: 'compliance', label: 'Compliance', icon: AlertTriangle },
-  { id: 'compliance-dashboard', label: 'Compliance Dashboard', icon: BarChart3 },
-  { id: 'psa-integrations', label: 'PSA Integrations', icon: Ticket },
-  { id: 'schedules', label: 'Scheduled Exports', icon: Calendar },
-  { id: 'automated-backups', label: 'Automated Backups', icon: HardDrive },
-  { id: 'webhooks', label: 'Webhooks', icon: Webhook },
-  { id: 'reports', label: 'Reports', icon: FileText },
-  { id: 'billing', label: 'Billing & Usage', icon: BarChart3 },
-  { id: 'jobs', label: 'Export Jobs', icon: History },
-  { id: 'audit', label: 'Audit Trail', icon: FileText },
-  { id: 'permission-health', label: 'Permission Health', icon: HeartPulse },
-  { id: 'permissions-reference', label: 'Permissions Reference', icon: FileKey },
-  { id: 'documentation', label: 'Documentation', icon: Book },
-  { id: 'git', label: 'Git & CI/CD', icon: GitBranch },
-  { id: 'auth', label: 'Authentication', icon: Key },
-  { id: 'settings', label: 'Settings', icon: Settings },
+interface NavGroup {
+  title: string;
+  items: NavItem[];
+}
+
+const navGroups: NavGroup[] = [
+  {
+    title: 'Overview',
+    items: [
+      { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+      { id: 'governance', label: 'Governance Center', icon: Gauge },
+      { id: 'customers', label: 'Customers', icon: Building2 },
+    ],
+  },
+  {
+    title: 'Tenant Health',
+    items: [
+      { id: 'health-dashboard', label: 'Health Dashboard', icon: Activity },
+      { id: 'secure-score', label: 'Secure Score', icon: Shield },
+      { id: 'permission-health', label: 'Permission Health', icon: HeartPulse },
+    ],
+  },
+  {
+    title: 'Configuration',
+    items: [
+      { id: 'resources', label: 'Resources', icon: FolderTree },
+      { id: 'export', label: 'Export', icon: Download },
+      { id: 'import', label: 'Import / Restore', icon: Upload },
+      { id: 'jobs', label: 'Export Jobs', icon: History },
+    ],
+  },
+  {
+    title: 'Policy Management',
+    items: [
+      { id: 'policy-templates', label: 'Policy Templates', icon: FileCheck },
+      { id: 'policy-deployment', label: 'Policy Deployment', icon: Rocket },
+      { id: 'scheduled-deployments', label: 'Scheduled Deployments', icon: CalendarClock },
+    ],
+  },
+  {
+    title: 'Monitoring',
+    items: [
+      { id: 'drift', label: 'Drift Detection', icon: GitCompare },
+      { id: 'scheduled-drift', label: 'Scheduled Drift', icon: CalendarClock },
+      { id: 'validation', label: 'Validation', icon: ShieldCheck },
+      { id: 'compliance', label: 'Compliance Checks', icon: AlertTriangle },
+      { id: 'compliance-dashboard', label: 'Compliance Dashboard', icon: BarChart3 },
+    ],
+  },
+  {
+    title: 'Automation',
+    items: [
+      { id: 'schedules', label: 'Scheduled Exports', icon: Calendar },
+      { id: 'automated-backups', label: 'Automated Backups', icon: HardDrive },
+      { id: 'webhooks', label: 'Webhooks', icon: Webhook },
+      { id: 'psa-integrations', label: 'PSA Integrations', icon: Ticket },
+    ],
+  },
+  {
+    title: 'Reporting',
+    items: [
+      { id: 'reports', label: 'Reports', icon: FileText },
+      { id: 'billing', label: 'Billing & Usage', icon: BarChart3 },
+      { id: 'audit', label: 'Audit Trail', icon: FileText },
+    ],
+  },
+  {
+    title: 'System',
+    items: [
+      { id: 'permissions-reference', label: 'Permissions Reference', icon: FileKey },
+      { id: 'documentation', label: 'Documentation', icon: Book },
+      { id: 'git', label: 'Git & CI/CD', icon: GitBranch },
+      { id: 'auth', label: 'Authentication', icon: Key },
+      { id: 'settings', label: 'Settings', icon: Settings },
+    ],
+  },
 ];
 
 interface SidebarProps {
@@ -127,30 +173,55 @@ export const Sidebar = ({ activeTab, onTabChange, isConnected = false }: Sidebar
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto p-3 space-y-1">
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = activeTab === item.id;
-          
-          return (
-            <button
-              key={item.id}
-              onClick={() => onTabChange(item.id)}
-              className={cn(
-                "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200",
-                "hover:bg-sidebar-accent",
-                isActive 
-                  ? "bg-primary/10 text-primary border-l-2 border-primary" 
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <Icon className="w-5 h-5 flex-shrink-0" />
-              {!collapsed && (
-                <span className="text-sm font-medium">{item.label}</span>
-              )}
-            </button>
-          );
-        })}
+      <nav className="flex-1 overflow-y-auto py-2">
+        {navGroups.map((group, groupIndex) => (
+          <div key={group.title}>
+            {/* Group Header */}
+            {!collapsed && (
+              <div className="px-4 py-2 mt-2 first:mt-0">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                  {group.title}
+                </span>
+              </div>
+            )}
+            
+            {/* Separator for collapsed state */}
+            {collapsed && groupIndex > 0 && (
+              <Separator className="my-2 mx-2 bg-sidebar-border" />
+            )}
+            
+            {/* Group Items */}
+            <div className="px-2 space-y-0.5">
+              {group.items.map((item) => {
+                const Icon = item.icon;
+                const isActive = activeTab === item.id;
+                
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => onTabChange(item.id)}
+                    className={cn(
+                      "w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200",
+                      "hover:bg-sidebar-accent group",
+                      isActive 
+                        ? "bg-primary/10 text-primary border-l-2 border-primary ml-0.5" 
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                    title={collapsed ? item.label : undefined}
+                  >
+                    <Icon className={cn(
+                      "w-4 h-4 flex-shrink-0 transition-colors",
+                      isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
+                    )} />
+                    {!collapsed && (
+                      <span className="text-sm font-medium truncate">{item.label}</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
 
       {/* Connection Status */}
