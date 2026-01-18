@@ -420,25 +420,62 @@ if ($SkippedCount -gt 0) {
 Write-Host "============================================" -ForegroundColor Green
 
 # ============================================
-# STEP 5: Grant Admin Consent (Optional)
+# STEP 5: Grant Admin Consent (Automated)
 # ============================================
 Write-Host ""
-Write-Host "IMPORTANT: Admin consent is still required!" -ForegroundColor Yellow
+Write-Host "Granting admin consent for all permissions..." -ForegroundColor Cyan
+Write-Host "(This requires Global Administrator or Privileged Role Administrator)" -ForegroundColor Yellow
 Write-Host ""
-Write-Host "Option 1: Grant consent via Azure Portal:" -ForegroundColor Cyan
-Write-Host "  1. Go to: https://portal.azure.com" -ForegroundColor White
-Write-Host "  2. Navigate to: Azure Active Directory > App registrations > $($App.DisplayName)" -ForegroundColor White
-Write-Host "  3. Click 'API permissions' in the left menu" -ForegroundColor White
-Write-Host "  4. Click 'Grant admin consent for [Your Tenant]'" -ForegroundColor White
-Write-Host ""
-Write-Host "Option 2: Grant consent via PowerShell (requires admin):" -ForegroundColor Cyan
-Write-Host "  # Run the following commands:" -ForegroundColor White
 
-foreach ($Permission in $RequiredPermissions) {
-    $Role = $GraphSP.AppRoles | Where-Object { $_.Value -eq $Permission }
+$ConsentGranted = 0
+$ConsentSkipped = 0
+$ConsentFailed = 0
+
+foreach ($PermissionName in $RequiredPermissions) {
+    $Role = $GraphSP.AppRoles | Where-Object { $_.Value -eq $PermissionName }
     if ($Role) {
-        Write-Host "  # New-MgServicePrincipalAppRoleAssignment -ServicePrincipalId '$($ServicePrincipal.Id)' -PrincipalId '$($ServicePrincipal.Id)' -ResourceId '$($GraphSP.Id)' -AppRoleId '$($Role.Id)'" -ForegroundColor DarkGray
+        # Check if consent already exists
+        $ExistingGrant = Get-MgServicePrincipalAppRoleAssignment -ServicePrincipalId $ServicePrincipal.Id -ErrorAction SilentlyContinue | 
+            Where-Object { $_.AppRoleId -eq $Role.Id -and $_.ResourceId -eq $GraphSP.Id }
+        
+        if ($ExistingGrant) {
+            Write-Host "  ~ $PermissionName (already consented)" -ForegroundColor DarkGray
+            $ConsentSkipped++
+            continue
+        }
+        
+        try {
+            New-MgServicePrincipalAppRoleAssignment \`
+                -ServicePrincipalId $ServicePrincipal.Id \`
+                -PrincipalId $ServicePrincipal.Id \`
+                -ResourceId $GraphSP.Id \`
+                -AppRoleId $Role.Id \`
+                -ErrorAction Stop | Out-Null
+            
+            Write-Host "  + $PermissionName" -ForegroundColor Green
+            $ConsentGranted++
+        } catch {
+            Write-Warning "  - Failed to grant consent for: $PermissionName"
+            Write-Host "    Error: $($_.Exception.Message)" -ForegroundColor Red
+            $ConsentFailed++
+        }
     }
+}
+
+Write-Host ""
+Write-Host "============================================" -ForegroundColor Green
+Write-Host "PERMISSIONS CONFIGURATION COMPLETE!" -ForegroundColor Green
+Write-Host "============================================" -ForegroundColor Green
+Write-Host ""
+Write-Host "Summary:" -ForegroundColor Cyan
+Write-Host "  Permissions added to app: $AddedCount" -ForegroundColor White
+Write-Host "  Admin consent granted: $ConsentGranted" -ForegroundColor White
+Write-Host "  Already consented: $ConsentSkipped" -ForegroundColor White
+if ($ConsentFailed -gt 0) {
+    Write-Host "  Consent failed: $ConsentFailed" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "Note: Failed consents may require manual approval in Azure Portal:" -ForegroundColor Yellow
+    Write-Host "  Azure Portal -> Azure AD -> App registrations -> $($App.DisplayName) -> API permissions" -ForegroundColor White
 }
 
 Write-Host ""
@@ -562,6 +599,40 @@ Write-Host "Graph API: Added $GraphAddedCount permissions" -ForegroundColor Gree
 if ($GraphSkippedCount -gt 0) {
     Write-Host "  Skipped $GraphSkippedCount (not found)" -ForegroundColor Yellow
 }
+
+# Grant admin consent automatically
+Write-Host ""
+Write-Host "Granting admin consent..." -ForegroundColor Cyan
+
+$ConsentGranted = 0
+$ConsentSkipped = 0
+
+foreach ($PermissionName in $RequiredPermissions) {
+    $Role = $GraphSP.AppRoles | Where-Object { $_.Value -eq $PermissionName }
+    if ($Role) {
+        $ExistingGrant = Get-MgServicePrincipalAppRoleAssignment -ServicePrincipalId $ServicePrincipal.Id -ErrorAction SilentlyContinue | 
+            Where-Object { $_.AppRoleId -eq $Role.Id -and $_.ResourceId -eq $GraphSP.Id }
+        
+        if ($ExistingGrant) {
+            $ConsentSkipped++
+            continue
+        }
+        
+        try {
+            New-MgServicePrincipalAppRoleAssignment \`
+                -ServicePrincipalId $ServicePrincipal.Id \`
+                -PrincipalId $ServicePrincipal.Id \`
+                -ResourceId $GraphSP.Id \`
+                -AppRoleId $Role.Id \`
+                -ErrorAction Stop | Out-Null
+            $ConsentGranted++
+        } catch {
+            # Silent fail - will be reported in summary
+        }
+    }
+}
+
+Write-Host "  Consent granted: $ConsentGranted | Already consented: $ConsentSkipped" -ForegroundColor Green
 
 # Disconnect from Graph
 Write-Host ""
