@@ -437,20 +437,32 @@ Write-Host "Go to: Azure Portal → App Registrations → Your App → API Permi
       </div>
 
       {/* Controls */}
-      <Card>
+      <Card className={writeMode ? 'border-orange-500/50 bg-orange-500/5' : ''}>
         <CardContent className="py-4">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
                 <Switch
                   id="write-mode"
                   checked={writeMode}
                   onCheckedChange={setWriteMode}
                 />
-                <Label htmlFor="write-mode" className="cursor-pointer">
-                  {writeMode ? 'Export + Import (Read-Write)' : 'Export Only (Read)'}
-                </Label>
+                <div>
+                  <Label htmlFor="write-mode" className="cursor-pointer font-medium">
+                    {writeMode ? 'Export + Import (Read-Write)' : 'Export Only (Read)'}
+                  </Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {writeMode 
+                      ? 'Shows ReadWrite permissions & Contributor role for Azure' 
+                      : 'Shows Read permissions & Reader role for Azure'}
+                  </p>
+                </div>
               </div>
+              {writeMode && (
+                <Badge variant="outline" className="border-orange-500/50 text-orange-600 bg-orange-500/10">
+                  Import/Restore requires Contributor
+                </Badge>
+              )}
             </div>
             
             <div className="flex items-center gap-2">
