@@ -7,6 +7,7 @@ const corsHeaders = {
 };
 
 interface DeployRequest {
+  action?: 'deploy' | 'rollback';
   deploymentId: string;
   resultId: string;
   tenantConnectionId: string;
@@ -15,14 +16,27 @@ interface DeployRequest {
   resourceTypes: string[];
 }
 
+interface RollbackRequest {
+  action: 'rollback';
+  resultId: string;
+  tenantConnectionId: string;
+}
+
 interface PolicyChange {
   resourceType: string;
-  action: 'create' | 'update' | 'delete' | 'skip';
+  action: 'create' | 'update' | 'delete' | 'skip' | 'rollback';
   resourceId?: string;
   resourceName?: string;
   currentValue?: unknown;
   newValue?: unknown;
+  originalValue?: unknown;
   reason?: string;
+}
+
+interface RollbackItem {
+  resourceType: string;
+  resourceId: string;
+  originalValue: Record<string, unknown>;
 }
 
 async function getGraphAccessToken(clientId: string, clientSecret: string, tenantId: string): Promise<string> {
@@ -118,6 +132,73 @@ async function updateResource(accessToken: string, endpoint: string, id: string,
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
+}
+
+async function deleteResource(accessToken: string, endpoint: string, id: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const response = await fetch(`https://graph.microsoft.com/v1.0/${endpoint}/${id}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (response.ok || response.status === 204) {
+      return { success: true };
+    } else {
+      const error = await response.text();
+      return { success: false, error };
+    }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
+
+async function rollbackDeployment(
+  accessToken: string,
+  rollbackData: RollbackItem[]
+): Promise<{ changes: PolicyChange[]; success: boolean; errors: string[] }> {
+  const changes: PolicyChange[] = [];
+  const errors: string[] = [];
+
+  for (const item of rollbackData) {
+    const endpoint = getEndpointForResourceType(item.resourceType);
+    const resourceName = (item.originalValue.displayName || item.originalValue.name || item.resourceId) as string;
+
+    try {
+      // For updates, restore the original value
+      const result = await updateResource(accessToken, endpoint, item.resourceId, item.originalValue);
+
+      if (result.success) {
+        changes.push({
+          resourceType: item.resourceType,
+          action: 'rollback',
+          resourceId: item.resourceId,
+          resourceName,
+          originalValue: item.originalValue,
+          reason: 'Rolled back to original configuration',
+        });
+      } else {
+        errors.push(`Failed to rollback ${resourceName}: ${result.error}`);
+        changes.push({
+          resourceType: item.resourceType,
+          action: 'rollback',
+          resourceId: item.resourceId,
+          resourceName,
+          reason: `Rollback failed: ${result.error}`,
+        });
+      }
+    } catch (rollbackError) {
+      errors.push(`Error rolling back ${resourceName}: ${rollbackError instanceof Error ? rollbackError.message : 'Unknown error'}`);
+    }
+  }
+
+  return {
+    changes,
+    success: errors.length === 0,
+    errors,
+  };
 }
 
 function getEndpointForResourceType(resourceType: string): string {
@@ -251,8 +332,111 @@ serve(async (req) => {
       );
     }
 
-    const body: DeployRequest = await req.json();
-    console.log('Deploying policy:', body.deploymentId, 'to tenant:', body.tenantConnectionId, 'dry-run:', body.dryRun);
+    const body = await req.json();
+    const action = body.action || 'deploy';
+
+    // Handle rollback action
+    if (action === 'rollback') {
+      const { resultId, tenantConnectionId } = body as RollbackRequest;
+      console.log('Rolling back deployment result:', resultId);
+
+      // Get the deployment result with rollback data
+      const { data: deployResult, error: resultError } = await supabase
+        .from('deployment_results')
+        .select('rollback_data, deployment_id')
+        .eq('id', resultId)
+        .single();
+
+      if (resultError || !deployResult || !deployResult.rollback_data) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'No rollback data available' }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Update status to running
+      await supabase
+        .from('deployment_results')
+        .update({ status: 'running', started_at: new Date().toISOString() })
+        .eq('id', resultId);
+
+      // Get credentials
+      const { data: credentials, error: credError } = await supabase.rpc('get_decrypted_credential', {
+        p_tenant_connection_id: tenantConnectionId,
+        p_user_id: user.id,
+      });
+
+      if (credError || !credentials || credentials.length === 0) {
+        await supabase
+          .from('deployment_results')
+          .update({ status: 'failed', error_message: 'No credentials found', completed_at: new Date().toISOString() })
+          .eq('id', resultId);
+
+        return new Response(
+          JSON.stringify({ success: false, error: 'No credentials found' }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const cred = credentials[0];
+
+      try {
+        const accessToken = await getGraphAccessToken(cred.client_id, cred.client_secret, cred.tenant_id);
+        const rollbackItems = deployResult.rollback_data as RollbackItem[];
+        const result = await rollbackDeployment(accessToken, rollbackItems);
+
+        // Update the result
+        await supabase
+          .from('deployment_results')
+          .update({
+            status: result.success ? 'rolled_back' : 'failed',
+            completed_at: new Date().toISOString(),
+            applied_changes: {
+              rollback: true,
+              changes: result.changes,
+              errors: result.errors,
+            },
+            rollback_data: null, // Clear rollback data after successful rollback
+            error_message: result.errors.length > 0 ? result.errors.join('; ') : null,
+          })
+          .eq('id', resultId);
+
+        // Update deployment status
+        await supabase
+          .from('policy_deployments')
+          .update({ status: 'rolled_back' })
+          .eq('id', deployResult.deployment_id);
+
+        return new Response(
+          JSON.stringify({
+            success: result.success,
+            action: 'rollback',
+            changes: result.changes,
+            errors: result.errors,
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      } catch (rollbackError) {
+        console.error('Rollback error:', rollbackError);
+        await supabase
+          .from('deployment_results')
+          .update({
+            status: 'failed',
+            error_message: rollbackError instanceof Error ? rollbackError.message : 'Rollback failed',
+            completed_at: new Date().toISOString(),
+          })
+          .eq('id', resultId);
+
+        return new Response(
+          JSON.stringify({ success: false, error: rollbackError instanceof Error ? rollbackError.message : 'Rollback failed' }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
+    // Standard deployment
+    const deployBody = body as DeployRequest;
+    console.log('Deploying policy:', deployBody.deploymentId, 'to tenant:', deployBody.tenantConnectionId, 'dry-run:', deployBody.dryRun);
 
     // Update result status to running
     await supabase
@@ -261,11 +445,11 @@ serve(async (req) => {
         status: 'running',
         started_at: new Date().toISOString(),
       })
-      .eq('id', body.resultId);
+      .eq('id', deployBody.resultId);
 
     // Get credentials for the tenant
     const { data: credentials, error: credError } = await supabase.rpc('get_decrypted_credential', {
-      p_tenant_connection_id: body.tenantConnectionId,
+      p_tenant_connection_id: deployBody.tenantConnectionId,
       p_user_id: user.id,
     });
 
@@ -277,7 +461,7 @@ serve(async (req) => {
           error_message: 'No credentials found for tenant',
           completed_at: new Date().toISOString(),
         })
-        .eq('id', body.resultId);
+        .eq('id', deployBody.resultId);
 
       return new Response(
         JSON.stringify({ success: false, error: 'No credentials found' }),
@@ -298,9 +482,9 @@ serve(async (req) => {
       // Analyze and optionally deploy policies
       const result = await analyzeAndDeployPolicy(
         accessToken,
-        body.policyData,
-        body.resourceTypes,
-        body.dryRun
+        deployBody.policyData,
+        deployBody.resourceTypes,
+        deployBody.dryRun
       );
 
       // Update result with findings
@@ -309,7 +493,7 @@ serve(async (req) => {
         completed_at: new Date().toISOString(),
       };
 
-      if (body.dryRun) {
+      if (deployBody.dryRun) {
         updateData.dry_run_result = {
           changes: result.changes,
           summary: {
@@ -347,13 +531,13 @@ serve(async (req) => {
       await supabase
         .from('deployment_results')
         .update(updateData)
-        .eq('id', body.resultId);
+        .eq('id', deployBody.resultId);
 
       // Update deployment progress
       const { data: allResults } = await supabase
         .from('deployment_results')
         .select('status')
-        .eq('deployment_id', body.deploymentId);
+        .eq('deployment_id', deployBody.deploymentId);
 
       const completed = allResults?.filter(r => r.status === 'completed').length || 0;
       const failed = allResults?.filter(r => r.status === 'failed').length || 0;
@@ -372,14 +556,14 @@ serve(async (req) => {
       await supabase
         .from('policy_deployments')
         .update(deploymentUpdate)
-        .eq('id', body.deploymentId);
+        .eq('id', deployBody.deploymentId);
 
       console.log('Deployment result:', result.success ? 'success' : 'failed', 'changes:', result.changes.length);
 
       return new Response(
         JSON.stringify({
           success: result.success,
-          dryRun: body.dryRun,
+          dryRun: deployBody.dryRun,
           changes: result.changes,
           errors: result.errors,
         }),
@@ -396,7 +580,7 @@ serve(async (req) => {
           error_message: deployError instanceof Error ? deployError.message : 'Unknown error',
           completed_at: new Date().toISOString(),
         })
-        .eq('id', body.resultId);
+        .eq('id', deployBody.resultId);
 
       return new Response(
         JSON.stringify({

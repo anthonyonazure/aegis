@@ -56,7 +56,7 @@ import {
 import { getCustomers, getTenantGroups, getTenantConnectionsByCustomer, getTenantConnectionsByGroup } from '@/lib/customerDatabase';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
-import { executeFullDeployment, DeploymentChange, getChangeActionBadgeVariant } from '@/lib/deploymentApi';
+import { executeFullDeployment, rollbackFullDeployment, DeploymentChange, getChangeActionBadgeVariant } from '@/lib/deploymentApi';
 
 interface PolicyDeploymentViewProps {
   templateId?: string;
@@ -72,10 +72,12 @@ export const PolicyDeploymentView = ({ templateId, onBack }: PolicyDeploymentVie
   const [loading, setLoading] = useState(true);
   const [deploying, setDeploying] = useState(false);
   const [executing, setExecuting] = useState(false);
+  const [rollingBack, setRollingBack] = useState(false);
   const [selectedDeployment, setSelectedDeployment] = useState<PolicyDeployment | null>(null);
   const [deploymentResults, setDeploymentResults] = useState<DeploymentResult[]>([]);
   const [executionProgress, setExecutionProgress] = useState({ current: 0, total: 0, tenant: '' });
   const [showChangesDialog, setShowChangesDialog] = useState(false);
+  const [showRollbackDialog, setShowRollbackDialog] = useState(false);
   const [selectedResultChanges, setSelectedResultChanges] = useState<DeploymentChange[]>([]);
   
   // Form state
@@ -308,6 +310,61 @@ export const PolicyDeploymentView = ({ templateId, onBack }: PolicyDeploymentVie
     await handleExecuteDeployment(selectedDeployment);
   };
 
+  const handleRollback = async () => {
+    if (!selectedDeployment) return;
+
+    // Check if there's rollback data available
+    const hasRollbackData = deploymentResults.some(r => 
+      r.rollbackData && Array.isArray(r.rollbackData) && r.rollbackData.length > 0
+    );
+    
+    if (!hasRollbackData) {
+      toast({
+        title: 'No Rollback Data',
+        description: 'This deployment has no changes that can be rolled back.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setShowRollbackDialog(false);
+
+    try {
+      setRollingBack(true);
+
+      const result = await rollbackFullDeployment(
+        selectedDeployment.id,
+        (completed, total, tenant) => {
+          setExecutionProgress({ current: completed + 1, total, tenant });
+        }
+      );
+
+      toast({
+        title: 'Rollback Complete',
+        description: `${result.completed} restored, ${result.failed} failed`,
+        variant: result.failed > 0 ? 'destructive' : 'default',
+      });
+
+      loadData();
+      loadDeploymentResults(selectedDeployment.id);
+
+    } catch (error) {
+      toast({
+        title: 'Rollback Error',
+        description: error instanceof Error ? error.message : 'Failed to rollback deployment',
+        variant: 'destructive',
+      });
+    } finally {
+      setRollingBack(false);
+      setExecutionProgress({ current: 0, total: 0, tenant: '' });
+    }
+  };
+
+  const canRollback = selectedDeployment && 
+    !selectedDeployment.dryRun && 
+    selectedDeployment.status === 'completed' &&
+    deploymentResults.some(r => r.rollbackData && Array.isArray(r.rollbackData) && r.rollbackData.length > 0);
+
   const viewResultChanges = (result: DeploymentResult) => {
     const changes = (result.dryRunResult?.changes || result.appliedChanges?.changes || []) as DeploymentChange[];
     setSelectedResultChanges(changes);
@@ -527,13 +584,15 @@ export const PolicyDeploymentView = ({ templateId, onBack }: PolicyDeploymentVie
           )}
 
           {/* Execution Progress */}
-          {executing && (
-            <Card className="glass-panel border-primary">
+          {(executing || rollingBack) && (
+            <Card className={cn("glass-panel", rollingBack ? "border-warning" : "border-primary")}>
               <CardContent className="p-6">
                 <div className="flex items-center gap-4 mb-4">
-                  <Loader2 className="w-8 h-8 text-primary animate-spin" />
+                  <Loader2 className={cn("w-8 h-8 animate-spin", rollingBack ? "text-warning" : "text-primary")} />
                   <div>
-                    <h3 className="font-semibold">Executing Deployment...</h3>
+                    <h3 className="font-semibold">
+                      {rollingBack ? 'Rolling Back Deployment...' : 'Executing Deployment...'}
+                    </h3>
                     <p className="text-sm text-muted-foreground">
                       Processing: {executionProgress.tenant}
                     </p>
@@ -548,7 +607,7 @@ export const PolicyDeploymentView = ({ templateId, onBack }: PolicyDeploymentVie
           )}
 
           {/* Deployment Results */}
-          {selectedDeployment && !executing && (
+          {selectedDeployment && !executing && !rollingBack && (
             <Card className="glass-panel">
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -562,6 +621,17 @@ export const PolicyDeploymentView = ({ templateId, onBack }: PolicyDeploymentVie
                     <Badge className={DEPLOYMENT_STATUS_CONFIG[selectedDeployment.status].color}>
                       {DEPLOYMENT_STATUS_CONFIG[selectedDeployment.status].label}
                     </Badge>
+                    {canRollback && (
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => setShowRollbackDialog(true)}
+                        className="text-warning border-warning hover:bg-warning/10"
+                      >
+                        <RotateCcw className="w-4 h-4 mr-1" />
+                        Rollback
+                      </Button>
+                    )}
                     {(selectedDeployment.status === 'completed' || selectedDeployment.status === 'failed') && (
                       <Button variant="outline" size="sm" onClick={handleRerunDeployment}>
                         <RefreshCw className="w-4 h-4 mr-1" />
@@ -772,6 +842,37 @@ export const PolicyDeploymentView = ({ templateId, onBack }: PolicyDeploymentVie
               )}
             </div>
           </ScrollArea>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rollback Confirmation Dialog */}
+      <Dialog open={showRollbackDialog} onOpenChange={setShowRollbackDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-warning" />
+              Confirm Rollback
+            </DialogTitle>
+            <DialogDescription>
+              This will restore the original configurations for all updated policies. 
+              This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="bg-warning/10 border border-warning/20 rounded-lg p-4 my-4">
+            <p className="text-sm text-muted-foreground">
+              <strong>{deploymentResults.filter(r => r.rollbackData && Array.isArray(r.rollbackData) && r.rollbackData.length > 0).length}</strong> tenant(s) 
+              have changes that can be rolled back.
+            </p>
+          </div>
+          <div className="flex gap-3 justify-end">
+            <Button variant="outline" onClick={() => setShowRollbackDialog(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleRollback}>
+              <RotateCcw className="w-4 h-4 mr-2" />
+              Rollback Changes
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
