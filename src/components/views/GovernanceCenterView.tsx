@@ -448,13 +448,51 @@ export function GovernanceCenterView({ onNavigate, onDeployPolicy }: GovernanceC
     }
   };
 
-  // Combine dynamic actions with static fallbacks
+  // Generate dynamic licensing actions based on current prices
+  const dynamicLicensingActions = useMemo((): ActionItem[] => {
+    const potentialSavings = stats.licensesByProduct.reduce((sum, lic) => {
+      return sum + (lic.available * lic.monthlyPrice);
+    }, 0);
+    
+    return [
+      {
+        id: 'optimize-licenses',
+        title: 'Optimize license assignments',
+        description: `${Math.floor(stats.unusedLicenses * 0.7)} licenses assigned to users who only use basic features.`,
+        category: 'licensing',
+        severity: 'low',
+        impact: `Potential savings of $${Math.floor(potentialSavings * 0.6).toLocaleString()}/month`,
+        effort: 'medium',
+        actionType: 'review',
+        policyTemplateId: 'License Optimization Policy',
+        reportTemplateId: 'lic-e5-usage',
+      },
+      {
+        id: 'reclaim-unused-licenses',
+        title: 'Reclaim unused licenses',
+        description: `${stats.unusedLicenses} licenses assigned to inactive users (no sign-in 60+ days).`,
+        category: 'licensing',
+        severity: 'medium',
+        impact: `Potential savings of $${potentialSavings.toLocaleString()}/month`,
+        effort: 'low',
+        actionType: 'remediate',
+        policyTemplateId: 'License Optimization Policy',
+        reportTemplateId: 'lic-inactive-users',
+      },
+    ];
+  }, [stats.licensesByProduct, stats.unusedLicenses]);
+
+  // Combine dynamic actions with static fallbacks, but use dynamic licensing actions
   const allActions = useMemo(() => {
     if (dynamicActions.length > 0) {
-      return dynamicActions;
+      // Replace licensing actions with our dynamic ones
+      const nonLicensingActions = dynamicActions.filter(a => a.category !== 'licensing');
+      return [...nonLicensingActions, ...dynamicLicensingActions];
     }
-    return GOVERNANCE_ACTIONS;
-  }, [dynamicActions]);
+    // For static actions, replace licensing with dynamic
+    const staticNonLicensing = GOVERNANCE_ACTIONS.filter(a => a.category !== 'licensing');
+    return [...staticNonLicensing, ...dynamicLicensingActions];
+  }, [dynamicActions, dynamicLicensingActions]);
 
   const actionsByCategory = useMemo(() => {
     return {
