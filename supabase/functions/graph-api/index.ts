@@ -180,6 +180,9 @@ const GRAPH_ENDPOINTS: Record<string, { endpoint: string; useBeta?: boolean; cre
 
   // Copilot
   'copilot/copilot-licenses': { endpoint: '/subscribedSkus', useBeta: false, supportsImport: false }, // Filter for Copilot SKUs client-side
+  'copilot/copilot-usage': { endpoint: '/reports/getMicrosoft365CopilotUsageUserDetail(period=\'D30\')', useBeta: true, supportsImport: false },
+  'copilot/copilot-readiness': { endpoint: '/deviceManagement/userExperienceAnalyticsDeviceScopes', useBeta: true, supportsImport: false },
+  'copilot/copilot-plugins': { endpoint: '/appCatalogs/teamsApps?$filter=distributionMethod eq \'organization\'', useBeta: false, supportsImport: false },
 };
 
 // Prepare resource data for import by removing read-only properties
