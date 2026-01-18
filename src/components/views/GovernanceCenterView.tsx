@@ -205,8 +205,10 @@ const CHART_COLORS = ['#22c55e', '#f59e0b', '#ef4444', '#6b7280'];
 
 export function GovernanceCenterView({ onNavigate, onDeployPolicy }: GovernanceCenterViewProps) {
   const { toast } = useToast();
-  const { selectedCustomerId, customers } = useTenant();
+  const { selectedCustomerId, selectedTenantId, customers, tenants } = useTenant();
   const [loading, setLoading] = useState(true);
+  const [fetchingLiveData, setFetchingLiveData] = useState(false);
+  const [dynamicActions, setDynamicActions] = useState<ActionItem[]>([]);
   const [stats, setStats] = useState<GovernanceStats>({
     totalTenants: 0,
     healthyTenants: 0,
@@ -231,7 +233,7 @@ export function GovernanceCenterView({ onNavigate, onDeployPolicy }: GovernanceC
 
   useEffect(() => {
     loadGovernanceData();
-  }, [selectedCustomerId]);
+  }, [selectedCustomerId, selectedTenantId]);
 
   const loadGovernanceData = async () => {
     setLoading(true);
@@ -243,13 +245,14 @@ export function GovernanceCenterView({ onNavigate, onDeployPolicy }: GovernanceC
       let tenantQuery = supabase
         .from('tenant_connections')
         .select('*')
-        .eq('user_id', user.id);
+        .eq('user_id', user.id)
+        .eq('status', 'connected');
       
       if (selectedCustomerId) {
         tenantQuery = tenantQuery.eq('customer_id', selectedCustomerId);
       }
       
-      const { data: tenants } = await tenantQuery;
+      const { data: tenantConnections } = await tenantQuery;
 
       // Load compliance results for scores
       const { data: complianceData } = await supabase
@@ -268,8 +271,8 @@ export function GovernanceCenterView({ onNavigate, onDeployPolicy }: GovernanceC
         .limit(1);
 
       // Calculate stats
-      const totalTenants = tenants?.length || 0;
-      const healthyTenants = tenants?.filter(t => t.health_status === 'healthy').length || 0;
+      const totalTenants = tenantConnections?.length || 0;
+      const healthyTenants = tenantConnections?.filter(t => t.health_status === 'healthy').length || 0;
       
       // Calculate compliance score from results
       const avgComplianceScore = complianceData?.length 
@@ -281,31 +284,37 @@ export function GovernanceCenterView({ onNavigate, onDeployPolicy }: GovernanceC
           }, 0) / complianceData.length)
         : 75; // Default demo value
       
-      // Mock secure score for demo
-      const avgSecureScore = 68; // Demo value
-
-      // Mock some data for demo purposes
-      const totalUsers = billingData?.[0]?.total_users || Math.floor(Math.random() * 500) + 100;
-      const totalLicenses = Math.floor(totalUsers * 1.2);
+      // Default values (will be overwritten by live data)
+      const totalUsers = billingData?.[0]?.total_users || 0;
+      const totalLicenses = Math.floor(totalUsers * 1.2) || 0;
       const assignedLicenses = totalUsers;
       
       setStats({
         totalTenants,
         healthyTenants,
         avgComplianceScore,
-        avgSecureScore,
+        avgSecureScore: 0,
         licenseUtilization: totalLicenses > 0 ? Math.round((assignedLicenses / totalLicenses) * 100) : 0,
-        activeAlerts: Math.floor(Math.random() * 10) + 2,
+        activeAlerts: 0,
         pendingActions: GOVERNANCE_ACTIONS.length,
         totalUsers,
-        adminUsers: Math.floor(totalUsers * 0.05),
-        guestUsers: Math.floor(totalUsers * 0.15),
-        mfaEnabled: Math.floor(totalUsers * 0.85),
-        riskyUsers: Math.floor(Math.random() * 5),
+        adminUsers: 0,
+        guestUsers: 0,
+        mfaEnabled: 0,
+        riskyUsers: 0,
         totalLicenses,
         assignedLicenses,
         unusedLicenses: totalLicenses - assignedLicenses,
       });
+
+      // If we have a selected tenant or can pick the first connected one, fetch live data
+      const targetTenantId = selectedTenantId || tenantConnections?.[0]?.id;
+      if (targetTenantId) {
+        await fetchLiveGovernanceMetrics(targetTenantId);
+      } else {
+        // Use static actions if no tenant connected
+        setDynamicActions([]);
+      }
     } catch (error) {
       console.error('Failed to load governance data:', error);
       toast({
@@ -318,18 +327,82 @@ export function GovernanceCenterView({ onNavigate, onDeployPolicy }: GovernanceC
     }
   };
 
+  const fetchLiveGovernanceMetrics = async (tenantConnectionId: string) => {
+    setFetchingLiveData(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('fetch-governance-metrics', {
+        body: { tenantConnectionId },
+      });
+
+      if (error) {
+        console.error('Failed to fetch live governance metrics:', error);
+        // Fall back to static actions
+        setDynamicActions([]);
+        return;
+      }
+
+      if (data?.success && data.metrics) {
+        const metrics = data.metrics;
+        
+        // Update stats with live data
+        setStats(prev => ({
+          ...prev,
+          avgSecureScore: metrics.security.maxSecureScore > 0 
+            ? Math.round((metrics.security.secureScore / metrics.security.maxSecureScore) * 100)
+            : 0,
+          totalUsers: metrics.identity.totalUsers,
+          adminUsers: metrics.identity.adminUsers,
+          guestUsers: metrics.identity.guestUsers,
+          mfaEnabled: metrics.identity.mfaEnabledUsers,
+          riskyUsers: metrics.identity.riskyUsers,
+          totalLicenses: metrics.licensing.totalLicenses,
+          assignedLicenses: metrics.licensing.assignedLicenses,
+          unusedLicenses: metrics.licensing.unusedLicenses,
+          licenseUtilization: metrics.licensing.utilizationRate,
+          activeAlerts: metrics.security.riskySignInsCount,
+          pendingActions: data.actions?.length || GOVERNANCE_ACTIONS.length,
+        }));
+
+        // Use dynamic actions from API
+        if (data.actions && data.actions.length > 0) {
+          setDynamicActions(data.actions);
+        } else {
+          setDynamicActions([]);
+        }
+
+        toast({
+          title: 'Live Data Loaded',
+          description: `Fetched real-time metrics from Microsoft Graph`,
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching live metrics:', error);
+      setDynamicActions([]);
+    } finally {
+      setFetchingLiveData(false);
+    }
+  };
+
+  // Combine dynamic actions with static fallbacks
+  const allActions = useMemo(() => {
+    if (dynamicActions.length > 0) {
+      return dynamicActions;
+    }
+    return GOVERNANCE_ACTIONS;
+  }, [dynamicActions]);
+
   const actionsByCategory = useMemo(() => {
     return {
-      security: GOVERNANCE_ACTIONS.filter(a => a.category === 'security'),
-      compliance: GOVERNANCE_ACTIONS.filter(a => a.category === 'compliance'),
-      identity: GOVERNANCE_ACTIONS.filter(a => a.category === 'identity'),
-      licensing: GOVERNANCE_ACTIONS.filter(a => a.category === 'licensing'),
+      security: allActions.filter(a => a.category === 'security'),
+      compliance: allActions.filter(a => a.category === 'compliance'),
+      identity: allActions.filter(a => a.category === 'identity'),
+      licensing: allActions.filter(a => a.category === 'licensing'),
     };
-  }, []);
+  }, [allActions]);
 
   const criticalActions = useMemo(() => {
-    return GOVERNANCE_ACTIONS.filter(a => a.severity === 'critical' || a.severity === 'high');
-  }, []);
+    return allActions.filter(a => a.severity === 'critical' || a.severity === 'high');
+  }, [allActions]);
 
   const complianceChartData = [
     { name: 'Passed', value: stats.avgComplianceScore, fill: '#22c55e' },
@@ -437,12 +510,26 @@ export function GovernanceCenterView({ onNavigate, onDeployPolicy }: GovernanceC
           <h1 className="text-2xl font-bold text-foreground">Governance Center</h1>
           <p className="text-muted-foreground">
             Unified view of compliance, security, identity, and licensing across your tenants
+            {dynamicActions.length > 0 && (
+              <Badge variant="outline" className="ml-2 text-xs">
+                <Activity className="w-3 h-3 mr-1" />
+                Live Data
+              </Badge>
+            )}
           </p>
         </div>
-        <Button variant="outline" onClick={loadGovernanceData}>
-          <RefreshCw className="w-4 h-4 mr-2" />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          {fetchingLiveData && (
+            <Badge variant="secondary" className="animate-pulse">
+              <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
+              Fetching live data...
+            </Badge>
+          )}
+          <Button variant="outline" onClick={loadGovernanceData} disabled={fetchingLiveData}>
+            <RefreshCw className={`w-4 h-4 mr-2 ${fetchingLiveData ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Top KPI Cards */}
