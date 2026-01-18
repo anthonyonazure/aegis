@@ -479,29 +479,31 @@ export function PreflightCheckDialog({
                   </div>
                   
                   {liveResults && !liveResults.success && (
-                    <div className="p-3 space-y-2">
-                      {liveResults.results.filter(r => !r.success).map((res) => (
-                        <div 
-                          key={res.resourceId}
-                          className="flex items-start gap-2 p-2 rounded bg-destructive/5 text-sm"
-                        >
-                          <XCircle className="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" />
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium">{res.resourceName}</span>
-                              {res.statusCode && (
-                                <Badge variant="outline" className="text-[10px] text-destructive border-destructive/30">
-                                  {res.statusCode}
-                                </Badge>
-                              )}
+                    <ScrollArea className="max-h-48">
+                      <div className="p-3 space-y-2">
+                        {liveResults.results.filter(r => !r.success).map((res) => (
+                          <div 
+                            key={res.resourceId}
+                            className="flex items-start gap-2 p-2 rounded bg-destructive/5 text-sm"
+                          >
+                            <XCircle className="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium">{res.resourceName}</span>
+                                {res.statusCode && (
+                                  <Badge variant="outline" className="text-[10px] text-destructive border-destructive/30">
+                                    {res.statusCode}
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                {getErrorGuidance(res)}
+                              </p>
                             </div>
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                              {getErrorGuidance(res)}
-                            </p>
                           </div>
-                        </div>
-                      ))}
-                    </div>
+                        ))}
+                      </div>
+                    </ScrollArea>
                   )}
                 </motion.div>
               )}
