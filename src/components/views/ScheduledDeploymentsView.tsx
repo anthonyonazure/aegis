@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   Select,
   SelectContent,
@@ -41,6 +42,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
+import { useTenant } from '@/contexts/TenantContext';
 import {
   ScheduledDeploymentConfig,
   ScheduledDeploymentRun,
@@ -86,7 +88,9 @@ interface TenantGroup {
 }
 
 export const ScheduledDeploymentsView = () => {
+  const [allConfigs, setAllConfigs] = useState<ScheduledDeploymentConfig[]>([]);
   const [configs, setConfigs] = useState<ScheduledDeploymentConfig[]>([]);
+  const [allRuns, setAllRuns] = useState<ScheduledDeploymentRun[]>([]);
   const [runs, setRuns] = useState<ScheduledDeploymentRun[]>([]);
   const [templates, setTemplates] = useState<PolicyTemplate[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -100,6 +104,9 @@ export const ScheduledDeploymentsView = () => {
   const [selectedConfigRuns, setSelectedConfigRuns] = useState<ScheduledDeploymentRun[]>([]);
   const [viewingConfig, setViewingConfig] = useState<ScheduledDeploymentConfig | null>(null);
   const [isRunning, setIsRunning] = useState<string | null>(null);
+  
+  const { selectedCustomerId, customers: tenantCustomers } = useTenant();
+  const selectedCustomer = tenantCustomers.find(c => c.id === selectedCustomerId);
 
   // Form state
   const [formName, setFormName] = useState('');
@@ -127,6 +134,24 @@ export const ScheduledDeploymentsView = () => {
     loadTenants();
   }, [formTargetType, formCustomerId]);
 
+  // Filter configs and runs when customer selection changes
+  useEffect(() => {
+    if (!selectedCustomerId) {
+      setConfigs(allConfigs);
+      setRuns(allRuns);
+    } else {
+      // Filter configs that target the selected customer
+      const filteredConfigs = allConfigs.filter(c => 
+        c.target_type === 'customer' && c.target_customer_id === selectedCustomerId
+      );
+      setConfigs(filteredConfigs);
+      
+      // Filter runs for the filtered configs
+      const configIds = new Set(filteredConfigs.map(c => c.id));
+      setRuns(allRuns.filter(r => configIds.has(r.scheduled_config_id)));
+    }
+  }, [selectedCustomerId, allConfigs, allRuns]);
+
   const loadData = async () => {
     try {
       setIsLoading(true);
@@ -136,9 +161,11 @@ export const ScheduledDeploymentsView = () => {
         getCustomers(),
         getScheduledDeploymentRuns(),
       ]);
+      setAllConfigs(configsData);
       setConfigs(configsData);
       setTemplates(templatesData);
       setCustomers(customersData);
+      setAllRuns(runsData);
       setRuns(runsData);
     } catch (error) {
       toast({
@@ -338,6 +365,17 @@ export const ScheduledDeploymentsView = () => {
 
   return (
     <div className="space-y-6">
+      {/* Customer Filter Indicator */}
+      {selectedCustomerId && selectedCustomer && (
+        <Alert>
+          <Building2 className="h-4 w-4" />
+          <AlertDescription>
+            Showing scheduled deployments for <strong>{selectedCustomer.name}</strong>. 
+            Clear the customer filter in the sidebar to see all schedules.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
