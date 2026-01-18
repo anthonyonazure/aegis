@@ -26,6 +26,7 @@ import { ReportsView } from '@/components/views/ReportsView';
 import { BillingView } from '@/components/views/BillingView';
 import { TenantHealthDashboardView } from '@/components/views/TenantHealthDashboardView';
 import { SecureScoreDashboardView } from '@/components/views/SecureScoreDashboardView';
+import { AutomatedBackupsView } from '@/components/views/AutomatedBackupsView';
 import { PreflightCheckDialog } from '@/components/PreflightCheckDialog';
 import { RESOURCE_CATEGORIES, ExportFormat } from '@/types/tenant';
 import { filterSupportedResourceIds } from '@/lib/resourceSupport';
@@ -268,6 +269,8 @@ const Index = () => {
         return <AuditView />;
       case 'schedules':
         return <ScheduledExportsView />;
+      case 'automated-backups':
+        return <AutomatedBackupsView />;
       case 'webhooks':
         return <WebhooksView />;
       case 'psa':

@@ -50,6 +50,161 @@ export type Database = {
         }
         Relationships: []
       }
+      automated_backup_configs: {
+        Row: {
+          auto_cleanup: boolean
+          backup_type: string
+          created_at: string
+          description: string | null
+          formats: string[]
+          id: string
+          is_active: boolean
+          last_run_at: string | null
+          last_run_success: boolean | null
+          max_backups: number
+          name: string
+          next_run_at: string | null
+          resource_ids: string[]
+          retention_days: number
+          run_count: number
+          schedule_cron: string
+          schedule_description: string | null
+          target_customer_id: string | null
+          target_group_id: string | null
+          target_tenant_ids: string[] | null
+          target_type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          auto_cleanup?: boolean
+          backup_type?: string
+          created_at?: string
+          description?: string | null
+          formats?: string[]
+          id?: string
+          is_active?: boolean
+          last_run_at?: string | null
+          last_run_success?: boolean | null
+          max_backups?: number
+          name: string
+          next_run_at?: string | null
+          resource_ids?: string[]
+          retention_days?: number
+          run_count?: number
+          schedule_cron?: string
+          schedule_description?: string | null
+          target_customer_id?: string | null
+          target_group_id?: string | null
+          target_tenant_ids?: string[] | null
+          target_type?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          auto_cleanup?: boolean
+          backup_type?: string
+          created_at?: string
+          description?: string | null
+          formats?: string[]
+          id?: string
+          is_active?: boolean
+          last_run_at?: string | null
+          last_run_success?: boolean | null
+          max_backups?: number
+          name?: string
+          next_run_at?: string | null
+          resource_ids?: string[]
+          retention_days?: number
+          run_count?: number
+          schedule_cron?: string
+          schedule_description?: string | null
+          target_customer_id?: string | null
+          target_group_id?: string | null
+          target_tenant_ids?: string[] | null
+          target_type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automated_backup_configs_target_customer_id_fkey"
+            columns: ["target_customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automated_backup_configs_target_group_id_fkey"
+            columns: ["target_group_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      automated_backup_runs: {
+        Row: {
+          completed_at: string | null
+          completed_tenants: number
+          config_id: string
+          created_at: string
+          error_message: string | null
+          expires_at: string | null
+          export_job_ids: string[] | null
+          failed_tenants: number
+          id: string
+          results: Json | null
+          started_at: string | null
+          status: string
+          total_resources: number
+          total_tenants: number
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          completed_tenants?: number
+          config_id: string
+          created_at?: string
+          error_message?: string | null
+          expires_at?: string | null
+          export_job_ids?: string[] | null
+          failed_tenants?: number
+          id?: string
+          results?: Json | null
+          started_at?: string | null
+          status?: string
+          total_resources?: number
+          total_tenants?: number
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          completed_tenants?: number
+          config_id?: string
+          created_at?: string
+          error_message?: string | null
+          expires_at?: string | null
+          export_job_ids?: string[] | null
+          failed_tenants?: number
+          id?: string
+          results?: Json | null
+          started_at?: string | null
+          status?: string
+          total_resources?: number
+          total_tenants?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automated_backup_runs_config_id_fkey"
+            columns: ["config_id"]
+            isOneToOne: false
+            referencedRelation: "automated_backup_configs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       billing_usage: {
         Row: {
           billable_amount: number | null
