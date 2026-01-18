@@ -161,6 +161,10 @@ export const TenantConfigPanel = ({ customer, onBack }: TenantConfigPanelProps) 
     setFormEnvironment('production');
     setFormGroupId(null);
     setEditingTenant(null);
+    // Also reset credentials when resetting tenant form
+    setFormClientId('');
+    setFormClientSecret('');
+    setShowSecret(false);
   };
 
   const resetCredentialsForm = () => {
@@ -207,6 +211,16 @@ export const TenantConfigPanel = ({ customer, onBack }: TenantConfigPanelProps) 
       return;
     }
 
+    // For new tenants, require credentials
+    if (!editingTenant && (!formClientId.trim() || !formClientSecret.trim())) {
+      toast({
+        title: 'Validation Error',
+        description: 'Client ID and Client Secret are required for new tenants',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     try {
       setSaving(true);
       const { data: { user } } = await supabase.auth.getUser();
@@ -226,20 +240,40 @@ export const TenantConfigPanel = ({ customer, onBack }: TenantConfigPanelProps) 
         if (error) throw error;
         toast({ title: 'Success', description: 'Tenant updated successfully' });
       } else {
-        const { error } = await supabase.from('tenant_connections').insert({
-          user_id: user.id,
-          tenant_id: formTenantId.trim(),
-          display_name: formDisplayName.trim() || null,
-          tenant_name: formDisplayName.trim() || null,
-          environment: formEnvironment,
-          customer_id: customer.id,
-          tenant_group_id: formGroupId || null,
-          auth_method: 'service_principal',
-          status: 'disconnected',
-        });
+        // Create tenant connection first
+        const { data: newTenant, error } = await supabase
+          .from('tenant_connections')
+          .insert({
+            user_id: user.id,
+            tenant_id: formTenantId.trim(),
+            display_name: formDisplayName.trim() || null,
+            tenant_name: formDisplayName.trim() || null,
+            environment: formEnvironment,
+            customer_id: customer.id,
+            tenant_group_id: formGroupId || null,
+            auth_method: 'service_principal',
+            status: 'disconnected',
+            client_id: formClientId.trim(),
+          })
+          .select()
+          .single();
 
         if (error) throw error;
-        toast({ title: 'Success', description: 'Tenant added successfully' });
+
+        // Store encrypted credentials
+        await storeEncryptedCredential(
+          newTenant.id,
+          formClientId.trim(),
+          formClientSecret.trim()
+        );
+
+        // Update status to connected
+        await supabase
+          .from('tenant_connections')
+          .update({ status: 'connected' })
+          .eq('id', newTenant.id);
+
+        toast({ title: 'Success', description: 'Tenant connected successfully' });
       }
 
       setDialogOpen(false);
@@ -254,6 +288,55 @@ export const TenantConfigPanel = ({ customer, onBack }: TenantConfigPanelProps) 
       });
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Test connection for new tenant (uses form values directly)
+  const handleTestNewConnection = async () => {
+    if (!formTenantId.trim() || !formClientId.trim() || !formClientSecret.trim()) {
+      toast({
+        title: 'Validation Error',
+        description: 'Please fill in all required fields first',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      setTestingConnection(true);
+
+      const tokenUrl = `https://login.microsoftonline.com/${formTenantId.trim()}/oauth2/v2.0/token`;
+      const params = new URLSearchParams({
+        client_id: formClientId.trim(),
+        client_secret: formClientSecret.trim(),
+        scope: 'https://graph.microsoft.com/.default',
+        grant_type: 'client_credentials',
+      });
+
+      const response = await fetch(tokenUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: params.toString(),
+      });
+
+      if (response.ok) {
+        toast({
+          title: 'Connection Successful',
+          description: 'Successfully authenticated with Microsoft Graph',
+        });
+      } else {
+        const error = await response.json();
+        throw new Error(error.error_description || 'Authentication failed');
+      }
+    } catch (error) {
+      console.error('Connection test failed:', error);
+      toast({
+        title: 'Connection Failed',
+        description: error instanceof Error ? error.message : 'Failed to connect',
+        variant: 'destructive',
+      });
+    } finally {
+      setTestingConnection(false);
     }
   };
 
@@ -575,78 +658,150 @@ export const TenantConfigPanel = ({ customer, onBack }: TenantConfigPanelProps) 
 
       {/* Add/Edit Tenant Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>{editingTenant ? 'Edit Tenant' : 'Add Tenant'}</DialogTitle>
+            <DialogTitle>{editingTenant ? 'Edit Tenant' : 'Add Tenant Connection'}</DialogTitle>
             <DialogDescription>
               {editingTenant
                 ? 'Update the tenant connection details'
-                : 'Add a new tenant connection for this customer'}
+                : 'Enter the Microsoft 365 tenant and service principal credentials'}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="tenantId">Tenant ID *</Label>
-              <Input
-                id="tenantId"
-                value={formTenantId}
-                onChange={(e) => setFormTenantId(e.target.value)}
-                placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                className="bg-secondary/50 font-mono"
-              />
-              <p className="text-xs text-muted-foreground">
-                The Microsoft 365 tenant ID (GUID)
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="displayName">Display Name</Label>
-              <Input
-                id="displayName"
-                value={formDisplayName}
-                onChange={(e) => setFormDisplayName(e.target.value)}
-                placeholder="e.g., Contoso Production"
-                className="bg-secondary/50"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
+            {/* Tenant Details Section */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                <Server className="w-4 h-4" />
+                Tenant Details
+              </div>
+              
               <div className="space-y-2">
-                <Label htmlFor="environment">Environment</Label>
-                <Select value={formEnvironment} onValueChange={setFormEnvironment}>
-                  <SelectTrigger className="bg-secondary/50">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="production">Production</SelectItem>
-                    <SelectItem value="development">Development</SelectItem>
-                    <SelectItem value="staging">Staging</SelectItem>
-                    <SelectItem value="test">Test</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="tenantId">Tenant ID *</Label>
+                <Input
+                  id="tenantId"
+                  value={formTenantId}
+                  onChange={(e) => setFormTenantId(e.target.value)}
+                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                  className="bg-secondary/50 font-mono"
+                />
+                <p className="text-xs text-muted-foreground">
+                  The Microsoft 365 tenant ID (GUID)
+                </p>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="group">Tenant Group</Label>
-                <Select 
-                  value={formGroupId || 'none'} 
-                  onValueChange={(v) => setFormGroupId(v === 'none' ? null : v)}
-                >
-                  <SelectTrigger className="bg-secondary/50">
-                    <SelectValue placeholder="Select group" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">No Group</SelectItem>
-                    {groups.map((group) => (
-                      <SelectItem key={group.id} value={group.id}>
-                        {group.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="displayName">Display Name</Label>
+                <Input
+                  id="displayName"
+                  value={formDisplayName}
+                  onChange={(e) => setFormDisplayName(e.target.value)}
+                  placeholder="e.g., Contoso Production"
+                  className="bg-secondary/50"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="environment">Environment</Label>
+                  <Select value={formEnvironment} onValueChange={setFormEnvironment}>
+                    <SelectTrigger className="bg-secondary/50">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="production">Production</SelectItem>
+                      <SelectItem value="development">Development</SelectItem>
+                      <SelectItem value="staging">Staging</SelectItem>
+                      <SelectItem value="test">Test</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="group">Tenant Group</Label>
+                  <Select 
+                    value={formGroupId || 'none'} 
+                    onValueChange={(v) => setFormGroupId(v === 'none' ? null : v)}
+                  >
+                    <SelectTrigger className="bg-secondary/50">
+                      <SelectValue placeholder="Select group" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No Group</SelectItem>
+                      {groups.map((group) => (
+                        <SelectItem key={group.id} value={group.id}>
+                          {group.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
+
+            {/* App Registration Section - Only show for new tenants */}
+            {!editingTenant && (
+              <>
+                <div className="border-t pt-4">
+                  <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground mb-4">
+                    <Key className="w-4 h-4" />
+                    App Registration (Service Principal)
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="newClientId">Application (Client) ID *</Label>
+                      <Input
+                        id="newClientId"
+                        value={formClientId}
+                        onChange={(e) => setFormClientId(e.target.value)}
+                        placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                        className="bg-secondary/50 font-mono"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="newClientSecret">Client Secret *</Label>
+                      <div className="relative">
+                        <Input
+                          id="newClientSecret"
+                          type={showSecret ? 'text' : 'password'}
+                          value={formClientSecret}
+                          onChange={(e) => setFormClientSecret(e.target.value)}
+                          placeholder="Enter client secret"
+                          className="bg-secondary/50 pr-10"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowSecret(!showSecret)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        >
+                          {showSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Credentials are encrypted and stored securely
+                      </p>
+                    </div>
+
+                    <Button
+                      variant="outline"
+                      type="button"
+                      className="w-full gap-2"
+                      onClick={handleTestNewConnection}
+                      disabled={testingConnection || !formTenantId || !formClientId || !formClientSecret}
+                    >
+                      {testingConnection ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <RefreshCw className="w-4 h-4" />
+                      )}
+                      Test Connection
+                    </Button>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
           <DialogFooter>
@@ -655,7 +810,7 @@ export const TenantConfigPanel = ({ customer, onBack }: TenantConfigPanelProps) 
             </Button>
             <Button onClick={handleSaveTenant} disabled={saving}>
               {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              {editingTenant ? 'Save Changes' : 'Add Tenant'}
+              {editingTenant ? 'Save Changes' : 'Add & Connect Tenant'}
             </Button>
           </DialogFooter>
         </DialogContent>
