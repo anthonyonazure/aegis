@@ -383,6 +383,7 @@ const Index = () => {
         onOpenChange={setShowPreflightCheck}
         accessToken={preflightToken}
         selectedResources={preflightResources}
+        tenantConnectionId={connectionId}
         onProceed={handlePreflightProceed}
         onCancel={handlePreflightCancel}
         onRefreshToken={refreshToken}

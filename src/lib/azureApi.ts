@@ -135,6 +135,43 @@ export async function listAzureSubscriptions(
   }
 }
 
+export async function getAzureTokenFromStoredCredentials(
+  tenantConnectionId: string
+): Promise<AzureConnectionResult> {
+  try {
+    const { data, error } = await supabase.functions.invoke('azure-api', {
+      body: {
+        action: 'get-token-from-stored',
+        tenantConnectionId,
+      },
+    });
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    if (!data.success) {
+      return { success: false, error: data.error || 'Token request failed' };
+    }
+
+    return {
+      success: true,
+      accessToken: data.accessToken,
+      expiresIn: data.expiresIn,
+      subscriptions: data.subscriptions?.map((sub: any) => ({
+        subscriptionId: sub.subscriptionId,
+        displayName: sub.displayName,
+        state: sub.state,
+      })),
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Token request failed',
+    };
+  }
+}
+
 export async function exportAzureResources(
   accessToken: string,
   subscriptionIds: string[],

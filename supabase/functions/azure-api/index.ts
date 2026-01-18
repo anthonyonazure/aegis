@@ -25,6 +25,11 @@ const ListSubscriptionsFromStoredSchema = z.object({
   tenantConnectionId: z.string().uuid('Invalid tenant connection ID'),
 });
 
+const GetTokenFromStoredSchema = z.object({
+  action: z.literal('get-token-from-stored'),
+  tenantConnectionId: z.string().uuid('Invalid tenant connection ID'),
+});
+
 const ExportRequestSchema = z.object({
   action: z.literal('export'),
   accessToken: z.string().min(1, 'Access token required'),
@@ -346,6 +351,74 @@ serve(async (req) => {
         JSON.stringify({
           success: true,
           subscriptions: subsResult.subscriptions,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Handle get-token-from-stored action (uses stored credentials)
+    if (rawBody.action === 'get-token-from-stored') {
+      const parseResult = GetTokenFromStoredSchema.safeParse(rawBody);
+      if (!parseResult.success) {
+        return new Response(
+          JSON.stringify({ error: 'Invalid request parameters' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const { tenantConnectionId } = parseResult.data;
+
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+      const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+      const supabase = createClient(supabaseUrl, supabaseKey);
+
+      // Get decrypted credentials using the database function
+      const { data: credentials, error: credError } = await supabase
+        .rpc('get_decrypted_credential', {
+          p_tenant_connection_id: tenantConnectionId,
+          p_user_id: userId,
+        });
+
+      if (credError || !credentials || credentials.length === 0) {
+        console.error('Error fetching credentials:', credError);
+        return new Response(
+          JSON.stringify({ success: false, error: 'Could not retrieve stored credentials. Please reconfigure credentials.' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const { client_id, client_secret, tenant_id } = credentials[0];
+
+      // Get Azure ARM token
+      const tokenResult = await getAzureAccessToken(tenant_id, client_id, client_secret);
+
+      if ('error' in tokenResult) {
+        return new Response(
+          JSON.stringify({ success: false, error: tokenResult.error }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // List subscriptions (helps pick the right subscriptionId for RBAC tests)
+      const subsResult = await listSubscriptions(tokenResult.token);
+
+      if ('error' in subsResult) {
+        return new Response(
+          JSON.stringify({ success: false, error: subsResult.error }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          accessToken: tokenResult.token,
+          expiresIn: tokenResult.expiresIn,
+          subscriptions: subsResult.subscriptions.map((s: any) => ({
+            subscriptionId: s.subscriptionId,
+            displayName: s.displayName,
+            state: s.state,
+          })),
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
