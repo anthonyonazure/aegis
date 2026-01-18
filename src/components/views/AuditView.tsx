@@ -13,13 +13,15 @@ import {
   Link,
   AlertTriangle,
   CheckCircle2,
-  XCircle
+  XCircle,
+  Building2
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   Select,
   SelectContent,
@@ -29,6 +31,7 @@ import {
 } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useTenant } from '@/contexts/TenantContext';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { formatAuditAction } from '@/lib/auditLog';
@@ -40,6 +43,7 @@ interface AuditLog {
   resource_id: string | null;
   details: Record<string, unknown>;
   created_at: string;
+  tenant_connection_id: string | null;
 }
 
 const ACTION_ICONS: Record<string, React.ReactNode> = {
@@ -76,10 +80,45 @@ const ACTION_COLORS: Record<string, string> = {
 
 export const AuditView = () => {
   const { toast } = useToast();
+  const { selectedCustomerId, selectedTenantId, customers } = useTenant();
+  const [allLogs, setAllLogs] = useState<AuditLog[]>([]);
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [actionFilter, setActionFilter] = useState<string>('all');
+  const [tenantConnectionIds, setTenantConnectionIds] = useState<string[]>([]);
+
+  // Load tenant connection IDs for the selected customer
+  useEffect(() => {
+    const loadTenantConnections = async () => {
+      if (!selectedCustomerId) {
+        setTenantConnectionIds([]);
+        return;
+      }
+      
+      const { data } = await supabase
+        .from('tenant_connections')
+        .select('id')
+        .eq('customer_id', selectedCustomerId);
+      
+      setTenantConnectionIds((data || []).map(t => t.id));
+    };
+    
+    loadTenantConnections();
+  }, [selectedCustomerId]);
+
+  // Filter logs when selection or allLogs changes
+  useEffect(() => {
+    if (selectedTenantId) {
+      setLogs(allLogs.filter(log => log.tenant_connection_id === selectedTenantId));
+    } else if (selectedCustomerId && tenantConnectionIds.length > 0) {
+      setLogs(allLogs.filter(log => 
+        log.tenant_connection_id && tenantConnectionIds.includes(log.tenant_connection_id)
+      ));
+    } else {
+      setLogs(allLogs);
+    }
+  }, [allLogs, selectedTenantId, selectedCustomerId, tenantConnectionIds]);
 
   useEffect(() => {
     loadLogs();
@@ -95,7 +134,7 @@ export const AuditView = () => {
         .limit(500);
 
       if (error) throw error;
-      setLogs((data || []).map(log => ({
+      setAllLogs((data || []).map(log => ({
         ...log,
         details: (log.details as Record<string, unknown>) || {},
       })));
@@ -110,6 +149,8 @@ export const AuditView = () => {
       setIsLoading(false);
     }
   };
+
+  const selectedCustomerName = customers.find(c => c.id === selectedCustomerId)?.name;
 
   const filteredLogs = logs.filter(log => {
     const matchesSearch = !searchQuery || 
@@ -160,6 +201,19 @@ export const AuditView = () => {
             Track all actions performed in your M365 configuration management
           </p>
         </div>
+
+      {/* Customer/Tenant Filter Alert */}
+      {(selectedCustomerId || selectedTenantId) && (
+        <Alert className="mb-4 border-primary/50 bg-primary/5">
+          <Building2 className="h-4 w-4" />
+          <AlertDescription>
+            {selectedTenantId 
+              ? 'Showing audit logs for the selected tenant only.'
+              : `Showing audit logs for customer: ${selectedCustomerName || 'Selected Customer'}`
+            }
+          </AlertDescription>
+        </Alert>
+      )}
         <div className="flex gap-2">
           <Button variant="outline" onClick={exportLogs}>
             <Download className="w-4 h-4 mr-2" />

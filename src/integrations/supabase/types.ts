@@ -23,6 +23,7 @@ export type Database = {
           ip_address: string | null
           resource_id: string | null
           resource_type: string | null
+          tenant_connection_id: string | null
           user_agent: string | null
           user_id: string
         }
@@ -34,6 +35,7 @@ export type Database = {
           ip_address?: string | null
           resource_id?: string | null
           resource_type?: string | null
+          tenant_connection_id?: string | null
           user_agent?: string | null
           user_id: string
         }
@@ -45,10 +47,19 @@ export type Database = {
           ip_address?: string | null
           resource_id?: string | null
           resource_type?: string | null
+          tenant_connection_id?: string | null
           user_agent?: string | null
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "audit_logs_tenant_connection_id_fkey"
+            columns: ["tenant_connection_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_connections"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       automated_backup_configs: {
         Row: {
