@@ -27,6 +27,7 @@ import { BillingView } from '@/components/views/BillingView';
 import { TenantHealthDashboardView } from '@/components/views/TenantHealthDashboardView';
 import { SecureScoreDashboardView } from '@/components/views/SecureScoreDashboardView';
 import { AutomatedBackupsView } from '@/components/views/AutomatedBackupsView';
+import { PermissionHealthView } from '@/components/views/PermissionHealthView';
 import { PreflightCheckDialog } from '@/components/PreflightCheckDialog';
 import { ALL_RESOURCE_CATEGORIES, ExportFormat } from '@/types/tenant';
 import { filterSupportedResourceIds } from '@/lib/resourceSupport';
@@ -267,6 +268,8 @@ const Index = () => {
         return <ComplianceDashboardView />;
       case 'audit':
         return <AuditView />;
+      case 'permission-health':
+        return <PermissionHealthView />;
       case 'schedules':
         return <ScheduledExportsView />;
       case 'automated-backups':
