@@ -5,6 +5,31 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Microsoft Graph API endpoints for different resource types
+const GRAPH_ENDPOINTS: Record<string, { endpoint: string; useBeta?: boolean }> = {
+  // Intune
+  'intune/device-configurations': { endpoint: '/deviceManagement/deviceConfigurations' },
+  'intune/compliance-policies': { endpoint: '/deviceManagement/deviceCompliancePolicies' },
+  'intune/app-configurations': { endpoint: '/deviceAppManagement/mobileAppConfigurations', useBeta: true },
+  'intune/autopilot': { endpoint: '/deviceManagement/windowsAutopilotDeploymentProfiles' },
+  'intune/enrollment-restrictions': { endpoint: '/deviceManagement/deviceEnrollmentConfigurations' },
+  'intune/scripts': { endpoint: '/deviceManagement/deviceManagementScripts' },
+  
+  // Conditional Access
+  'conditional-access/ca-policies': { endpoint: '/identity/conditionalAccess/policies' },
+  'conditional-access/named-locations': { endpoint: '/identity/conditionalAccess/namedLocations' },
+  
+  // Entra ID
+  'entra-id/groups': { endpoint: '/groups' },
+  'entra-id/app-registrations': { endpoint: '/applications' },
+  'entra-id/admin-units': { endpoint: '/administrativeUnits' },
+  
+  // Defender
+  'defender/asr-policies': { endpoint: '/deviceManagement/configurationPolicies?$expand=settings', useBeta: true },
+  'defender/antivirus-policies': { endpoint: '/deviceManagement/configurationPolicies?$expand=settings', useBeta: true },
+  'defender/firewall-policies': { endpoint: '/deviceManagement/configurationPolicies?$expand=settings', useBeta: true },
+};
+
 interface ScheduledDriftConfig {
   id: string;
   user_id: string;
@@ -46,7 +71,28 @@ interface DriftResult {
   removed: number;
   modified: number;
   error?: string;
-  details?: Record<string, unknown>;
+  details?: {
+    resourcesChecked: number;
+    hasBaseline: boolean;
+    addedResources?: Array<{ type: string; name: string; id: string }>;
+    removedResources?: Array<{ type: string; name: string; id: string }>;
+    modifiedResources?: Array<{ type: string; name: string; id: string; changes: string[] }>;
+  };
+}
+
+interface BaselineResource {
+  id: string;
+  resource_type: string;
+  resource_name: string | null;
+  resource_id: string | null;
+  data: Record<string, unknown>;
+}
+
+interface CurrentResource {
+  id: string;
+  displayName?: string;
+  name?: string;
+  [key: string]: unknown;
 }
 
 Deno.serve(async (req) => {
@@ -150,7 +196,7 @@ Deno.serve(async (req) => {
           .eq("id", driftRun.id);
 
         // Get baseline export data if configured
-        let baselineData: Record<string, unknown> | null = null;
+        let baselineData: { resources: BaselineResource[]; exportId: string } | null = null;
         if (schedule.baseline_export_id) {
           const { data: baselineResources } = await supabase
             .from("exported_resources")
@@ -159,7 +205,7 @@ Deno.serve(async (req) => {
           
           if (baselineResources && baselineResources.length > 0) {
             baselineData = {
-              resources: baselineResources,
+              resources: baselineResources as BaselineResource[],
               exportId: schedule.baseline_export_id,
             };
           }
@@ -173,16 +219,13 @@ Deno.serve(async (req) => {
 
         for (const tenant of tenants) {
           try {
-            // For now, simulate drift detection
-            // In a real implementation, this would:
-            // 1. Get credentials from service_principal_config
-            // 2. Fetch current state from Graph API
-            // 3. Compare with baseline
-            
-            const driftResult = await simulateDriftCheck(
+            // Real drift detection using Graph API
+            const driftResult = await performRealDriftCheck(
+              supabase,
               tenant,
               schedule.resource_ids,
-              baselineData
+              baselineData,
+              schedule.user_id
             );
 
             tenantResults.push(driftResult);
@@ -353,35 +396,284 @@ async function getTargetTenants(
   return data || [];
 }
 
-async function simulateDriftCheck(
+// Get access token using stored credentials
+async function getAccessToken(
+  tenantId: string,
+  clientId: string,
+  clientSecret: string
+): Promise<{ token: string } | { error: string }> {
+  const tokenEndpoint = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`;
+  
+  const params = new URLSearchParams({
+    client_id: clientId,
+    client_secret: clientSecret,
+    scope: 'https://graph.microsoft.com/.default',
+    grant_type: 'client_credentials',
+  });
+
+  try {
+    const response = await fetch(tokenEndpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString(),
+    });
+
+    const data = await response.json();
+    
+    if (!response.ok) {
+      return { error: data.error_description || data.error || 'Token request failed' };
+    }
+
+    return { token: data.access_token };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'Network error' };
+  }
+}
+
+// Fetch resources from Graph API
+async function fetchGraphResources(
+  accessToken: string,
+  endpoint: string,
+  useBeta: boolean = false
+): Promise<CurrentResource[]> {
+  const baseUrl = useBeta ? 'https://graph.microsoft.com/beta' : 'https://graph.microsoft.com/v1.0';
+  const graphUrl = `${baseUrl}${endpoint}`;
+
+  try {
+    const response = await fetch(graphUrl, {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      console.error(`Graph API error for ${endpoint}: ${response.status}`);
+      return [];
+    }
+
+    const data = await response.json();
+    return data.value || [data];
+  } catch (error) {
+    console.error(`Error fetching ${endpoint}:`, error);
+    return [];
+  }
+}
+
+// Get stored credentials for a tenant connection
+async function getStoredCredentials(
+  supabase: any,
+  tenantConnectionId: string,
+  userId: string
+): Promise<{ clientId: string; clientSecret: string; tenantId: string } | null> {
+  const { data, error } = await supabase.rpc('get_decrypted_credential', {
+    p_tenant_connection_id: tenantConnectionId,
+    p_user_id: userId,
+  });
+
+  if (error || !data || data.length === 0) {
+    console.error('Failed to get credentials:', error);
+    return null;
+  }
+
+  return {
+    clientId: data[0].client_id,
+    clientSecret: data[0].client_secret,
+    tenantId: data[0].tenant_id,
+  };
+}
+
+// Compare two objects and return the list of changed keys
+function getChangedKeys(baseline: Record<string, unknown>, current: Record<string, unknown>): string[] {
+  const changes: string[] = [];
+  const allKeys = new Set([...Object.keys(baseline), ...Object.keys(current)]);
+  
+  // Keys to ignore in comparison
+  const ignoreKeys = ['createdDateTime', 'modifiedDateTime', 'lastModifiedDateTime', '@odata.context', '@odata.type'];
+  
+  for (const key of allKeys) {
+    if (ignoreKeys.includes(key)) continue;
+    
+    const baseVal = JSON.stringify(baseline[key]);
+    const currVal = JSON.stringify(current[key]);
+    
+    if (baseVal !== currVal) {
+      changes.push(key);
+    }
+  }
+  
+  return changes;
+}
+
+// Perform real drift detection using Graph API
+async function performRealDriftCheck(
+  supabase: any,
   tenant: TenantConnection,
   resourceIds: string[],
-  baselineData: Record<string, unknown> | null
+  baselineData: { resources: BaselineResource[]; exportId: string } | null,
+  userId: string
 ): Promise<DriftResult> {
-  // Simulate drift detection
-  // In production, this would:
-  // 1. Authenticate using service principal
-  // 2. Fetch current resources via Graph API
-  // 3. Compare with baseline
+  const tenantName = tenant.display_name || tenant.tenant_name || tenant.tenant_id;
   
-  // For now, return simulated results
-  const hasDrift = Math.random() > 0.7; // 30% chance of drift
-  const added = hasDrift ? Math.floor(Math.random() * 3) : 0;
-  const removed = hasDrift ? Math.floor(Math.random() * 2) : 0;
-  const modified = hasDrift ? Math.floor(Math.random() * 5) : 0;
+  // Get credentials for this tenant
+  const credentials = await getStoredCredentials(supabase, tenant.id, userId);
+  
+  if (!credentials) {
+    return {
+      tenantId: tenant.tenant_id,
+      tenantName,
+      connectionId: tenant.id,
+      status: "error",
+      hasDrift: false,
+      added: 0,
+      removed: 0,
+      modified: 0,
+      error: "No credentials stored for this tenant",
+    };
+  }
+
+  // Get access token
+  const tokenResult = await getAccessToken(
+    credentials.tenantId,
+    credentials.clientId,
+    credentials.clientSecret
+  );
+
+  if ('error' in tokenResult) {
+    return {
+      tenantId: tenant.tenant_id,
+      tenantName,
+      connectionId: tenant.id,
+      status: "error",
+      hasDrift: false,
+      added: 0,
+      removed: 0,
+      modified: 0,
+      error: `Authentication failed: ${tokenResult.error}`,
+    };
+  }
+
+  // If no baseline, we can't detect drift - just return success with no drift
+  if (!baselineData || !baselineData.resources || baselineData.resources.length === 0) {
+    return {
+      tenantId: tenant.tenant_id,
+      tenantName,
+      connectionId: tenant.id,
+      status: "success",
+      hasDrift: false,
+      added: 0,
+      removed: 0,
+      modified: 0,
+      details: {
+        resourcesChecked: 0,
+        hasBaseline: false,
+      },
+    };
+  }
+
+  // Group baseline resources by type
+  const baselineByType: Record<string, BaselineResource[]> = {};
+  for (const resource of baselineData.resources) {
+    const type = resource.resource_type;
+    if (!baselineByType[type]) baselineByType[type] = [];
+    baselineByType[type].push(resource);
+  }
+
+  // Track drift results
+  const addedResources: Array<{ type: string; name: string; id: string }> = [];
+  const removedResources: Array<{ type: string; name: string; id: string }> = [];
+  const modifiedResources: Array<{ type: string; name: string; id: string; changes: string[] }> = [];
+
+  // Check each resource type
+  const resourceTypesToCheck = resourceIds.length > 0 
+    ? resourceIds.filter(id => GRAPH_ENDPOINTS[id])
+    : Object.keys(baselineByType).filter(type => GRAPH_ENDPOINTS[type]);
+
+  for (const resourceType of resourceTypesToCheck) {
+    const endpointConfig = GRAPH_ENDPOINTS[resourceType];
+    if (!endpointConfig) continue;
+
+    try {
+      // Fetch current state from Graph API
+      const currentResources = await fetchGraphResources(
+        tokenResult.token,
+        endpointConfig.endpoint,
+        endpointConfig.useBeta
+      );
+
+      const baselineResources = baselineByType[resourceType] || [];
+      
+      // Create maps for comparison
+      const baselineMap = new Map<string, BaselineResource>();
+      for (const br of baselineResources) {
+        const id = br.resource_id || (br.data as any)?.id;
+        if (id) baselineMap.set(id, br);
+      }
+
+      const currentMap = new Map<string, CurrentResource>();
+      for (const cr of currentResources) {
+        if (cr.id) currentMap.set(cr.id, cr);
+      }
+
+      // Find added resources (in current but not in baseline)
+      for (const [id, current] of currentMap) {
+        if (!baselineMap.has(id)) {
+          addedResources.push({
+            type: resourceType,
+            name: current.displayName || current.name || id,
+            id,
+          });
+        }
+      }
+
+      // Find removed and modified resources
+      for (const [id, baseline] of baselineMap) {
+        const current = currentMap.get(id);
+        
+        if (!current) {
+          // Resource was removed
+          removedResources.push({
+            type: resourceType,
+            name: baseline.resource_name || (baseline.data as any)?.displayName || id,
+            id,
+          });
+        } else {
+          // Check for modifications
+          const baselineData = baseline.data as Record<string, unknown>;
+          const changes = getChangedKeys(baselineData, current as Record<string, unknown>);
+          
+          if (changes.length > 0) {
+            modifiedResources.push({
+              type: resourceType,
+              name: current.displayName || current.name || id,
+              id,
+              changes,
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.error(`Error checking drift for ${resourceType}:`, err);
+    }
+  }
+
+  const hasDrift = addedResources.length > 0 || removedResources.length > 0 || modifiedResources.length > 0;
 
   return {
     tenantId: tenant.tenant_id,
-    tenantName: tenant.display_name || tenant.tenant_name || tenant.tenant_id,
+    tenantName,
     connectionId: tenant.id,
     status: "success",
-    hasDrift: added > 0 || removed > 0 || modified > 0,
-    added,
-    removed,
-    modified,
+    hasDrift,
+    added: addedResources.length,
+    removed: removedResources.length,
+    modified: modifiedResources.length,
     details: {
-      resourcesChecked: resourceIds.length,
-      hasBaseline: !!baselineData,
+      resourcesChecked: resourceTypesToCheck.length,
+      hasBaseline: true,
+      addedResources: addedResources.slice(0, 20), // Limit to first 20
+      removedResources: removedResources.slice(0, 20),
+      modifiedResources: modifiedResources.slice(0, 20),
     },
   };
 }
