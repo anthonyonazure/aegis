@@ -214,10 +214,14 @@ export function PreflightCheckDialog({
                 <Server className="w-5 h-5 flex-shrink-0 mt-0.5 text-blue-500" />
                 <div className="flex-1">
                   <p className="font-medium text-blue-600 dark:text-blue-400">
-                    Azure: Assign "Reader" Role
+                    Azure: Assign Role to Service Principal
                   </p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    {azureGuidance.recommendation}
+                    <strong>Export only:</strong> Assign "Reader" role<br/>
+                    <strong>Export + Import:</strong> Assign "Contributor" role
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Go to Subscriptions → Your Subscription → Access Control (IAM) → Add role assignment
                   </p>
                   <div className="flex items-center gap-2 mt-3 flex-wrap">
                     <Button
@@ -382,7 +386,7 @@ export function PreflightCheckDialog({
                           <div className="flex flex-wrap gap-1 mt-1.5">
                             {res.provider === 'azure' ? (
                               <span className="text-[10px] text-blue-600 dark:text-blue-400">
-                                Requires: Reader role on subscription
+                                Assign: Reader (export) or Contributor (import)
                               </span>
                             ) : (
                               <>

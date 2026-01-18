@@ -28,37 +28,70 @@ import { AzureSubscription } from '@/types/tenant';
 import { useToast } from '@/hooks/use-toast';
 import { ServicePrincipalManager, ServicePrincipalConfig } from '@/components/ServicePrincipalManager';
 
-const graphPermissions = [
-  // Intune / Device Management
-  { scope: 'DeviceManagementConfiguration.Read.All', description: 'Intune device configurations' },
-  { scope: 'DeviceManagementApps.Read.All', description: 'Intune apps & scripts' },
-  { scope: 'DeviceManagementManagedDevices.Read.All', description: 'Managed devices & compliance' },
-  { scope: 'DeviceManagementServiceConfig.Read.All', description: 'Autopilot & enrollment' },
-  // Identity & Access
-  { scope: 'Policy.Read.All', description: 'Conditional Access & policies' },
-  { scope: 'Directory.Read.All', description: 'Users, groups, roles' },
-  { scope: 'Application.Read.All', description: 'App registrations' },
-  { scope: 'RoleManagement.Read.Directory', description: 'Role assignments' },
-  // Security & Compliance
-  { scope: 'SecurityEvents.Read.All', description: 'Defender & security configs' },
-  { scope: 'ThreatAssessment.Read.All', description: 'Threat policies' },
-  // Collaboration
-  { scope: 'Mail.Read', description: 'Exchange transport rules (delegated)' },
-  { scope: 'SharePointTenantSettings.Read.All', description: 'SharePoint settings' },
-  { scope: 'Team.ReadBasic.All', description: 'Teams configurations' },
-];
+// Graph API permissions - organized by read-only vs read-write
+const graphPermissions = {
+  readOnly: [
+    // Intune / Device Management
+    { scope: 'DeviceManagementConfiguration.Read.All', description: 'Device configs, compliance, update rings' },
+    { scope: 'DeviceManagementApps.Read.All', description: 'Apps, scripts, app configs' },
+    { scope: 'DeviceManagementManagedDevices.Read.All', description: 'Managed devices' },
+    { scope: 'DeviceManagementServiceConfig.Read.All', description: 'Autopilot, enrollment' },
+    // Identity & Access
+    { scope: 'Policy.Read.All', description: 'Conditional Access policies' },
+    { scope: 'Directory.Read.All', description: 'Users, groups, roles, directory settings' },
+    { scope: 'Application.Read.All', description: 'App registrations' },
+    { scope: 'RoleManagement.Read.Directory', description: 'Role assignments' },
+    // Security
+    { scope: 'SecurityEvents.Read.All', description: 'Defender configs' },
+    // Collaboration
+    { scope: 'Sites.Read.All', description: 'SharePoint settings' },
+    { scope: 'TeamSettings.Read.All', description: 'Teams policies' },
+  ],
+  readWrite: [
+    // Intune / Device Management
+    { scope: 'DeviceManagementConfiguration.ReadWrite.All', description: 'Create/update device configs, compliance, update rings' },
+    { scope: 'DeviceManagementApps.ReadWrite.All', description: 'Create/update apps, scripts' },
+    { scope: 'DeviceManagementManagedDevices.ReadWrite.All', description: 'Manage devices' },
+    { scope: 'DeviceManagementServiceConfig.ReadWrite.All', description: 'Create/update Autopilot, enrollment' },
+    // Identity & Access
+    { scope: 'Policy.ReadWrite.ConditionalAccess', description: 'Create/update CA policies' },
+    { scope: 'Directory.ReadWrite.All', description: 'Create/update groups, settings' },
+    { scope: 'Application.ReadWrite.All', description: 'Create/update app registrations' },
+    { scope: 'RoleManagement.ReadWrite.Directory', description: 'Assign roles' },
+    // Security
+    { scope: 'SecurityEvents.ReadWrite.All', description: 'Update Defender configs' },
+    // Collaboration
+    { scope: 'Sites.ReadWrite.All', description: 'Update SharePoint settings' },
+    { scope: 'TeamSettings.ReadWrite.All', description: 'Update Teams policies' },
+  ],
+};
+
+// Azure RBAC - simple role-based (not individual permissions)
+const azureRoles = {
+  readOnly: {
+    role: 'Reader',
+    description: 'Export/backup all Azure resources',
+    scope: 'Subscription or Management Group',
+  },
+  readWrite: {
+    role: 'Contributor', 
+    description: 'Export + Import/Restore Azure resources',
+    scope: 'Subscription or Management Group',
+  },
+};
 
 const azureRbacSteps = [
   { step: 1, title: 'Open Azure Portal', action: 'Go to portal.azure.com → Subscriptions' },
-  { step: 2, title: 'Select Subscription', action: 'Choose the subscription you want to export' },
+  { step: 2, title: 'Select Subscription', action: 'Choose the subscription you want to manage' },
   { step: 3, title: 'Access Control', action: 'Click "Access control (IAM)" in the left menu' },
   { step: 4, title: 'Add Role Assignment', action: 'Click "Add" → "Add role assignment"' },
-  { step: 5, title: 'Choose Reader Role', action: 'Select "Reader" role and click Next' },
+  { step: 5, title: 'Choose Role', action: 'Select "Reader" (export only) or "Contributor" (export + import)' },
   { step: 6, title: 'Assign to App', action: 'Search for your App Registration name, select it, and click "Review + assign"' },
 ];
 
 export const AuthView = () => {
   const [connectionType, setConnectionType] = useState<'graph' | 'azure' | 'both'>('graph');
+  const [permissionMode, setPermissionMode] = useState<'readOnly' | 'readWrite'>('readWrite');
   const [authMethod, setAuthMethod] = useState<'app' | 'delegated'>('app');
   const [tenantId, setTenantId] = useState('');
   const [clientId, setClientId] = useState('');
@@ -164,7 +197,8 @@ export const AuthView = () => {
   };
 
   const copyAllPermissions = () => {
-    const allScopes = graphPermissions.map(p => p.scope).join('\n');
+    const permsToUse = permissionMode === 'readWrite' ? graphPermissions.readWrite : graphPermissions.readOnly;
+    const allScopes = permsToUse.map(p => p.scope).join('\n');
     navigator.clipboard.writeText(allScopes);
     setCopied('all');
     setTimeout(() => setCopied(null), 2000);
@@ -467,18 +501,73 @@ export const AuthView = () => {
                 Required Permissions
               </CardTitle>
               <CardDescription>
-                Permissions needed based on your connection type
+                Choose what you need to do with your tenant
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
+              {/* Permission Mode Toggle */}
+              <div className="flex rounded-lg border border-border overflow-hidden">
+                <button
+                  onClick={() => setPermissionMode('readOnly')}
+                  className={cn(
+                    "flex-1 px-4 py-3 text-sm font-medium transition-all",
+                    permissionMode === 'readOnly' 
+                      ? "bg-primary text-primary-foreground" 
+                      : "bg-card hover:bg-secondary/50 text-muted-foreground"
+                  )}
+                >
+                  <div className="flex flex-col items-center gap-1">
+                    <span>📤 Export Only</span>
+                    <span className="text-xs opacity-75">Read permissions</span>
+                  </div>
+                </button>
+                <button
+                  onClick={() => setPermissionMode('readWrite')}
+                  className={cn(
+                    "flex-1 px-4 py-3 text-sm font-medium transition-all",
+                    permissionMode === 'readWrite' 
+                      ? "bg-primary text-primary-foreground" 
+                      : "bg-card hover:bg-secondary/50 text-muted-foreground"
+                  )}
+                >
+                  <div className="flex flex-col items-center gap-1">
+                    <span>🔄 Export + Import</span>
+                    <span className="text-xs opacity-75">Read & Write permissions</span>
+                  </div>
+                </button>
+              </div>
+
+              {/* Recommendation banner */}
+              <div className={cn(
+                "p-3 rounded-lg border",
+                permissionMode === 'readWrite' 
+                  ? "bg-amber-500/10 border-amber-500/20" 
+                  : "bg-green-500/10 border-green-500/20"
+              )}>
+                <p className="text-sm">
+                  {permissionMode === 'readWrite' ? (
+                    <>
+                      <strong>Recommended:</strong> Use ReadWrite permissions if you plan to import configurations, restore backups, or deploy policies.
+                    </>
+                  ) : (
+                    <>
+                      <strong>Minimal access:</strong> Use Read-only permissions if you only need to export/backup configurations.
+                    </>
+                  )}
+                </p>
+              </div>
+
               {/* Graph Permissions */}
               {(connectionType === 'graph' || connectionType === 'both') && (
                 <div>
                   <h4 className="font-medium text-foreground mb-3 flex items-center gap-2">
                     <Cloud className="w-4 h-4" /> Microsoft Graph API Permissions
+                    <span className="text-xs bg-secondary px-2 py-0.5 rounded">
+                      {permissionMode === 'readWrite' ? 'Read + Write' : 'Read Only'}
+                    </span>
                   </h4>
-                  <div className="space-y-2">
-                    {graphPermissions.map((perm) => (
+                  <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                    {(permissionMode === 'readWrite' ? graphPermissions.readWrite : graphPermissions.readOnly).map((perm) => (
                       <div 
                         key={perm.scope}
                         className="flex items-center justify-between p-3 rounded-lg bg-secondary/30"
@@ -503,6 +592,9 @@ export const AuthView = () => {
                       </div>
                     ))}
                   </div>
+                  <p className="text-xs text-muted-foreground mt-3">
+                    Add these in Azure Portal → App Registrations → Your App → API Permissions → Add a permission → Microsoft Graph → Application permissions
+                  </p>
                 </div>
               )}
 
@@ -510,17 +602,35 @@ export const AuthView = () => {
               {(connectionType === 'azure' || connectionType === 'both') && (
                 <div>
                   <h4 className="font-medium text-foreground mb-3 flex items-center gap-2">
-                    <Server className="w-4 h-4" /> Azure RBAC Setup
+                    <Server className="w-4 h-4" /> Azure RBAC Role
+                    <span className="text-xs bg-secondary px-2 py-0.5 rounded">
+                      {permissionMode === 'readWrite' ? 'Contributor' : 'Reader'}
+                    </span>
                   </h4>
                   
-                  {/* Simple summary */}
-                  <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20 mb-4">
-                    <p className="font-medium text-blue-600 dark:text-blue-400 mb-1">
-                      Just assign the "Reader" role
+                  {/* Role summary */}
+                  <div className={cn(
+                    "p-4 rounded-lg border mb-4",
+                    permissionMode === 'readWrite' 
+                      ? "bg-amber-500/10 border-amber-500/20" 
+                      : "bg-blue-500/10 border-blue-500/20"
+                  )}>
+                    <p className={cn(
+                      "font-medium mb-1",
+                      permissionMode === 'readWrite' 
+                        ? "text-amber-600 dark:text-amber-400" 
+                        : "text-blue-600 dark:text-blue-400"
+                    )}>
+                      Assign the "{permissionMode === 'readWrite' ? 'Contributor' : 'Reader'}" role
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      This single role grants all the read permissions needed to export Azure resources. 
-                      No need to add individual permissions like "Microsoft.Compute/virtualMachines/read".
+                      {permissionMode === 'readWrite' 
+                        ? "This role allows you to read, create, update, and delete Azure resources. Required for imports and policy deployments."
+                        : "This role allows you to view Azure resources. Sufficient for exports and backups only."
+                      }
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      <strong>No need to add individual permissions</strong> like "Microsoft.Compute/virtualMachines/read" - the role includes everything.
                     </p>
                   </div>
 
@@ -536,7 +646,12 @@ export const AuthView = () => {
                         </span>
                         <div>
                           <p className="font-medium text-foreground text-sm">{item.title}</p>
-                          <p className="text-xs text-muted-foreground">{item.action}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {item.step === 5 
+                              ? `Select "${permissionMode === 'readWrite' ? 'Contributor' : 'Reader'}" role and click Next`
+                              : item.action
+                            }
+                          </p>
                         </div>
                       </div>
                     ))}
@@ -562,7 +677,7 @@ export const AuthView = () => {
                   </div>
 
                   <p className="text-xs text-muted-foreground mt-3">
-                    <strong>Note:</strong> Repeat for each subscription you want to export. For imports/restores, you'll need "Contributor" role instead.
+                    <strong>Note:</strong> Repeat for each subscription you want to manage.
                   </p>
                 </div>
               )}
@@ -575,7 +690,7 @@ export const AuthView = () => {
                   onClick={() => window.open('https://portal.azure.com/#view/Microsoft_AAD_IAM/ActiveDirectoryMenuBlade/~/RegisteredApps', '_blank')}
                 >
                   <ExternalLink className="w-4 h-4" />
-                  Open Azure Portal
+                  Open App Registrations
                 </Button>
                 {(connectionType === 'graph' || connectionType === 'both') && (
                   <Button variant="ghost" size="sm" onClick={copyAllPermissions}>
@@ -585,7 +700,7 @@ export const AuthView = () => {
                         Copied!
                       </>
                     ) : (
-                      'Copy All Graph Permissions'
+                      <>Copy All Graph Permissions</>
                     )}
                   </Button>
                 )}
