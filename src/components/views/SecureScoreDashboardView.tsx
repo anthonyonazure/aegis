@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { 
   Table, 
   TableBody, 
@@ -24,7 +25,8 @@ import {
   Building2,
   Target,
   Lightbulb,
-  BarChart3
+  BarChart3,
+  Filter
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
@@ -44,6 +46,8 @@ import {
   Legend
 } from 'recharts';
 import { format } from 'date-fns';
+import { supabase } from '@/integrations/supabase/client';
+import { useTenant } from '@/contexts/TenantContext';
 import {
   TenantSecureScore,
   ScoreHistory,
@@ -118,12 +122,56 @@ function ScoreGauge({ percentage, size = 120 }: { percentage: number; size?: num
 }
 
 export function SecureScoreDashboardView() {
+  const { selectedCustomerId, customers } = useTenant();
+  const [allScores, setAllScores] = useState<TenantSecureScore[]>([]);
   const [scores, setScores] = useState<TenantSecureScore[]>([]);
+  const [allHistory, setAllHistory] = useState<ScoreHistory[]>([]);
   const [history, setHistory] = useState<ScoreHistory[]>([]);
   const [stats, setStats] = useState<AggregatedScoreStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedTenant, setSelectedTenant] = useState<string | null>(null);
+  const [tenantConnectionIds, setTenantConnectionIds] = useState<string[]>([]);
+
+  const selectedCustomerName = customers.find(c => c.id === selectedCustomerId)?.name;
+
+  // Load tenant connection IDs for the selected customer
+  useEffect(() => {
+    const loadTenantConnections = async () => {
+      if (!selectedCustomerId) {
+        setTenantConnectionIds([]);
+        return;
+      }
+      
+      const { data } = await supabase
+        .from('tenant_connections')
+        .select('id')
+        .eq('customer_id', selectedCustomerId);
+      
+      setTenantConnectionIds((data || []).map(t => t.id));
+    };
+    
+    loadTenantConnections();
+  }, [selectedCustomerId]);
+
+  // Filter scores and history when customer selection changes
+  useEffect(() => {
+    if (selectedCustomerId && tenantConnectionIds.length > 0) {
+      const filteredScores = allScores.filter(s => 
+        tenantConnectionIds.includes(s.tenantConnectionId)
+      );
+      setScores(filteredScores);
+      setStats(calculateAggregatedStats(filteredScores));
+      
+      setHistory(allHistory.filter(h => 
+        tenantConnectionIds.includes(h.tenantConnectionId)
+      ));
+    } else {
+      setScores(allScores);
+      setStats(calculateAggregatedStats(allScores));
+      setHistory(allHistory);
+    }
+  }, [selectedCustomerId, tenantConnectionIds, allScores, allHistory]);
 
   useEffect(() => {
     loadData();
@@ -136,9 +184,8 @@ export function SecureScoreDashboardView() {
         getSecureScores(),
         getScoreHistory(undefined, 30),
       ]);
-      setScores(scoresData);
-      setHistory(historyData);
-      setStats(calculateAggregatedStats(scoresData));
+      setAllScores(scoresData);
+      setAllHistory(historyData);
     } catch (error) {
       console.error('Error loading secure score data:', error);
       toast.error('Failed to load secure score data');
@@ -215,6 +262,16 @@ export function SecureScoreDashboardView() {
           {refreshing ? 'Refreshing...' : 'Refresh All'}
         </Button>
       </div>
+
+      {/* Customer filter indicator */}
+      {selectedCustomerId && (
+        <Alert className="border-primary/50 bg-primary/5">
+          <Filter className="h-4 w-4" />
+          <AlertDescription>
+            Showing secure scores for customer: <strong>{selectedCustomerName || 'Selected Customer'}</strong>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {scores.length === 0 ? (
         <Card>
