@@ -26,14 +26,17 @@ import {
   Activity,
   Ticket,
   RotateCcw,
-  Shield
+  Shield,
+  Filter
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { RESOURCE_CATEGORIES } from '@/types/tenant';
 import { getIcon } from '@/lib/icons';
 import { supabase } from '@/integrations/supabase/client';
+import { useTenant } from '@/contexts/TenantContext';
 
 interface DashboardViewProps {
   onNavigate: (tab: string) => void;
@@ -69,6 +72,9 @@ export const DashboardView = ({
   selectedFormatsCount = 0,
   hasGitConfig = false
 }: DashboardViewProps) => {
+  const { selectedCustomerId, selectedTenantId, customers } = useTenant();
+  const selectedCustomer = customers.find(c => c.id === selectedCustomerId);
+  
   const [stats, setStats] = useState<DashboardStats>({
     totalExports: 0,
     successfulExports: 0,
@@ -89,9 +95,10 @@ export const DashboardView = ({
   });
   const [loading, setLoading] = useState(true);
 
+  // Reload stats when customer/tenant selection changes
   useEffect(() => {
     loadStats();
-  }, []);
+  }, [selectedCustomerId, selectedTenantId]);
 
   const loadStats = async () => {
     try {
@@ -101,6 +108,18 @@ export const DashboardView = ({
         return;
       }
 
+      // Get tenant IDs for the selected customer (if any)
+      let tenantIds: Set<string> = new Set();
+      if (selectedCustomerId) {
+        const { data: tenantConnections } = await supabase
+          .from('tenant_connections')
+          .select('id')
+          .eq('customer_id', selectedCustomerId);
+        tenantIds = new Set((tenantConnections || []).map(t => t.id));
+      }
+
+      // Fetch all data first
+      // Note: Only some tables have tenant_connection_id column
       const [
         exportsResult,
         schedulesResult,
@@ -117,36 +136,56 @@ export const DashboardView = ({
         psaTicketsResult,
         reportsResult
       ] = await Promise.all([
-        supabase.from('export_jobs').select('id, status, completed_at').eq('user_id', user.id).order('completed_at', { ascending: false }),
-        supabase.from('scheduled_exports').select('id, is_active').eq('user_id', user.id),
+        supabase.from('export_jobs').select('id, status, completed_at, tenant_connection_id').eq('user_id', user.id).order('completed_at', { ascending: false }),
+        supabase.from('scheduled_exports').select('id, is_active, tenant_connection_id').eq('user_id', user.id),
         supabase.from('webhook_configs').select('id, is_active').eq('user_id', user.id),
-        supabase.from('drift_detections').select('id').eq('user_id', user.id),
+        supabase.from('drift_detections').select('id, tenant_connection_id').eq('user_id', user.id),
         supabase.from('compliance_results').select('id').eq('user_id', user.id),
-        supabase.from('import_jobs').select('id').eq('user_id', user.id),
+        supabase.from('import_jobs').select('id, tenant_connection_id').eq('user_id', user.id),
         supabase.from('customers').select('id').eq('user_id', user.id),
-        supabase.from('tenant_connections').select('id').eq('user_id', user.id),
+        supabase.from('tenant_connections').select('id, customer_id').eq('user_id', user.id),
         supabase.from('policy_deployments').select('id, status').eq('user_id', user.id),
-        supabase.from('scheduled_deployment_configs').select('id, is_active').eq('user_id', user.id),
-        supabase.from('scheduled_drift_configs').select('id, is_active').eq('user_id', user.id),
+        supabase.from('scheduled_deployment_configs').select('id, is_active, target_customer_id').eq('user_id', user.id),
+        supabase.from('scheduled_drift_configs').select('id, is_active, target_customer_id').eq('user_id', user.id),
         supabase.from('psa_integrations').select('id, is_active').eq('user_id', user.id),
         supabase.from('psa_tickets').select('id').eq('user_id', user.id),
         supabase.from('reports').select('id').eq('user_id', user.id)
       ]);
 
-      const exports = exportsResult.data || [];
-      const schedules = schedulesResult.data || [];
+      let exports = exportsResult.data || [];
+      let schedules = schedulesResult.data || [];
       const webhooks = webhooksResult.data || [];
-      const drifts = driftResult.data || [];
+      let drifts = driftResult.data || [];
       const compliance = complianceResult.data || [];
-      const imports = importsResult.data || [];
-      const customers = customersResult.data || [];
-      const tenants = tenantsResult.data || [];
+      let imports = importsResult.data || [];
+      let customersData = customersResult.data || [];
+      let tenants = tenantsResult.data || [];
       const policyDeployments = policyDeploymentsResult.data || [];
-      const scheduledDeployments = scheduledDeploymentsResult.data || [];
-      const scheduledDrift = scheduledDriftResult.data || [];
+      let scheduledDeployments = scheduledDeploymentsResult.data || [];
+      let scheduledDrift = scheduledDriftResult.data || [];
       const psaIntegrations = psaIntegrationsResult.data || [];
       const psaTickets = psaTicketsResult.data || [];
       const reports = reportsResult.data || [];
+
+      // Apply filtering if a specific tenant is selected
+      // Only filter tables that have tenant_connection_id column
+      if (selectedTenantId) {
+        exports = exports.filter(e => e.tenant_connection_id === selectedTenantId);
+        schedules = schedules.filter(s => s.tenant_connection_id === selectedTenantId);
+        drifts = drifts.filter(d => d.tenant_connection_id === selectedTenantId);
+        imports = imports.filter(i => i.tenant_connection_id === selectedTenantId);
+        tenants = tenants.filter(t => t.id === selectedTenantId);
+      } else if (selectedCustomerId && tenantIds.size > 0) {
+        // Apply filtering if a customer is selected (show all tenants for that customer)
+        exports = exports.filter(e => e.tenant_connection_id && tenantIds.has(e.tenant_connection_id));
+        schedules = schedules.filter(s => s.tenant_connection_id && tenantIds.has(s.tenant_connection_id));
+        drifts = drifts.filter(d => d.tenant_connection_id && tenantIds.has(d.tenant_connection_id));
+        imports = imports.filter(i => i.tenant_connection_id && tenantIds.has(i.tenant_connection_id));
+        tenants = tenants.filter(t => t.customer_id === selectedCustomerId);
+        scheduledDeployments = scheduledDeployments.filter(s => s.target_customer_id === selectedCustomerId);
+        scheduledDrift = scheduledDrift.filter(s => s.target_customer_id === selectedCustomerId);
+        customersData = customersData.filter(c => c.id === selectedCustomerId);
+      }
 
       setStats({
         totalExports: exports.length,
@@ -157,7 +196,7 @@ export const DashboardView = ({
         complianceChecks: compliance.length,
         lastExportDate: exports[0]?.completed_at || null,
         importJobs: imports.length,
-        totalCustomers: customers.length,
+        totalCustomers: customersData.length,
         totalTenants: tenants.length,
         policyDeployments: policyDeployments.length,
         scheduledDeployments: scheduledDeployments.filter(s => s.is_active).length,
@@ -367,6 +406,23 @@ export const DashboardView = ({
 
   return (
     <div className="space-y-6">
+      {/* Customer/Tenant Filter Indicator */}
+      {(selectedCustomerId || selectedTenantId) && (
+        <Alert>
+          <Filter className="h-4 w-4" />
+          <AlertDescription>
+            {selectedCustomer ? (
+              <>
+                Dashboard stats filtered for <strong>{selectedCustomer.name}</strong>.
+                Clear the selection in the sidebar to see all data.
+              </>
+            ) : (
+              <>Dashboard stats filtered. Clear the selection to see all data.</>
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
