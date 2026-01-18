@@ -28,7 +28,7 @@ import { TenantHealthDashboardView } from '@/components/views/TenantHealthDashbo
 import { SecureScoreDashboardView } from '@/components/views/SecureScoreDashboardView';
 import { AutomatedBackupsView } from '@/components/views/AutomatedBackupsView';
 import { PreflightCheckDialog } from '@/components/PreflightCheckDialog';
-import { RESOURCE_CATEGORIES, ExportFormat } from '@/types/tenant';
+import { ALL_RESOURCE_CATEGORIES, ExportFormat } from '@/types/tenant';
 import { filterSupportedResourceIds } from '@/lib/resourceSupport';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useExport } from '@/hooks/useTenant';
@@ -83,15 +83,15 @@ const Index = () => {
   };
 
   const handleSelectAll = (categoryId: string) => {
-    const category = RESOURCE_CATEGORIES.find(c => c.id === categoryId);
+    const category = ALL_RESOURCE_CATEGORIES.find(c => c.id === categoryId);
     if (!category) return;
 
-    // Only select supported resources (has graphEndpoint or explicit supported: true)
+    // Only select supported resources
     const supportedResources = category.subcategories
       .filter(sub => {
         if (sub.supported === false) return false;
         if (sub.supported === true) return true;
-        return !!sub.graphEndpoint;
+        return !!sub.graphEndpoint || !!sub.azureResourceType;
       })
       .map(sub => `${categoryId}/${sub.id}`);
 
@@ -108,12 +108,12 @@ const Index = () => {
 
   const handleSelectAllResources = () => {
     // Get all supported resource IDs across all categories
-    const allSupportedResources = RESOURCE_CATEGORIES.flatMap(category =>
+    const allSupportedResources = ALL_RESOURCE_CATEGORIES.flatMap(category =>
       category.subcategories
         .filter(sub => {
           if (sub.supported === false) return false;
           if (sub.supported === true) return true;
-          return !!sub.graphEndpoint;
+          return !!sub.graphEndpoint || !!sub.azureResourceType;
         })
         .map(sub => `${category.id}/${sub.id}`)
     );
