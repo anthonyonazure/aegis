@@ -148,7 +148,10 @@ export const ReportsView = () => {
   // Filter reports when customer selection changes
   useEffect(() => {
     if (selectedCustomerId) {
-      setReports(allReports.filter(report => report.customer_id === selectedCustomerId));
+      // Show reports for the selected customer OR reports without a customer (global reports)
+      setReports(allReports.filter(report => 
+        report.customer_id === selectedCustomerId || report.customer_id === null
+      ));
     } else {
       setReports(allReports);
     }
