@@ -21,6 +21,7 @@ interface AuditLogEntry {
   resourceType?: string;
   resourceId?: string;
   details?: Record<string, Json>;
+  tenantConnectionId?: string;
 }
 
 export async function logAuditEvent(entry: AuditLogEntry): Promise<void> {
@@ -34,6 +35,7 @@ export async function logAuditEvent(entry: AuditLogEntry): Promise<void> {
       resource_type: entry.resourceType || null,
       resource_id: entry.resourceId || null,
       details: (entry.details || {}) as Json,
+      tenant_connection_id: entry.tenantConnectionId || null,
     }]);
   } catch (error) {
     console.error('Failed to log audit event:', error);
