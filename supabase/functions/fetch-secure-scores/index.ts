@@ -228,44 +228,47 @@ serve(async (req) => {
           fetchImprovementActions(accessToken),
         ]);
 
-        // Calculate score percentage
+        // Calculate score percentage (for response); the DB column is generated and cannot be written directly
         const scorePercentage = scoreData.maxScore > 0 
           ? (scoreData.currentScore / scoreData.maxScore) * 100 
           : 0;
 
-        // Upsert the secure score
-        const { error: upsertError } = await supabase
-          .from('tenant_secure_scores')
-          .upsert({
-            user_id: user.id,
-            tenant_connection_id: tenant.id,
-            current_score: scoreData.currentScore,
-            max_score: scoreData.maxScore,
-            score_percentage: scorePercentage,
-            control_scores: scoreData.controlScores,
-            improvement_actions: improvementActions,
-            updated_at: new Date().toISOString(),
-          }, {
-            onConflict: 'tenant_connection_id',
-          });
+        const secureScorePayload = {
+          user_id: user.id,
+          tenant_connection_id: tenant.id,
+          current_score: scoreData.currentScore,
+          max_score: scoreData.maxScore,
+          control_scores: scoreData.controlScores,
+          improvement_actions: improvementActions,
+          updated_at: new Date().toISOString(),
+        };
 
-        if (upsertError) {
-          // If upsert fails, try insert
-          await supabase
+        // Persist the secure score (update existing row; otherwise insert)
+        const { data: updatedRows, error: updateError } = await supabase
+          .from('tenant_secure_scores')
+          .update(secureScorePayload)
+          .eq('tenant_connection_id', tenant.id)
+          .eq('user_id', user.id)
+          .select('id');
+
+        if (updateError) {
+          console.error('Failed to update tenant_secure_scores:', updateError);
+          throw new Error(`Failed to persist secure score (update): ${updateError.message}`);
+        }
+
+        if (!updatedRows || updatedRows.length === 0) {
+          const { error: insertError } = await supabase
             .from('tenant_secure_scores')
-            .insert({
-              user_id: user.id,
-              tenant_connection_id: tenant.id,
-              current_score: scoreData.currentScore,
-              max_score: scoreData.maxScore,
-              score_percentage: scorePercentage,
-              control_scores: scoreData.controlScores,
-              improvement_actions: improvementActions,
-            });
+            .insert(secureScorePayload);
+
+          if (insertError) {
+            console.error('Failed to insert tenant_secure_scores:', insertError);
+            throw new Error(`Failed to persist secure score (insert): ${insertError.message}`);
+          }
         }
 
         // Record history
-        await supabase
+        const { error: historyError } = await supabase
           .from('secure_score_history')
           .insert({
             user_id: user.id,
@@ -273,6 +276,10 @@ serve(async (req) => {
             score: scoreData.currentScore,
             max_score: scoreData.maxScore,
           });
+
+        if (historyError) {
+          console.error('Failed to insert secure_score_history:', historyError);
+        }
 
         results.push({
           tenantConnectionId: tenant.id,
