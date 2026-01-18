@@ -11,7 +11,8 @@ import {
   Loader2,
   Trash2,
   FileUp,
-  RefreshCw
+  RefreshCw,
+  Building2
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -126,7 +127,7 @@ interface ValidationResult {
 
 export const ImportView = () => {
   const { toast } = useToast();
-  const { isConnected, getValidToken, connectionId } = useTenant();
+  const { isConnected, getValidToken, connectionId, selectedTenantId, tenants } = useTenant();
   
   const [importJobs, setImportJobs] = useState<ImportJob[]>([]);
   const [exportJobs, setExportJobs] = useState<ExportJob[]>([]);
@@ -144,23 +145,38 @@ export const ImportView = () => {
   const [rollbackJobId, setRollbackJobId] = useState<string | null>(null);
   const [isRollingBack, setIsRollingBack] = useState(false);
 
+  // Get tenant name for display
+  const selectedTenant = tenants.find(t => t.id === selectedTenantId);
+  const tenantDisplayName = selectedTenant?.displayName || selectedTenant?.tenantName || 'All Tenants';
+
   useEffect(() => {
     loadData();
-  }, []);
+  }, [selectedTenantId]);
 
   const loadData = async () => {
     setIsLoading(true);
     try {
+      // Build queries with tenant filter
+      let importQuery = supabase
+        .from('import_jobs')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      let exportQuery = supabase
+        .from('export_jobs')
+        .select('id, name, status, created_at, categories')
+        .eq('status', 'completed')
+        .order('created_at', { ascending: false });
+
+      // Filter by selected tenant if one is selected
+      if (selectedTenantId) {
+        importQuery = importQuery.eq('tenant_connection_id', selectedTenantId);
+        exportQuery = exportQuery.eq('tenant_connection_id', selectedTenantId);
+      }
+
       const [importRes, exportRes] = await Promise.all([
-        supabase
-          .from('import_jobs')
-          .select('*')
-          .order('created_at', { ascending: false }),
-        supabase
-          .from('export_jobs')
-          .select('id, name, status, created_at, categories')
-          .eq('status', 'completed')
-          .order('created_at', { ascending: false })
+        importQuery,
+        exportQuery
       ]);
 
       if (importRes.error) throw importRes.error;
@@ -661,6 +677,14 @@ export const ImportView = () => {
           <p className="text-muted-foreground mt-1">
             Restore configurations to your tenant from exports or JSON files
           </p>
+          {selectedTenantId && (
+            <div className="flex items-center gap-2 mt-2">
+              <Building2 className="w-4 h-4 text-primary" />
+              <span className="text-sm text-primary font-medium">
+                Filtered to: {tenantDisplayName}
+              </span>
+            </div>
+          )}
         </div>
         <Button variant="outline" onClick={loadData} disabled={isLoading}>
           <RefreshCw className={cn("w-4 h-4 mr-2", isLoading && "animate-spin")} />

@@ -9,7 +9,8 @@ import {
   Check,
   AlertCircle,
   Loader2,
-  Shield
+  Shield,
+  Building2
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -21,6 +22,7 @@ import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 import { ExportFormat } from '@/types/tenant';
 import { PreflightCheckDialog } from '@/components/PreflightCheckDialog';
+import { useTenant } from '@/contexts/TenantContext';
 
 const exportFormats = [
   {
@@ -85,7 +87,11 @@ export const ExportView = ({
   const [includeMetadata, setIncludeMetadata] = useState(true);
   const [preflightOpen, setPreflightOpen] = useState(false);
 
-  const canExport = selectedResources.length > 0 && selectedFormats.length > 0 && !isExporting;
+  const { selectedTenantId, tenants, isConnected, tenantName } = useTenant();
+  const selectedTenant = tenants.find(t => t.id === selectedTenantId);
+  const displayTenantName = tenantName || selectedTenant?.displayName || selectedTenant?.tenantName;
+
+  const canExport = selectedResources.length > 0 && selectedFormats.length > 0 && !isExporting && isConnected;
 
   const handleStartExport = () => {
     if (accessToken) {
@@ -111,6 +117,14 @@ export const ExportView = ({
           <p className="text-muted-foreground mt-1">
             Choose export formats and configure output settings
           </p>
+          {displayTenantName && (
+            <div className="flex items-center gap-2 mt-2">
+              <Building2 className="w-4 h-4 text-primary" />
+              <span className="text-sm text-primary font-medium">
+                Exporting from: {displayTenantName}
+              </span>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-3">
           <Badge variant="outline" className="px-3 py-1">
@@ -180,8 +194,25 @@ export const ExportView = ({
         </motion.div>
       )}
 
+      {/* Warning if no tenant connected */}
+      {!isConnected && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex items-center gap-3 p-4 rounded-lg bg-warning/10 border border-warning/20"
+        >
+          <AlertCircle className="w-5 h-5 text-warning" />
+          <div>
+            <p className="font-medium text-warning">No tenant connected</p>
+            <p className="text-sm text-muted-foreground">
+              Select a tenant from the dropdown above to begin exporting
+            </p>
+          </div>
+        </motion.div>
+      )}
+
       {/* Warning if no resources selected */}
-      {selectedResources.length === 0 && (
+      {selectedResources.length === 0 && isConnected && (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
