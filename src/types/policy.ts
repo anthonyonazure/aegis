@@ -737,6 +737,375 @@ export const BASELINE_TEMPLATES: Omit<PolicyTemplate, 'id' | 'userId' | 'created
   },
 ];
 
+// Governance Action Templates - specific remediation policies
+export const GOVERNANCE_ACTION_TEMPLATES: Omit<PolicyTemplate, 'id' | 'userId' | 'createdAt' | 'updatedAt'>[] = [
+  {
+    name: 'MFA Enforcement Policy',
+    description: 'Enforce Multi-Factor Authentication for all users, with special focus on admin accounts',
+    category: 'security',
+    baselineType: 'microsoft_security',
+    policyData: {
+      conditionalAccess: {
+        displayName: 'Require MFA for All Users',
+        state: 'enabled',
+        conditions: {
+          users: {
+            includeUsers: ['All'],
+          },
+          applications: {
+            includeApplications: ['All'],
+          },
+          clientAppTypes: ['all'],
+        },
+        grantControls: {
+          operator: 'OR',
+          builtInControls: ['mfa'],
+        },
+      },
+      adminMfaPolicy: {
+        displayName: 'Require MFA for Administrators',
+        state: 'enabled',
+        conditions: {
+          users: {
+            includeRoles: [
+              '62e90394-69f5-4237-9190-012177145e10', // Global Administrator
+              'e8611ab8-c189-46e8-94e1-60213ab1f814', // Privileged Role Administrator
+              '194ae4cb-b126-40b2-bd5b-6091b380977d', // Security Administrator
+              'f28a1f50-f6e7-4571-818b-6a12f2af6b6c', // SharePoint Administrator
+              '29232cdf-9323-42fd-ade2-1d097af3e4de', // Exchange Administrator
+              'fe930be7-5e62-47db-91af-98c3a49a38b1', // User Administrator
+            ],
+          },
+          applications: {
+            includeApplications: ['All'],
+          },
+        },
+        grantControls: {
+          operator: 'OR',
+          builtInControls: ['mfa'],
+        },
+        sessionControls: {
+          signInFrequency: {
+            value: 1,
+            type: 'hours',
+            isEnabled: true,
+          },
+        },
+      },
+      authenticationMethods: {
+        microsoftAuthenticator: { enabled: true },
+        fido2: { enabled: true },
+        sms: { enabled: false },
+        voiceCall: { enabled: false },
+        email: { enabled: false },
+      },
+    },
+    resourceTypes: ['conditionalAccessPolicies', 'authenticationMethodsPolicy'],
+    isDefault: true,
+    isActive: true,
+    version: 1,
+  },
+  {
+    name: 'Block Legacy Authentication',
+    description: 'Block legacy authentication protocols that bypass MFA and pose security risks',
+    category: 'security',
+    baselineType: 'microsoft_security',
+    policyData: {
+      conditionalAccess: {
+        displayName: 'Block Legacy Authentication',
+        state: 'enabled',
+        conditions: {
+          users: {
+            includeUsers: ['All'],
+          },
+          applications: {
+            includeApplications: ['All'],
+          },
+          clientAppTypes: ['exchangeActiveSync', 'other'],
+        },
+        grantControls: {
+          operator: 'OR',
+          builtInControls: ['block'],
+        },
+      },
+      exchangeOnline: {
+        modernAuthEnabled: true,
+        basicAuthBlocked: {
+          activesync: true,
+          autodiscover: true,
+          imap: true,
+          mapi: true,
+          offlineAddressBook: true,
+          outlookService: true,
+          pop: true,
+          reportingWebServices: true,
+          rpc: true,
+          smtp: true,
+          webServices: true,
+          powershell: false,
+        },
+      },
+    },
+    resourceTypes: ['conditionalAccessPolicies', 'exchangeOnlineSettings'],
+    isDefault: true,
+    isActive: true,
+    version: 1,
+  },
+  {
+    name: 'Conditional Access Baseline',
+    description: 'Comprehensive Conditional Access policy baseline for secure access control',
+    category: 'security',
+    baselineType: 'zero_trust',
+    policyData: {
+      policies: [
+        {
+          displayName: 'Require MFA for All Users',
+          state: 'enabled',
+          conditions: {
+            users: { includeUsers: ['All'] },
+            applications: { includeApplications: ['All'] },
+          },
+          grantControls: {
+            operator: 'OR',
+            builtInControls: ['mfa'],
+          },
+        },
+        {
+          displayName: 'Block Legacy Authentication',
+          state: 'enabled',
+          conditions: {
+            users: { includeUsers: ['All'] },
+            applications: { includeApplications: ['All'] },
+            clientAppTypes: ['exchangeActiveSync', 'other'],
+          },
+          grantControls: {
+            operator: 'OR',
+            builtInControls: ['block'],
+          },
+        },
+        {
+          displayName: 'Require Compliant Device',
+          state: 'enabled',
+          conditions: {
+            users: { includeUsers: ['All'] },
+            applications: { includeApplications: ['All'] },
+            platforms: { includePlatforms: ['windows', 'macOS', 'iOS', 'android'] },
+          },
+          grantControls: {
+            operator: 'AND',
+            builtInControls: ['mfa', 'compliantDevice'],
+          },
+        },
+        {
+          displayName: 'Block High Risk Sign-Ins',
+          state: 'enabled',
+          conditions: {
+            users: { includeUsers: ['All'] },
+            applications: { includeApplications: ['All'] },
+            signInRiskLevels: ['high'],
+          },
+          grantControls: {
+            operator: 'OR',
+            builtInControls: ['block'],
+          },
+        },
+        {
+          displayName: 'Require Password Change for High Risk Users',
+          state: 'enabled',
+          conditions: {
+            users: { includeUsers: ['All'] },
+            applications: { includeApplications: ['All'] },
+            userRiskLevels: ['high'],
+          },
+          grantControls: {
+            operator: 'AND',
+            builtInControls: ['mfa', 'passwordChange'],
+          },
+        },
+      ],
+      sessionControls: {
+        signInFrequency: {
+          value: 12,
+          type: 'hours',
+          isEnabled: true,
+        },
+        persistentBrowser: {
+          mode: 'never',
+          isEnabled: true,
+        },
+      },
+    },
+    resourceTypes: ['conditionalAccessPolicies'],
+    isDefault: true,
+    isActive: true,
+    version: 1,
+  },
+  {
+    name: 'Guest User Access Restriction',
+    description: 'Restrict external guest user access and require additional verification',
+    category: 'identity',
+    baselineType: 'zero_trust',
+    policyData: {
+      conditionalAccess: {
+        displayName: 'Restrict Guest Access',
+        state: 'enabled',
+        conditions: {
+          users: {
+            includeGuestsOrExternalUsers: {
+              guestOrExternalUserTypes: 'b2bCollaborationGuest,b2bDirectConnectUser',
+              externalTenants: { membershipKind: 'all' },
+            },
+          },
+          applications: { includeApplications: ['All'] },
+        },
+        grantControls: {
+          operator: 'AND',
+          builtInControls: ['mfa', 'compliantDevice'],
+        },
+        sessionControls: {
+          signInFrequency: {
+            value: 1,
+            type: 'hours',
+            isEnabled: true,
+          },
+        },
+      },
+      guestUserSettings: {
+        guestUserRoleId: '2af84b1e-32c8-42b7-82bc-daa82404023b', // Restricted Guest
+        allowInvitesFrom: 'adminsAndGuestInviters',
+        guestSelfServiceSignUp: false,
+        allowEmailVerifiedUsersToJoinOrganization: false,
+        collaborationRestrictions: {
+          allowedDomains: [],
+          blockedDomains: [],
+        },
+      },
+      accessReview: {
+        enabled: true,
+        reviewInterval: 90,
+        autoRemoveAccessOnDeny: true,
+      },
+    },
+    resourceTypes: ['conditionalAccessPolicies', 'authorizationPolicy', 'accessReviews'],
+    isDefault: true,
+    isActive: true,
+    version: 1,
+  },
+  {
+    name: 'Privileged Identity Management',
+    description: 'Configure just-in-time privileged access for admin roles using PIM',
+    category: 'identity',
+    baselineType: 'zero_trust',
+    policyData: {
+      pimRoleSettings: {
+        globalAdministrator: {
+          activationMaximumDuration: 'PT8H',
+          requireMfaOnActivation: true,
+          requireJustification: true,
+          requireApproval: true,
+          requireTicketInfo: true,
+          permanentEligibleAssignmentAllowed: false,
+          expirationRule: {
+            isExpirationRequired: true,
+            maximumDuration: 'P365D',
+          },
+        },
+        privilegedRoleAdministrator: {
+          activationMaximumDuration: 'PT8H',
+          requireMfaOnActivation: true,
+          requireJustification: true,
+          requireApproval: true,
+        },
+        securityAdministrator: {
+          activationMaximumDuration: 'PT8H',
+          requireMfaOnActivation: true,
+          requireJustification: true,
+        },
+        exchangeAdministrator: {
+          activationMaximumDuration: 'PT8H',
+          requireMfaOnActivation: true,
+          requireJustification: true,
+        },
+        sharepointAdministrator: {
+          activationMaximumDuration: 'PT8H',
+          requireMfaOnActivation: true,
+          requireJustification: true,
+        },
+        userAdministrator: {
+          activationMaximumDuration: 'PT8H',
+          requireMfaOnActivation: true,
+          requireJustification: true,
+        },
+      },
+      accessReview: {
+        enabled: true,
+        reviewInterval: 30,
+        reviewerType: 'Manager',
+        autoRemoveAccessOnDeny: true,
+      },
+      alerts: {
+        rolesBeingActivatedTooFrequently: true,
+        adminElevatingAccessToSubscriptions: true,
+        potentialStaleRoleAssignments: true,
+        rolesNotRequiringMfa: true,
+      },
+    },
+    resourceTypes: ['privilegedIdentityManagement', 'roleManagement'],
+    isDefault: true,
+    isActive: true,
+    version: 1,
+  },
+  {
+    name: 'License Optimization Policy',
+    description: 'Configure automated license reclamation and optimization rules',
+    category: 'licensing',
+    baselineType: 'custom',
+    policyData: {
+      licenseReclamation: {
+        enabled: true,
+        inactivityThresholdDays: 60,
+        excludedUsers: [],
+        excludedGroups: [],
+        notifyBeforeReclaim: true,
+        notifyDaysBefore: 14,
+      },
+      licenseDowngrade: {
+        enabled: true,
+        rules: [
+          {
+            name: 'E5 to E3 for Basic Users',
+            fromSku: 'SPE_E5',
+            toSku: 'SPE_E3',
+            conditions: {
+              noAdvancedSecurityUsage: true,
+              noPowerBIProUsage: true,
+              noAudioConferencingUsage: true,
+            },
+          },
+          {
+            name: 'E3 to F3 for Frontline Workers',
+            fromSku: 'SPE_E3',
+            toSku: 'SPE_F1',
+            conditions: {
+              userType: 'frontline',
+              noDesktopAppsUsage: true,
+            },
+          },
+        ],
+      },
+      reporting: {
+        generateWeeklyReport: true,
+        includeOptimizationSuggestions: true,
+        includeCostSavings: true,
+      },
+    },
+    resourceTypes: ['subscribedSkus', 'users', 'licenseDetails'],
+    isDefault: true,
+    isActive: true,
+    version: 1,
+  },
+];
+
 export const BASELINE_CONFIG: Record<BaselineType, { label: string; color: string; icon: string }> = {
   cis: { label: 'CIS', color: 'bg-blue-500/20 text-blue-400', icon: 'Shield' },
   nist: { label: 'NIST', color: 'bg-purple-500/20 text-purple-400', icon: 'FileCheck' },

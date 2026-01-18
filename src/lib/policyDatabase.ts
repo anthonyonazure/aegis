@@ -6,6 +6,7 @@ import {
   BaselineType,
   DeploymentStatus,
   TargetType,
+  GOVERNANCE_ACTION_TEMPLATES,
 } from '@/types/policy';
 
 // Helper to get current user ID
@@ -405,4 +406,73 @@ function mapDeploymentResultFromDb(row: Record<string, unknown>): DeploymentResu
     completedAt: row.completed_at ? new Date(row.completed_at as string) : undefined,
     createdAt: new Date(row.created_at as string),
   };
+}
+
+// ============= Governance Template Seeding =============
+
+const GOVERNANCE_TEMPLATE_NAMES = GOVERNANCE_ACTION_TEMPLATES.map(t => t.name);
+
+export async function seedGovernanceTemplates(): Promise<{ seeded: number; skipped: number }> {
+  try {
+    const userId = await getCurrentUserId();
+    
+    // Check which templates already exist
+    const { data: existingTemplates } = await supabase
+      .from('policy_templates')
+      .select('name')
+      .in('name', GOVERNANCE_TEMPLATE_NAMES);
+    
+    const existingNames = new Set((existingTemplates || []).map(t => t.name));
+    
+    // Filter templates that don't exist yet
+    const templatesToCreate = GOVERNANCE_ACTION_TEMPLATES.filter(
+      t => !existingNames.has(t.name)
+    );
+    
+    if (templatesToCreate.length === 0) {
+      return { seeded: 0, skipped: GOVERNANCE_TEMPLATE_NAMES.length };
+    }
+    
+    // Insert missing templates
+    const { error } = await supabase
+      .from('policy_templates')
+      .insert(
+        templatesToCreate.map(t => ({
+          user_id: userId,
+          name: t.name,
+          description: t.description,
+          category: t.category,
+          baseline_type: t.baselineType,
+          policy_data: t.policyData as unknown as Record<string, never>,
+          resource_types: t.resourceTypes,
+          is_default: t.isDefault,
+          is_active: t.isActive,
+          version: t.version,
+        }))
+      );
+    
+    if (error) {
+      console.error('Failed to seed governance templates:', error);
+      return { seeded: 0, skipped: existingNames.size };
+    }
+    
+    return { seeded: templatesToCreate.length, skipped: existingNames.size };
+  } catch (error) {
+    console.error('Error seeding governance templates:', error);
+    return { seeded: 0, skipped: 0 };
+  }
+}
+
+export async function getPolicyTemplateByName(name: string): Promise<PolicyTemplate | null> {
+  const { data, error } = await supabase
+    .from('policy_templates')
+    .select('*')
+    .eq('name', name)
+    .maybeSingle();
+
+  if (error) {
+    console.error('Error fetching policy template by name:', error);
+    return null;
+  }
+  return data ? mapPolicyTemplateFromDb(data) : null;
 }
