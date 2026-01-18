@@ -12,12 +12,14 @@ import {
   AlertTriangle,
   Radio,
   StopCircle,
-  Building2
+  Building2,
+  Filter
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
 import { getExportJobs, deleteExportJob, cancelExportJob } from '@/lib/database';
 import { downloadExportAsZip } from '@/lib/exportUtils';
@@ -89,6 +91,7 @@ const getStatusBadge = (status: JobStatus, hasError: boolean) => {
 };
 
 export const JobsView = () => {
+  const [allJobs, setAllJobs] = useState<ExportJobRecord[]>([]);
   const [jobs, setJobs] = useState<ExportJobRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState<string | null>(null);
@@ -96,18 +99,54 @@ export const JobsView = () => {
   const [selectedJob, setSelectedJob] = useState<ExportJobRecord | null>(null);
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
   const [lastRealtimeUpdate, setLastRealtimeUpdate] = useState<Date | null>(null);
+  const [tenantConnectionIds, setTenantConnectionIds] = useState<string[]>([]);
   const { toast } = useToast();
-  const { selectedTenantId, selectedCustomerId, tenants } = useTenant();
+  const { selectedTenantId, selectedCustomerId, tenants, customers } = useTenant();
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
-  // Get tenant name for display
+  // Get tenant/customer name for display
   const selectedTenant = tenants.find(t => t.id === selectedTenantId);
-  const tenantDisplayName = selectedTenant?.displayName || selectedTenant?.tenantName || 'All Tenants';
+  const tenantDisplayName = selectedTenant?.displayName || selectedTenant?.tenantName || null;
+  const selectedCustomerName = selectedCustomerId 
+    ? customers.find(c => c.id === selectedCustomerId)?.name 
+    : null;
+
+  // Load tenant connections for selected customer
+  useEffect(() => {
+    const loadTenantConnections = async () => {
+      if (!selectedCustomerId) {
+        setTenantConnectionIds([]);
+        return;
+      }
+      
+      const { data } = await supabase
+        .from('tenant_connections')
+        .select('id')
+        .eq('customer_id', selectedCustomerId);
+      
+      setTenantConnectionIds(data?.map(t => t.id) || []);
+    };
+    
+    loadTenantConnections();
+  }, [selectedCustomerId]);
+
+  // Filter jobs when customer/tenant selection changes
+  useEffect(() => {
+    if (selectedTenantId) {
+      setJobs(allJobs.filter(job => job.tenant_connection_id === selectedTenantId));
+    } else if (selectedCustomerId && tenantConnectionIds.length > 0) {
+      setJobs(allJobs.filter(job => 
+        job.tenant_connection_id && tenantConnectionIds.includes(job.tenant_connection_id)
+      ));
+    } else {
+      setJobs(allJobs);
+    }
+  }, [selectedCustomerId, selectedTenantId, tenantConnectionIds, allJobs]);
 
   const fetchJobs = useCallback(async () => {
     try {
-      const data = await getExportJobs(selectedTenantId || undefined);
-      setJobs(data as ExportJobRecord[]);
+      const data = await getExportJobs();
+      setAllJobs(data as ExportJobRecord[]);
     } catch (error) {
       console.error('Failed to fetch jobs:', error);
       toast({
@@ -118,7 +157,7 @@ export const JobsView = () => {
     } finally {
       setLoading(false);
     }
-  }, [toast, selectedTenantId]);
+  }, [toast]);
 
   useEffect(() => {
     fetchJobs();
@@ -141,15 +180,15 @@ export const JobsView = () => {
 
           if (payload.eventType === 'INSERT') {
             const newJob = payload.new as ExportJobRecord;
-            setJobs((prev) => [newJob, ...prev]);
+            setAllJobs((prev) => [newJob, ...prev]);
           } else if (payload.eventType === 'UPDATE') {
             const updatedJob = payload.new as ExportJobRecord;
-            setJobs((prev) =>
+            setAllJobs((prev) =>
               prev.map((job) => (job.id === updatedJob.id ? updatedJob : job))
             );
           } else if (payload.eventType === 'DELETE') {
             const deletedJob = payload.old as { id: string };
-            setJobs((prev) => prev.filter((job) => job.id !== deletedJob.id));
+            setAllJobs((prev) => prev.filter((job) => job.id !== deletedJob.id));
           }
         }
       )
@@ -198,7 +237,7 @@ export const JobsView = () => {
   const handleDelete = async (jobId: string) => {
     try {
       await deleteExportJob(jobId);
-      setJobs(prev => prev.filter(j => j.id !== jobId));
+      setAllJobs(prev => prev.filter(j => j.id !== jobId));
       toast({
         title: 'Job Deleted',
         description: 'Export job has been deleted',
@@ -255,14 +294,6 @@ export const JobsView = () => {
           <p className="text-muted-foreground mt-1">
             View, download, and manage your export history
           </p>
-          {selectedTenantId && (
-            <div className="flex items-center gap-2 mt-2">
-              <Building2 className="w-4 h-4 text-primary" />
-              <span className="text-sm text-primary font-medium">
-                Filtered to: {tenantDisplayName}
-              </span>
-            </div>
-          )}
         </div>
         <div className="flex items-center gap-3">
           {/* Realtime Indicator */}
@@ -300,6 +331,17 @@ export const JobsView = () => {
           </Button>
         </div>
       </div>
+
+      {/* Customer filter indicator */}
+      {selectedCustomerId && (
+        <Alert className="border-primary/50 bg-primary/5">
+          <Filter className="h-4 w-4" />
+          <AlertDescription>
+            Showing export jobs for <strong>{selectedCustomerName}</strong>
+            {selectedTenantId && tenantDisplayName && ` (${tenantDisplayName})`}
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Summary Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
