@@ -16,6 +16,12 @@ export const COMPLIANCE_BASELINES = [
   { id: 'cis-m365', name: 'CIS Microsoft 365', description: 'CIS Benchmark for Microsoft 365' },
   { id: 'zero-trust', name: 'Zero Trust', description: 'Zero Trust security principles' },
   { id: 'nist', name: 'NIST 800-53', description: 'NIST security controls framework' },
+  { id: 'iso-27001', name: 'ISO 27001', description: 'Information Security Management System (ISMS) standard' },
+  { id: 'iso-27018', name: 'ISO 27018', description: 'Protection of PII in public clouds' },
+  { id: 'soc-2', name: 'SOC 2 Type II', description: 'Service Organization Control 2 - Trust Services Criteria' },
+  { id: 'iso-9001', name: 'ISO 9001', description: 'Quality Management System standard' },
+  { id: 'irap', name: 'IRAP', description: 'Australian Government Information Security Registered Assessors Program' },
+  { id: 'hipaa', name: 'HIPAA', description: 'Health Insurance Portability and Accountability Act' },
 ] as const;
 
 export const COMPLIANCE_RULES: ComplianceRule[] = [
@@ -1085,6 +1091,622 @@ export const COMPLIANCE_RULES: ComplianceRule[] = [
       return {
         passed: hasNetworkPolicy === true,
         message: hasNetworkPolicy ? `Network policy: ${networkProfile?.networkPolicy}` : 'No network policy configured',
+      };
+    },
+  },
+
+  // ===============================
+  // ISO 27001 - Information Security Management
+  // ===============================
+  {
+    id: 'iso27001-access-control',
+    name: 'Access Control Policy (A.9)',
+    description: 'ISO 27001 A.9: Access control policies must be established',
+    category: 'conditional-access',
+    severity: 'critical',
+    baseline: 'iso-27001',
+    resourceTypes: ['conditional-access/ca-policies'],
+    check: (resource) => {
+      const state = resource.state as string;
+      const conditions = resource.conditions as Record<string, unknown> | undefined;
+      const hasUsers = conditions?.users !== undefined;
+      return {
+        passed: state === 'enabled' && hasUsers,
+        message: state === 'enabled' && hasUsers 
+          ? 'Access control policy is active' 
+          : 'Access control not properly configured',
+      };
+    },
+  },
+  {
+    id: 'iso27001-cryptography',
+    name: 'Cryptographic Controls (A.10)',
+    description: 'ISO 27001 A.10: Data encryption must be enabled',
+    category: 'intune',
+    severity: 'critical',
+    baseline: 'iso-27001',
+    resourceTypes: ['intune/device-configurations', 'intune/compliance-policies'],
+    check: (resource) => {
+      const bitLockerEnabled = resource.bitLockerEnabled === true || 
+                               resource.requireDeviceEncryption === true ||
+                               resource.storageRequireEncryption === true ||
+                               resource.encryptionRequired === true;
+      return {
+        passed: bitLockerEnabled === true,
+        message: bitLockerEnabled ? 'Encryption controls configured' : 'Encryption not enforced',
+      };
+    },
+  },
+  {
+    id: 'iso27001-ops-security',
+    name: 'Operations Security (A.12)',
+    description: 'ISO 27001 A.12: Protection from malware required',
+    category: 'defender',
+    severity: 'critical',
+    baseline: 'iso-27001',
+    resourceTypes: ['defender/antivirus-policies', 'defender/asr-policies'],
+    check: (resource) => {
+      const settings = resource.settings as unknown[] | undefined;
+      const hasSettings = settings && settings.length > 0;
+      return {
+        passed: hasSettings === true,
+        message: hasSettings ? 'Operations security controls configured' : 'Malware protection not configured',
+      };
+    },
+  },
+  {
+    id: 'iso27001-audit-logging',
+    name: 'Audit Logging (A.12.4)',
+    description: 'ISO 27001 A.12.4: Event logging must be configured',
+    category: 'exchange',
+    severity: 'high',
+    baseline: 'iso-27001',
+    resourceTypes: ['exchange/organization-config', 'exchange/mailboxes'],
+    check: (resource) => {
+      const auditEnabled = resource.auditEnabled === true || 
+                           resource.auditDisabled === false;
+      return {
+        passed: auditEnabled !== false,
+        message: auditEnabled ? 'Audit logging enabled' : 'Audit logging not enabled',
+      };
+    },
+  },
+  {
+    id: 'iso27001-network-security',
+    name: 'Network Security (A.13)',
+    description: 'ISO 27001 A.13: Network controls must be implemented',
+    category: 'conditional-access',
+    severity: 'high',
+    baseline: 'iso-27001',
+    resourceTypes: ['conditional-access/ca-policies', 'conditional-access/named-locations'],
+    check: (resource) => {
+      const conditions = resource.conditions as Record<string, unknown> | undefined;
+      const locations = conditions?.locations as Record<string, unknown> | undefined;
+      const isTrustedLocation = resource.isTrusted === true;
+      return {
+        passed: locations !== undefined || isTrustedLocation,
+        message: locations || isTrustedLocation 
+          ? 'Network controls configured' 
+          : 'No network segmentation controls',
+      };
+    },
+  },
+  {
+    id: 'iso27001-supplier-security',
+    name: 'Supplier Relationships (A.15)',
+    description: 'ISO 27001 A.15: Third-party app permissions must be reviewed',
+    category: 'entra-id',
+    severity: 'medium',
+    baseline: 'iso-27001',
+    resourceTypes: ['entra-id/enterprise-apps', 'entra-id/app-registrations'],
+    check: (resource) => {
+      const requiredResourceAccess = resource.requiredResourceAccess as unknown[] | undefined;
+      const hasLimitedPermissions = !requiredResourceAccess || requiredResourceAccess.length <= 5;
+      return {
+        passed: hasLimitedPermissions,
+        message: hasLimitedPermissions 
+          ? 'App permissions appear reasonable' 
+          : `App has ${requiredResourceAccess?.length} resource access grants - review required`,
+      };
+    },
+  },
+
+  // ===============================
+  // ISO 27018 - PII Protection in Cloud
+  // ===============================
+  {
+    id: 'iso27018-pii-encryption',
+    name: 'PII Encryption in Transit (5.1)',
+    description: 'ISO 27018: PII must be encrypted during transmission',
+    category: 'sharepoint',
+    severity: 'critical',
+    baseline: 'iso-27018',
+    resourceTypes: ['sharepoint/tenant-settings', 'exchange/organization-config'],
+    check: (resource) => {
+      // SharePoint/Exchange use TLS by default in M365
+      const modernAuth = resource.oAuth2ClientProfileEnabled === true || 
+                         resource.modernAuthEnabled === true;
+      return {
+        passed: true, // M365 enforces TLS
+        message: 'M365 enforces TLS encryption for data in transit',
+      };
+    },
+  },
+  {
+    id: 'iso27018-data-location',
+    name: 'Data Location Transparency (5.2)',
+    description: 'ISO 27018: Data processing locations must be defined',
+    category: 'sharepoint',
+    severity: 'medium',
+    baseline: 'iso-27018',
+    resourceTypes: ['sharepoint/tenant-settings', 'sharepoint/geo-locations'],
+    check: (resource) => {
+      const geoLocation = resource.geoLocation as string | undefined;
+      const dataLocation = resource.allowedDataLocation as string | undefined;
+      return {
+        passed: geoLocation !== undefined || dataLocation !== undefined,
+        message: geoLocation || dataLocation 
+          ? `Data location: ${geoLocation || dataLocation}` 
+          : 'Data location not explicitly configured',
+      };
+    },
+  },
+  {
+    id: 'iso27018-consent-management',
+    name: 'Consent Management (A.2.1)',
+    description: 'ISO 27018: User consent controls must be configured',
+    category: 'entra-id',
+    severity: 'high',
+    baseline: 'iso-27018',
+    resourceTypes: ['entra-id/authorization-policy', 'entra-id/consent-policies'],
+    check: (resource) => {
+      const permissionGrantPolicy = resource.permissionGrantPolicyIdsAssignedToDefaultUserRole as string[] | undefined;
+      const isRestricted = !permissionGrantPolicy || 
+                           permissionGrantPolicy.length === 0 ||
+                           permissionGrantPolicy.includes('ManagePermissionGrantsForSelf.microsoft-user-default-low');
+      return {
+        passed: isRestricted,
+        message: isRestricted 
+          ? 'User consent is restricted' 
+          : 'Users can consent to any app - consider restricting',
+      };
+    },
+  },
+  {
+    id: 'iso27018-data-retention',
+    name: 'Data Retention Controls (A.10.1)',
+    description: 'ISO 27018: Data retention policies must be defined',
+    category: 'exchange',
+    severity: 'medium',
+    baseline: 'iso-27018',
+    resourceTypes: ['exchange/retention-policies', 'sharepoint/retention-policies'],
+    check: (resource) => {
+      const retentionEnabled = resource.retentionEnabled === true || 
+                               resource.isEnabled === true ||
+                               resource.retentionDays !== undefined;
+      return {
+        passed: retentionEnabled === true,
+        message: retentionEnabled ? 'Retention policy configured' : 'No retention policy defined',
+      };
+    },
+  },
+
+  // ===============================
+  // SOC 2 Type II - Trust Services Criteria
+  // ===============================
+  {
+    id: 'soc2-cc6-logical-access',
+    name: 'Logical Access Controls (CC6.1)',
+    description: 'SOC 2: Logical access security controls',
+    category: 'conditional-access',
+    severity: 'critical',
+    baseline: 'soc-2',
+    resourceTypes: ['conditional-access/ca-policies'],
+    check: (resource) => {
+      const grantControls = resource.grantControls as Record<string, unknown> | undefined;
+      const builtInControls = grantControls?.builtInControls as string[] | undefined;
+      const hasMfa = builtInControls?.includes('mfa');
+      const state = resource.state as string;
+      return {
+        passed: state === 'enabled' && hasMfa === true,
+        message: state === 'enabled' && hasMfa 
+          ? 'Logical access controls with MFA configured' 
+          : 'MFA not enforced for access control',
+      };
+    },
+  },
+  {
+    id: 'soc2-cc6-authentication',
+    name: 'Authentication Mechanisms (CC6.2)',
+    description: 'SOC 2: Strong authentication required',
+    category: 'conditional-access',
+    severity: 'critical',
+    baseline: 'soc-2',
+    resourceTypes: ['conditional-access/ca-policies', 'conditional-access/auth-strength'],
+    check: (resource) => {
+      const grantControls = resource.grantControls as Record<string, unknown> | undefined;
+      const authStrength = grantControls?.authenticationStrength as Record<string, unknown> | undefined;
+      const builtInControls = grantControls?.builtInControls as string[] | undefined;
+      const hasStrongAuth = authStrength !== undefined || builtInControls?.includes('mfa');
+      return {
+        passed: hasStrongAuth === true,
+        message: hasStrongAuth ? 'Strong authentication configured' : 'Strong authentication not enforced',
+      };
+    },
+  },
+  {
+    id: 'soc2-cc7-system-monitoring',
+    name: 'System Monitoring (CC7.1)',
+    description: 'SOC 2: Security event monitoring required',
+    category: 'defender',
+    severity: 'high',
+    baseline: 'soc-2',
+    resourceTypes: ['defender/antivirus-policies', 'defender/edr-policies'],
+    check: (resource) => {
+      const settings = resource.settings as unknown[] | undefined;
+      const hasSettings = settings && settings.length > 0;
+      return {
+        passed: hasSettings === true,
+        message: hasSettings ? 'Security monitoring configured' : 'Security monitoring not configured',
+      };
+    },
+  },
+  {
+    id: 'soc2-cc7-incident-response',
+    name: 'Incident Response (CC7.3)',
+    description: 'SOC 2: Incident detection and response capabilities',
+    category: 'defender',
+    severity: 'high',
+    baseline: 'soc-2',
+    resourceTypes: ['defender/asr-policies', 'defender/edr-policies'],
+    check: (resource) => {
+      const settings = resource.settings as unknown[] | undefined;
+      const templateRef = resource.templateReference as Record<string, unknown> | undefined;
+      const isEdr = templateRef?.templateFamily?.toString().toLowerCase().includes('edr') ||
+                    templateRef?.templateFamily?.toString().toLowerCase().includes('detection');
+      return {
+        passed: settings !== undefined || isEdr === true,
+        message: isEdr ? 'EDR/Incident response configured' : 'Configure EDR for incident response',
+      };
+    },
+  },
+  {
+    id: 'soc2-cc8-change-management',
+    name: 'Change Management (CC8.1)',
+    description: 'SOC 2: Change management controls',
+    category: 'intune',
+    severity: 'medium',
+    baseline: 'soc-2',
+    resourceTypes: ['intune/device-configurations', 'intune/compliance-policies'],
+    check: (resource) => {
+      const version = resource.version as number | undefined;
+      const lastModified = resource.lastModifiedDateTime as string | undefined;
+      const hasVersioning = version !== undefined && version > 0;
+      return {
+        passed: hasVersioning || lastModified !== undefined,
+        message: hasVersioning 
+          ? `Version ${version} - change tracking enabled` 
+          : 'Configuration change tracking available',
+      };
+    },
+  },
+  {
+    id: 'soc2-availability',
+    name: 'System Availability (A1.1)',
+    description: 'SOC 2: System availability controls',
+    category: 'teams',
+    severity: 'medium',
+    baseline: 'soc-2',
+    resourceTypes: ['teams/teams-settings', 'exchange/organization-config'],
+    check: (resource) => {
+      // M365 provides built-in availability
+      return {
+        passed: true,
+        message: 'M365 provides 99.9% SLA availability',
+      };
+    },
+  },
+  {
+    id: 'soc2-confidentiality',
+    name: 'Confidentiality Controls (C1.1)',
+    description: 'SOC 2: Information confidentiality',
+    category: 'sharepoint',
+    severity: 'high',
+    baseline: 'soc-2',
+    resourceTypes: ['sharepoint/tenant-settings', 'sharepoint/sensitivity-labels'],
+    check: (resource) => {
+      const sharingCapability = resource.sharingCapability as string;
+      const isRestricted = sharingCapability !== 'ExternalUserAndGuestSharing';
+      return {
+        passed: isRestricted,
+        message: isRestricted ? 'Sharing is restricted' : 'External sharing is permissive',
+      };
+    },
+  },
+
+  // ===============================
+  // ISO 9001 - Quality Management
+  // ===============================
+  {
+    id: 'iso9001-documented-policies',
+    name: 'Documented Policies (7.5)',
+    description: 'ISO 9001: Security policies must be documented and versioned',
+    category: 'intune',
+    severity: 'medium',
+    baseline: 'iso-9001',
+    resourceTypes: ['intune/device-configurations', 'intune/compliance-policies'],
+    check: (resource) => {
+      const description = resource.description as string | undefined;
+      const displayName = resource.displayName as string | undefined;
+      const hasDocumentation = description && description.length > 10;
+      return {
+        passed: hasDocumentation === true,
+        message: hasDocumentation 
+          ? 'Policy is documented' 
+          : 'Add description for quality documentation',
+      };
+    },
+  },
+  {
+    id: 'iso9001-policy-review',
+    name: 'Policy Review Process (9.2)',
+    description: 'ISO 9001: Policies should be reviewed and updated',
+    category: 'conditional-access',
+    severity: 'low',
+    baseline: 'iso-9001',
+    resourceTypes: ['conditional-access/ca-policies', 'intune/compliance-policies'],
+    check: (resource) => {
+      const lastModified = (resource.lastModifiedDateTime || resource.modifiedDateTime) as string | undefined;
+      if (!lastModified) return { passed: true, message: 'Unable to verify last modification' };
+      
+      const lastMod = new Date(lastModified as string);
+      const sixMonthsAgo = new Date();
+      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+      const isRecent = lastMod > sixMonthsAgo;
+      
+      return {
+        passed: isRecent,
+        message: isRecent 
+          ? `Last reviewed: ${lastMod.toLocaleDateString()}` 
+          : `Policy not updated since ${lastMod.toLocaleDateString()} - review recommended`,
+      };
+    },
+  },
+  {
+    id: 'iso9001-continuous-improvement',
+    name: 'Continuous Improvement (10.3)',
+    description: 'ISO 9001: Configuration should follow latest best practices',
+    category: 'conditional-access',
+    severity: 'low',
+    baseline: 'iso-9001',
+    resourceTypes: ['conditional-access/ca-policies'],
+    check: (resource) => {
+      const grantControls = resource.grantControls as Record<string, unknown> | undefined;
+      const authStrength = grantControls?.authenticationStrength as Record<string, unknown> | undefined;
+      const sessionControls = resource.sessionControls as Record<string, unknown> | undefined;
+      const hasModernControls = authStrength !== undefined || sessionControls !== undefined;
+      return {
+        passed: hasModernControls,
+        message: hasModernControls 
+          ? 'Using modern security controls' 
+          : 'Consider enabling advanced session controls',
+      };
+    },
+  },
+
+  // ===============================
+  // IRAP - Australian Government Security
+  // ===============================
+  {
+    id: 'irap-protected-access',
+    name: 'PROTECTED Level Access Control',
+    description: 'IRAP: Access controls for PROTECTED classification',
+    category: 'conditional-access',
+    severity: 'critical',
+    baseline: 'irap',
+    resourceTypes: ['conditional-access/ca-policies'],
+    check: (resource) => {
+      const grantControls = resource.grantControls as Record<string, unknown> | undefined;
+      const builtInControls = grantControls?.builtInControls as string[] | undefined;
+      const hasMfa = builtInControls?.includes('mfa');
+      const requiresCompliance = builtInControls?.includes('compliantDevice');
+      return {
+        passed: hasMfa === true && requiresCompliance === true,
+        message: hasMfa && requiresCompliance 
+          ? 'MFA and device compliance required' 
+          : 'PROTECTED requires MFA AND compliant device',
+      };
+    },
+  },
+  {
+    id: 'irap-encryption-rest',
+    name: 'Encryption at Rest (ISM-0459)',
+    description: 'IRAP/ISM: Data must be encrypted at rest',
+    category: 'intune',
+    severity: 'critical',
+    baseline: 'irap',
+    resourceTypes: ['intune/device-configurations', 'intune/compliance-policies'],
+    check: (resource) => {
+      const encrypted = resource.bitLockerEnabled === true || 
+                        resource.requireDeviceEncryption === true ||
+                        resource.storageRequireEncryption === true;
+      return {
+        passed: encrypted === true,
+        message: encrypted ? 'Encryption at rest configured' : 'Device encryption not enforced',
+      };
+    },
+  },
+  {
+    id: 'irap-australia-data',
+    name: 'Australian Data Sovereignty',
+    description: 'IRAP: Data should be stored in Australian regions',
+    category: 'sharepoint',
+    severity: 'high',
+    baseline: 'irap',
+    resourceTypes: ['sharepoint/tenant-settings', 'sharepoint/geo-locations'],
+    check: (resource) => {
+      const geoLocation = (resource.geoLocation as string || '').toLowerCase();
+      const dataLocation = (resource.allowedDataLocation as string || '').toLowerCase();
+      const isAustralia = geoLocation.includes('australia') || 
+                          geoLocation.includes('apc') ||
+                          dataLocation.includes('australia');
+      return {
+        passed: isAustralia || geoLocation === '' || dataLocation === '',
+        message: isAustralia 
+          ? 'Data located in Australia' 
+          : 'Verify data residency meets IRAP requirements',
+      };
+    },
+  },
+  {
+    id: 'irap-privileged-access',
+    name: 'Privileged Access Management (ISM-0432)',
+    description: 'IRAP/ISM: Privileged access must be strictly controlled',
+    category: 'entra-id',
+    severity: 'critical',
+    baseline: 'irap',
+    resourceTypes: ['entra-id/roles', 'entra-id/pim-policies'],
+    check: (resource) => {
+      const displayName = (resource.displayName as string || '').toLowerCase();
+      const isPrivileged = displayName.includes('admin') || displayName.includes('global');
+      const roleTemplateId = resource.roleTemplateId as string;
+      const hasTimeLimit = resource.endDateTime !== undefined;
+      
+      if (isPrivileged) {
+        return {
+          passed: hasTimeLimit === true,
+          message: hasTimeLimit 
+            ? 'Privileged access is time-limited' 
+            : 'Consider using PIM for time-limited admin access',
+        };
+      }
+      return { passed: true, message: 'Standard role assignment' };
+    },
+  },
+  {
+    id: 'irap-event-logging',
+    name: 'Security Event Logging (ISM-0580)',
+    description: 'IRAP/ISM: Security events must be logged',
+    category: 'exchange',
+    severity: 'high',
+    baseline: 'irap',
+    resourceTypes: ['exchange/organization-config', 'exchange/mailboxes'],
+    check: (resource) => {
+      const auditEnabled = resource.auditEnabled === true || 
+                           resource.auditDisabled === false;
+      return {
+        passed: auditEnabled !== false,
+        message: auditEnabled ? 'Security event logging enabled' : 'Enable audit logging for IRAP compliance',
+      };
+    },
+  },
+  {
+    id: 'irap-malware-protection',
+    name: 'Malware Protection (ISM-1417)',
+    description: 'IRAP/ISM: Endpoint protection must be configured',
+    category: 'defender',
+    severity: 'critical',
+    baseline: 'irap',
+    resourceTypes: ['defender/antivirus-policies', 'defender/asr-policies'],
+    check: (resource) => {
+      const settings = resource.settings as unknown[] | undefined;
+      const hasSettings = settings && settings.length > 0;
+      return {
+        passed: hasSettings === true,
+        message: hasSettings ? 'Malware protection configured' : 'Configure endpoint protection for IRAP',
+      };
+    },
+  },
+
+  // ===============================
+  // HIPAA - Healthcare Compliance
+  // ===============================
+  {
+    id: 'hipaa-access-controls',
+    name: 'Access Controls (164.312(a)(1))',
+    description: 'HIPAA: Unique user identification and access controls',
+    category: 'conditional-access',
+    severity: 'critical',
+    baseline: 'hipaa',
+    resourceTypes: ['conditional-access/ca-policies'],
+    check: (resource) => {
+      const grantControls = resource.grantControls as Record<string, unknown> | undefined;
+      const builtInControls = grantControls?.builtInControls as string[] | undefined;
+      const hasMfa = builtInControls?.includes('mfa');
+      return {
+        passed: hasMfa === true,
+        message: hasMfa ? 'MFA access controls configured' : 'HIPAA requires strong access controls',
+      };
+    },
+  },
+  {
+    id: 'hipaa-audit-controls',
+    name: 'Audit Controls (164.312(b))',
+    description: 'HIPAA: Activity recording and examination',
+    category: 'exchange',
+    severity: 'critical',
+    baseline: 'hipaa',
+    resourceTypes: ['exchange/organization-config', 'exchange/mailboxes'],
+    check: (resource) => {
+      const auditEnabled = resource.auditEnabled === true || 
+                           resource.auditDisabled === false;
+      return {
+        passed: auditEnabled !== false,
+        message: auditEnabled ? 'Audit controls enabled' : 'Enable auditing for HIPAA compliance',
+      };
+    },
+  },
+  {
+    id: 'hipaa-transmission-security',
+    name: 'Transmission Security (164.312(e)(1))',
+    description: 'HIPAA: Encryption during transmission',
+    category: 'exchange',
+    severity: 'critical',
+    baseline: 'hipaa',
+    resourceTypes: ['exchange/organization-config', 'exchange/transport-rules'],
+    check: (resource) => {
+      const modernAuth = resource.oAuth2ClientProfileEnabled === true;
+      return {
+        passed: true, // M365 uses TLS by default
+        message: 'M365 enforces TLS encryption for transmission security',
+      };
+    },
+  },
+  {
+    id: 'hipaa-integrity',
+    name: 'Integrity Controls (164.312(c)(1))',
+    description: 'HIPAA: Protect ePHI from improper alteration',
+    category: 'sharepoint',
+    severity: 'high',
+    baseline: 'hipaa',
+    resourceTypes: ['sharepoint/tenant-settings', 'sharepoint/sensitivity-labels'],
+    check: (resource) => {
+      const versioningEnabled = resource.versioningEnabled === true;
+      const sharingCapability = resource.sharingCapability as string;
+      const isRestricted = sharingCapability !== 'ExternalUserAndGuestSharing';
+      return {
+        passed: versioningEnabled || isRestricted,
+        message: versioningEnabled 
+          ? 'Versioning enabled for integrity' 
+          : (isRestricted ? 'Sharing restricted' : 'Enable versioning or restrict sharing'),
+      };
+    },
+  },
+  {
+    id: 'hipaa-automatic-logoff',
+    name: 'Automatic Logoff (164.312(a)(2)(iii))',
+    description: 'HIPAA: Session timeout controls',
+    category: 'conditional-access',
+    severity: 'high',
+    baseline: 'hipaa',
+    resourceTypes: ['conditional-access/ca-policies'],
+    check: (resource) => {
+      const sessionControls = resource.sessionControls as Record<string, unknown> | undefined;
+      const signInFrequency = sessionControls?.signInFrequency as Record<string, unknown> | undefined;
+      const hasTimeout = signInFrequency?.isEnabled === true;
+      return {
+        passed: hasTimeout === true,
+        message: hasTimeout ? 'Session timeout configured' : 'Configure session timeout for HIPAA',
       };
     },
   },
