@@ -50,6 +50,7 @@ const Index = () => {
   const [showPreflightCheck, setShowPreflightCheck] = useState(false);
   const [preflightToken, setPreflightToken] = useState<string | null>(null);
   const [preflightResources, setPreflightResources] = useState<string[]>([]);
+  const [selectedPolicyTemplateId, setSelectedPolicyTemplateId] = useState<string | null>(null);
   
   // Use shared tenant context
   const { 
@@ -219,7 +220,15 @@ const Index = () => {
           />
         );
       case 'governance':
-        return <GovernanceCenterView />;
+        return (
+          <GovernanceCenterView 
+            onNavigate={setActiveTab}
+            onDeployPolicy={(templateId) => {
+              setSelectedPolicyTemplateId(templateId);
+              setActiveTab('policy-deployment');
+            }}
+          />
+        );
       case 'customers':
         return <CustomersView />;
       case 'health-dashboard':
@@ -231,7 +240,15 @@ const Index = () => {
       case 'policy-templates':
         return <PolicyTemplatesView />;
       case 'policy-deployment':
-        return <PolicyDeploymentView />;
+        return (
+          <PolicyDeploymentView 
+            templateId={selectedPolicyTemplateId || undefined}
+            onBack={() => {
+              setSelectedPolicyTemplateId(null);
+              setActiveTab('governance');
+            }}
+          />
+        );
       case 'scheduled-deployments':
         return <ScheduledDeploymentsView />;
       case 'resources':

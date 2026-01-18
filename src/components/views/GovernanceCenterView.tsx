@@ -7,6 +7,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { useTenant } from '@/contexts/TenantContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -37,7 +40,11 @@ import {
   PieChart,
   AlertCircle,
   Lightbulb,
-  Wrench
+  Wrench,
+  Rocket,
+  FileText,
+  Play,
+  ClipboardList
 } from 'lucide-react';
 import {
   ChartContainer,
@@ -73,6 +80,13 @@ interface ActionItem {
   impact: string;
   effort: 'low' | 'medium' | 'high';
   actionType: 'policy' | 'config' | 'review' | 'remediate';
+  policyTemplateId?: string; // Links to policy template for deployment
+  reportTemplateId?: string; // Links to report template for review actions
+}
+
+interface GovernanceCenterViewProps {
+  onNavigate?: (view: string) => void;
+  onDeployPolicy?: (templateId: string) => void;
 }
 
 const SEVERITY_COLORS = {
@@ -89,10 +103,10 @@ const CATEGORY_ICONS = {
   licensing: CreditCard,
 };
 
-// Mock action items - in production these would come from analysis
-const MOCK_ACTIONS: ActionItem[] = [
+// Action items with links to policy templates and reports
+const GOVERNANCE_ACTIONS: ActionItem[] = [
   {
-    id: '1',
+    id: 'enable-mfa-admins',
     title: 'Enable MFA for all admin accounts',
     description: '3 admin accounts do not have MFA enabled, exposing privileged access to potential compromise.',
     category: 'security',
@@ -100,9 +114,10 @@ const MOCK_ACTIONS: ActionItem[] = [
     impact: 'Prevents 99.9% of account compromise attacks',
     effort: 'low',
     actionType: 'policy',
+    policyTemplateId: 'mfa-enforcement',
   },
   {
-    id: '2',
+    id: 'configure-conditional-access',
     title: 'Review Conditional Access policies',
     description: '2 tenants have no Conditional Access policies configured.',
     category: 'security',
@@ -110,9 +125,11 @@ const MOCK_ACTIONS: ActionItem[] = [
     impact: 'Enforces security controls based on user, device, and location',
     effort: 'medium',
     actionType: 'config',
+    policyTemplateId: 'conditional-access-baseline',
+    reportTemplateId: 'sec-conditional-access-summary',
   },
   {
-    id: '3',
+    id: 'remove-stale-guests',
     title: 'Remove stale guest accounts',
     description: '47 guest users have not signed in for over 90 days.',
     category: 'identity',
@@ -120,9 +137,10 @@ const MOCK_ACTIONS: ActionItem[] = [
     impact: 'Reduces attack surface and maintains clean directory',
     effort: 'low',
     actionType: 'remediate',
+    reportTemplateId: 'id-guest-users',
   },
   {
-    id: '4',
+    id: 'optimize-licenses',
     title: 'Optimize license assignments',
     description: '23 E5 licenses assigned to users who only use basic features.',
     category: 'licensing',
@@ -130,9 +148,10 @@ const MOCK_ACTIONS: ActionItem[] = [
     impact: 'Potential savings of $3,450/month',
     effort: 'medium',
     actionType: 'review',
+    reportTemplateId: 'lic-e5-usage',
   },
   {
-    id: '5',
+    id: 'fix-iso-compliance',
     title: 'Address compliance gaps for ISO 27001',
     description: '5 controls are not met in the latest compliance scan.',
     category: 'compliance',
@@ -140,9 +159,10 @@ const MOCK_ACTIONS: ActionItem[] = [
     impact: 'Required for ISO 27001 certification',
     effort: 'high',
     actionType: 'remediate',
+    reportTemplateId: 'comp-iso-27001',
   },
   {
-    id: '6',
+    id: 'block-legacy-auth',
     title: 'Block legacy authentication',
     description: 'Legacy authentication protocols are still allowed in 4 tenants.',
     category: 'security',
@@ -150,9 +170,10 @@ const MOCK_ACTIONS: ActionItem[] = [
     impact: 'Legacy auth bypasses MFA and is a common attack vector',
     effort: 'low',
     actionType: 'policy',
+    policyTemplateId: 'block-legacy-auth',
   },
   {
-    id: '7',
+    id: 'review-privileged-roles',
     title: 'Review privileged role holders',
     description: '12 users have Global Administrator role - consider using PIM.',
     category: 'identity',
@@ -160,9 +181,10 @@ const MOCK_ACTIONS: ActionItem[] = [
     impact: 'Reduces standing privilege and improves security posture',
     effort: 'medium',
     actionType: 'review',
+    reportTemplateId: 'id-privileged-users',
   },
   {
-    id: '8',
+    id: 'reclaim-unused-licenses',
     title: 'Reclaim unused licenses',
     description: '34 licenses assigned to inactive users (no sign-in 60+ days).',
     category: 'licensing',
@@ -170,12 +192,13 @@ const MOCK_ACTIONS: ActionItem[] = [
     impact: 'Potential savings of $1,870/month',
     effort: 'low',
     actionType: 'remediate',
+    reportTemplateId: 'lic-inactive-users',
   },
 ];
 
 const CHART_COLORS = ['#22c55e', '#f59e0b', '#ef4444', '#6b7280'];
 
-export function GovernanceCenterView() {
+export function GovernanceCenterView({ onNavigate, onDeployPolicy }: GovernanceCenterViewProps) {
   const { toast } = useToast();
   const { selectedCustomerId, customers } = useTenant();
   const [loading, setLoading] = useState(true);
@@ -197,6 +220,9 @@ export function GovernanceCenterView() {
     unusedLicenses: 0,
   });
   const [activeTab, setActiveTab] = useState('overview');
+  const [selectedAction, setSelectedAction] = useState<ActionItem | null>(null);
+  const [showActionDialog, setShowActionDialog] = useState(false);
+  const [actionWorkflow, setActionWorkflow] = useState<'deploy' | 'report' | 'manual'>('deploy');
 
   useEffect(() => {
     loadGovernanceData();
@@ -265,7 +291,7 @@ export function GovernanceCenterView() {
         avgSecureScore,
         licenseUtilization: totalLicenses > 0 ? Math.round((assignedLicenses / totalLicenses) * 100) : 0,
         activeAlerts: Math.floor(Math.random() * 10) + 2,
-        pendingActions: MOCK_ACTIONS.length,
+        pendingActions: GOVERNANCE_ACTIONS.length,
         totalUsers,
         adminUsers: Math.floor(totalUsers * 0.05),
         guestUsers: Math.floor(totalUsers * 0.15),
@@ -289,15 +315,15 @@ export function GovernanceCenterView() {
 
   const actionsByCategory = useMemo(() => {
     return {
-      security: MOCK_ACTIONS.filter(a => a.category === 'security'),
-      compliance: MOCK_ACTIONS.filter(a => a.category === 'compliance'),
-      identity: MOCK_ACTIONS.filter(a => a.category === 'identity'),
-      licensing: MOCK_ACTIONS.filter(a => a.category === 'licensing'),
+      security: GOVERNANCE_ACTIONS.filter(a => a.category === 'security'),
+      compliance: GOVERNANCE_ACTIONS.filter(a => a.category === 'compliance'),
+      identity: GOVERNANCE_ACTIONS.filter(a => a.category === 'identity'),
+      licensing: GOVERNANCE_ACTIONS.filter(a => a.category === 'licensing'),
     };
   }, []);
 
   const criticalActions = useMemo(() => {
-    return MOCK_ACTIONS.filter(a => a.severity === 'critical' || a.severity === 'high');
+    return GOVERNANCE_ACTIONS.filter(a => a.severity === 'critical' || a.severity === 'high');
   }, []);
 
   const complianceChartData = [
@@ -317,10 +343,51 @@ export function GovernanceCenterView() {
   ];
 
   const handleActionClick = (action: ActionItem) => {
-    toast({
-      title: 'Action Initiated',
-      description: `Starting remediation for: ${action.title}`,
-    });
+    setSelectedAction(action);
+    // Set default workflow based on action type
+    if (action.policyTemplateId && (action.actionType === 'policy' || action.actionType === 'config')) {
+      setActionWorkflow('deploy');
+    } else if (action.reportTemplateId) {
+      setActionWorkflow('report');
+    } else {
+      setActionWorkflow('manual');
+    }
+    setShowActionDialog(true);
+  };
+
+  const handleExecuteAction = () => {
+    if (!selectedAction) return;
+
+    if (actionWorkflow === 'deploy' && selectedAction.policyTemplateId) {
+      // Navigate to policy deployment with template
+      if (onDeployPolicy) {
+        onDeployPolicy(selectedAction.policyTemplateId);
+      } else if (onNavigate) {
+        onNavigate('policy-deployment');
+      }
+      toast({
+        title: 'Navigating to Policy Deployment',
+        description: `Deploy policy to remediate: ${selectedAction.title}`,
+      });
+    } else if (actionWorkflow === 'report' && selectedAction.reportTemplateId) {
+      // Navigate to reports
+      if (onNavigate) {
+        onNavigate('reports');
+      }
+      toast({
+        title: 'Opening Reports',
+        description: `Generate report for: ${selectedAction.title}`,
+      });
+    } else {
+      // Manual action - show guidance
+      toast({
+        title: 'Manual Remediation',
+        description: `Review the documentation and follow manual steps for: ${selectedAction.title}`,
+      });
+    }
+
+    setShowActionDialog(false);
+    setSelectedAction(null);
   };
 
   const getScoreColor = (score: number) => {
@@ -1019,6 +1086,108 @@ export function GovernanceCenterView() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Action Workflow Dialog */}
+      <Dialog open={showActionDialog} onOpenChange={setShowActionDialog}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {selectedAction && (
+                <>
+                  <div className={`p-1.5 rounded ${SEVERITY_COLORS[selectedAction.severity]}`}>
+                    {(() => {
+                      const Icon = CATEGORY_ICONS[selectedAction.category];
+                      return <Icon className="w-4 h-4 text-white" />;
+                    })()}
+                  </div>
+                  {selectedAction.title}
+                </>
+              )}
+            </DialogTitle>
+            <DialogDescription>
+              {selectedAction?.description}
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedAction && (
+            <div className="space-y-6 py-4">
+              {/* Impact & Effort */}
+              <div className="flex items-center gap-4">
+                <Badge variant={selectedAction.severity === 'critical' ? 'destructive' : 'secondary'}>
+                  {selectedAction.severity} priority
+                </Badge>
+                <Badge variant="outline">{selectedAction.effort} effort</Badge>
+              </div>
+
+              <div className="p-3 rounded-lg bg-muted/50">
+                <p className="text-sm text-muted-foreground">
+                  <strong>Impact:</strong> {selectedAction.impact}
+                </p>
+              </div>
+
+              {/* Workflow Selection */}
+              <div className="space-y-3">
+                <Label className="text-sm font-medium">Choose Remediation Workflow</Label>
+                <RadioGroup value={actionWorkflow} onValueChange={(v) => setActionWorkflow(v as 'deploy' | 'report' | 'manual')}>
+                  {selectedAction.policyTemplateId && (
+                    <div className="flex items-center space-x-3 p-3 rounded-lg border hover:bg-muted/30 transition-colors">
+                      <RadioGroupItem value="deploy" id="deploy" />
+                      <Label htmlFor="deploy" className="flex-1 cursor-pointer">
+                        <div className="flex items-center gap-2">
+                          <Rocket className="w-4 h-4 text-primary" />
+                          <span className="font-medium">Deploy Policy</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Deploy a policy template to automatically remediate this issue across selected tenants
+                        </p>
+                      </Label>
+                    </div>
+                  )}
+                  
+                  {selectedAction.reportTemplateId && (
+                    <div className="flex items-center space-x-3 p-3 rounded-lg border hover:bg-muted/30 transition-colors">
+                      <RadioGroupItem value="report" id="report" />
+                      <Label htmlFor="report" className="flex-1 cursor-pointer">
+                        <div className="flex items-center gap-2">
+                          <FileText className="w-4 h-4 text-blue-500" />
+                          <span className="font-medium">Generate Report</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Generate a detailed report to review affected resources before taking action
+                        </p>
+                      </Label>
+                    </div>
+                  )}
+                  
+                  <div className="flex items-center space-x-3 p-3 rounded-lg border hover:bg-muted/30 transition-colors">
+                    <RadioGroupItem value="manual" id="manual" />
+                    <Label htmlFor="manual" className="flex-1 cursor-pointer">
+                      <div className="flex items-center gap-2">
+                        <ClipboardList className="w-4 h-4 text-muted-foreground" />
+                        <span className="font-medium">Manual Remediation</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        View guidance and perform manual remediation steps
+                      </p>
+                    </Label>
+                  </div>
+                </RadioGroup>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowActionDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleExecuteAction}>
+              <Play className="w-4 h-4 mr-2" />
+              {actionWorkflow === 'deploy' ? 'Start Deployment' : 
+               actionWorkflow === 'report' ? 'Generate Report' : 'View Guidance'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
