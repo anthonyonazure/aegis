@@ -31,17 +31,21 @@ import {
   AutomationConfig,
   getAutomationConfigs,
   createAutomationConfig,
+  updateAutomationConfig,
   deleteAutomationConfig,
   testAutomationConnection,
   getRunbookScript,
   POWERSHELL_RESOURCE_TYPES,
 } from '@/lib/automationApi';
+import { Pencil } from 'lucide-react';
 
 export function AzureAutomationManager() {
   const { connectionId: currentTenantId } = useTenant();
   const [configs, setConfigs] = useState<AutomationConfig[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [editingConfig, setEditingConfig] = useState<AutomationConfig | null>(null);
   const [showRunbookDialog, setShowRunbookDialog] = useState(false);
   const [runbookScript, setRunbookScript] = useState<string | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
@@ -116,6 +120,34 @@ export function AzureAutomationManager() {
       loadConfigs();
     } else {
       toast.error(result.error || 'Failed to delete configuration');
+    }
+  };
+
+  const handleEdit = (config: AutomationConfig) => {
+    setEditingConfig(config);
+    setShowEditDialog(true);
+  };
+
+  const handleUpdate = async () => {
+    if (!editingConfig) return;
+
+    // Clean up input values
+    const cleanedUpdates = {
+      name: editingConfig.name,
+      subscription_id: extractResourceName(editingConfig.subscription_id),
+      resource_group: extractResourceName(editingConfig.resource_group),
+      automation_account_name: extractResourceName(editingConfig.automation_account_name),
+      runbook_name: extractResourceName(editingConfig.runbook_name) || 'Export-M365Config',
+    };
+
+    const result = await updateAutomationConfig(editingConfig.id, cleanedUpdates);
+    if (result.success) {
+      toast.success('Configuration updated');
+      setShowEditDialog(false);
+      setEditingConfig(null);
+      loadConfigs();
+    } else {
+      toast.error(result.error || 'Failed to update configuration');
     }
   };
 
@@ -346,6 +378,13 @@ export function AzureAutomationManager() {
                         <Button
                           variant="ghost"
                           size="sm"
+                          onClick={() => handleEdit(config)}
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() => handleDelete(config.id)}
                         >
                           <Trash2 className="w-4 h-4 text-destructive" />
@@ -468,6 +507,75 @@ export function AzureAutomationManager() {
             <Button onClick={downloadRunbookScript}>
               <Download className="w-4 h-4 mr-2" />
               Download .ps1
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Configuration Dialog */}
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Edit Azure Automation Configuration</DialogTitle>
+            <DialogDescription>
+              Update the Azure Automation Account settings
+            </DialogDescription>
+          </DialogHeader>
+          {editingConfig && (
+            <div className="grid gap-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-name">Configuration Name</Label>
+                <Input
+                  id="edit-name"
+                  value={editingConfig.name}
+                  onChange={(e) => setEditingConfig({ ...editingConfig, name: e.target.value })}
+                  placeholder="My Automation Account"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-subscription">Azure Subscription ID</Label>
+                <Input
+                  id="edit-subscription"
+                  value={editingConfig.subscription_id}
+                  onChange={(e) => setEditingConfig({ ...editingConfig, subscription_id: e.target.value })}
+                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-rg">Resource Group</Label>
+                <Input
+                  id="edit-rg"
+                  value={editingConfig.resource_group}
+                  onChange={(e) => setEditingConfig({ ...editingConfig, resource_group: e.target.value })}
+                  placeholder="my-resource-group"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-account">Automation Account Name</Label>
+                <Input
+                  id="edit-account"
+                  value={editingConfig.automation_account_name}
+                  onChange={(e) => setEditingConfig({ ...editingConfig, automation_account_name: e.target.value })}
+                  placeholder="my-automation-account"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-runbook">Runbook Name</Label>
+                <Input
+                  id="edit-runbook"
+                  value={editingConfig.runbook_name}
+                  onChange={(e) => setEditingConfig({ ...editingConfig, runbook_name: e.target.value })}
+                  placeholder="Export-M365Config"
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleUpdate}>
+              Save Changes
             </Button>
           </DialogFooter>
         </DialogContent>
