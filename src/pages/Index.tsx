@@ -28,6 +28,7 @@ import { TenantHealthDashboardView } from '@/components/views/TenantHealthDashbo
 import { SecureScoreDashboardView } from '@/components/views/SecureScoreDashboardView';
 import { AutomatedBackupsView } from '@/components/views/AutomatedBackupsView';
 import { PermissionHealthView } from '@/components/views/PermissionHealthView';
+import { PermissionsReferenceView } from '@/components/views/PermissionsReferenceView';
 import { PreflightCheckDialog } from '@/components/PreflightCheckDialog';
 import { ALL_RESOURCE_CATEGORIES, ExportFormat } from '@/types/tenant';
 import { filterSupportedResourceIds } from '@/lib/resourceSupport';
@@ -270,6 +271,8 @@ const Index = () => {
         return <AuditView />;
       case 'permission-health':
         return <PermissionHealthView />;
+      case 'permissions-reference':
+        return <PermissionsReferenceView />;
       case 'schedules':
         return <ScheduledExportsView />;
       case 'automated-backups':
