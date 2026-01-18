@@ -234,7 +234,7 @@ export function PreflightCheckDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+      <DialogContent className="max-w-2xl h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Shield className="w-5 h-5 text-primary" />
@@ -251,7 +251,7 @@ export function PreflightCheckDialog({
             <p className="text-muted-foreground">Checking permissions...</p>
           </div>
         ) : result ? (
-          <ScrollArea className="flex-1 -mx-6 px-6" style={{ maxHeight: 'calc(90vh - 180px)' }}>
+          <ScrollArea className="min-h-0 flex-1 -mx-6 px-6">
             <div className="space-y-4 pr-2">
               {/* Summary */}
               <div className="grid grid-cols-3 gap-4">
@@ -642,7 +642,7 @@ export function PreflightCheckDialog({
           </ScrollArea>
         ) : null}
 
-        <DialogFooter className="gap-2">
+        <DialogFooter className="gap-2 flex-shrink-0">
           <Button variant="outline" onClick={onCancel}>
             Cancel
           </Button>
