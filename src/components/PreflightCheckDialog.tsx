@@ -251,287 +251,287 @@ export function PreflightCheckDialog({
             <p className="text-muted-foreground">Checking permissions...</p>
           </div>
         ) : result ? (
-          <div className="flex-1 overflow-hidden flex flex-col space-y-4">
-            {/* Summary */}
-            <div className="grid grid-cols-3 gap-4">
-              <div className="p-4 rounded-lg bg-secondary/30 text-center">
-                <p className="text-2xl font-bold text-foreground">{result.totalResources}</p>
-                <p className="text-sm text-muted-foreground">Total Resources</p>
-              </div>
-              <div className="p-4 rounded-lg bg-success/10 text-center">
-                <p className="text-2xl font-bold text-success">{result.accessibleResources}</p>
-                <p className="text-sm text-muted-foreground">Accessible</p>
-              </div>
-              <div className="p-4 rounded-lg bg-destructive/10 text-center">
-                <p className="text-2xl font-bold text-destructive">{result.deniedResources}</p>
-                <p className="text-sm text-muted-foreground">Will Fail</p>
-              </div>
-            </div>
-
-            {/* Progress Bar */}
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Permission Coverage</span>
-                <span className={cn(
-                  "font-medium",
-                  accessiblePercent === 100 ? "text-success" : 
-                  accessiblePercent >= 50 ? "text-warning" : "text-destructive"
-                )}>
-                  {accessiblePercent}%
-                </span>
-              </div>
-              <Progress 
-                value={accessiblePercent} 
-                className={cn(
-                  "h-2",
-                  accessiblePercent === 100 ? "[&>div]:bg-success" : 
-                  accessiblePercent >= 50 ? "[&>div]:bg-warning" : "[&>div]:bg-destructive"
-                )}
-              />
-            </div>
-
-            {/* Azure RBAC Warning - Show when Azure resources are missing */}
-            {azureGuidance && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="flex items-start gap-3 p-4 rounded-lg border bg-blue-500/10 border-blue-500/20"
-              >
-                <Server className="w-5 h-5 flex-shrink-0 mt-0.5 text-blue-500" />
-                <div className="flex-1">
-                  <p className="font-medium text-blue-600 dark:text-blue-400">
-                    Azure: Assign Role to Service Principal
-                  </p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    <strong>Export only:</strong> Assign "Reader" role<br/>
-                    <strong>Export + Import:</strong> Assign "Contributor" role
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Go to Subscriptions → Your Subscription → Access Control (IAM) → Add role assignment
-                  </p>
-                  <div className="flex items-center gap-2 mt-3 flex-wrap">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      asChild
-                    >
-                      <a 
-                        href={azureGuidance.portalUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        <ExternalLink className="w-3 h-3 mr-1" />
-                        Open Subscriptions
-                      </a>
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      asChild
-                    >
-                      <a 
-                        href="https://learn.microsoft.com/en-us/azure/role-based-access-control/role-assignments-portal"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        <ExternalLink className="w-3 h-3 mr-1" />
-                        How to Assign Roles
-                      </a>
-                    </Button>
-                  </div>
+          <ScrollArea className="flex-1 -mx-6 px-6" style={{ maxHeight: 'calc(85vh - 200px)' }}>
+            <div className="space-y-4 pr-2">
+              {/* Summary */}
+              <div className="grid grid-cols-3 gap-4">
+                <div className="p-4 rounded-lg bg-secondary/30 text-center">
+                  <p className="text-2xl font-bold text-foreground">{result.totalResources}</p>
+                  <p className="text-sm text-muted-foreground">Total Resources</p>
                 </div>
-              </motion.div>
-            )}
-
-            {/* Graph API Warning - Show when Graph resources are missing */}
-            {missingGraphResources.length > 0 && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="flex items-start gap-3 p-4 rounded-lg border bg-purple-500/10 border-purple-500/20"
-              >
-                <Cloud className="w-5 h-5 flex-shrink-0 mt-0.5 text-purple-500" />
-                <div className="flex-1">
-                  <p className="font-medium text-purple-600 dark:text-purple-400">
-                    M365: Add API Permissions ({missingGraphResources.length} resources)
-                  </p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Add the missing Graph API permissions in Azure Portal → App Registrations → API Permissions, then click "Grant admin consent".
-                  </p>
-                  <div className="flex items-center gap-2 mt-3 flex-wrap">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      asChild
-                    >
-                      <a 
-                        href="https://portal.azure.com/#view/Microsoft_AAD_IAM/ActiveDirectoryMenuBlade/~/RegisteredApps"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        <ExternalLink className="w-3 h-3 mr-1" />
-                        Open App Registrations
-                      </a>
-                    </Button>
-                  </div>
+                <div className="p-4 rounded-lg bg-success/10 text-center">
+                  <p className="text-2xl font-bold text-success">{result.accessibleResources}</p>
+                  <p className="text-sm text-muted-foreground">Accessible</p>
                 </div>
-              </motion.div>
-            )}
+                <div className="p-4 rounded-lg bg-destructive/10 text-center">
+                  <p className="text-2xl font-bold text-destructive">{result.deniedResources}</p>
+                  <p className="text-sm text-muted-foreground">Will Fail</p>
+                </div>
+              </div>
 
-            {/* General action buttons */}
-            <div className="flex items-center gap-2 flex-wrap">
-              {result.deniedResources > 0 && (
-                <>
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={handleCopyMissingPermissions}
-                  >
-                    <Copy className="w-3 h-3 mr-1" />
-                    Copy Setup Instructions
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleRefreshPermissions}
-                    disabled={refreshing}
-                  >
-                    {refreshing ? (
-                      <>
-                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                        Refreshing...
-                      </>
-                    ) : (
-                      <>
-                        <Shield className="w-3 h-3 mr-1" />
-                        Refresh
-                      </>
-                    )}
-                  </Button>
-                </>
+              {/* Progress Bar */}
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Permission Coverage</span>
+                  <span className={cn(
+                    "font-medium",
+                    accessiblePercent === 100 ? "text-success" : 
+                    accessiblePercent >= 50 ? "text-warning" : "text-destructive"
+                  )}>
+                    {accessiblePercent}%
+                  </span>
+                </div>
+                <Progress 
+                  value={accessiblePercent} 
+                  className={cn(
+                    "h-2",
+                    accessiblePercent === 100 ? "[&>div]:bg-success" : 
+                    accessiblePercent >= 50 ? "[&>div]:bg-warning" : "[&>div]:bg-destructive"
+                  )}
+                />
+              </div>
+
+              {/* Azure RBAC Warning - Show when Azure resources are missing */}
+              {azureGuidance && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex items-start gap-3 p-4 rounded-lg border bg-blue-500/10 border-blue-500/20"
+                >
+                  <Server className="w-5 h-5 flex-shrink-0 mt-0.5 text-blue-500" />
+                  <div className="flex-1">
+                    <p className="font-medium text-blue-600 dark:text-blue-400">
+                      Azure: Assign Role to Service Principal
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      <strong>Export only:</strong> Assign "Reader" role<br/>
+                      <strong>Export + Import:</strong> Assign "Contributor" role
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Go to Subscriptions → Your Subscription → Access Control (IAM) → Add role assignment
+                    </p>
+                    <div className="flex items-center gap-2 mt-3 flex-wrap">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        asChild
+                      >
+                        <a 
+                          href={azureGuidance.portalUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <ExternalLink className="w-3 h-3 mr-1" />
+                          Open Subscriptions
+                        </a>
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        asChild
+                      >
+                        <a 
+                          href="https://learn.microsoft.com/en-us/azure/role-based-access-control/role-assignments-portal"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <ExternalLink className="w-3 h-3 mr-1" />
+                          How to Assign Roles
+                        </a>
+                      </Button>
+                    </div>
+                  </div>
+                </motion.div>
               )}
-              <Button
-                variant="default"
-                size="sm"
-                onClick={handleLiveValidation}
-                disabled={liveValidating}
-                className="gap-1"
-              >
-                {liveValidating ? (
+
+              {/* Graph API Warning - Show when Graph resources are missing */}
+              {missingGraphResources.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex items-start gap-3 p-4 rounded-lg border bg-purple-500/10 border-purple-500/20"
+                >
+                  <Cloud className="w-5 h-5 flex-shrink-0 mt-0.5 text-purple-500" />
+                  <div className="flex-1">
+                    <p className="font-medium text-purple-600 dark:text-purple-400">
+                      M365: Add API Permissions ({missingGraphResources.length} resources)
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Add the missing Graph API permissions in Azure Portal → App Registrations → API Permissions, then click "Grant admin consent".
+                    </p>
+                    <div className="flex items-center gap-2 mt-3 flex-wrap">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        asChild
+                      >
+                        <a 
+                          href="https://portal.azure.com/#view/Microsoft_AAD_IAM/ActiveDirectoryMenuBlade/~/RegisteredApps"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <ExternalLink className="w-3 h-3 mr-1" />
+                          Open App Registrations
+                        </a>
+                      </Button>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* General action buttons */}
+              <div className="flex items-center gap-2 flex-wrap">
+                {result.deniedResources > 0 && (
                   <>
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                    Testing APIs...
-                  </>
-                ) : (
-                  <>
-                    <Zap className="w-3 h-3" />
-                    Run Live Test
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={handleCopyMissingPermissions}
+                    >
+                      <Copy className="w-3 h-3 mr-1" />
+                      Copy Setup Instructions
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleRefreshPermissions}
+                      disabled={refreshing}
+                    >
+                      {refreshing ? (
+                        <>
+                          <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                          Refreshing...
+                        </>
+                      ) : (
+                        <>
+                          <Shield className="w-3 h-3 mr-1" />
+                          Refresh
+                        </>
+                      )}
+                    </Button>
                   </>
                 )}
-              </Button>
-            </div>
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={handleLiveValidation}
+                  disabled={liveValidating}
+                  className="gap-1"
+                >
+                  {liveValidating ? (
+                    <>
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      Testing APIs...
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="w-3 h-3" />
+                      Run Live Test
+                    </>
+                  )}
+                </Button>
+              </div>
 
-            {/* Live Validation Results */}
-            {showLiveResults && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="border rounded-lg overflow-hidden"
-              >
-                <div className={cn(
-                  "flex items-center justify-between p-3",
-                  liveResults?.success 
-                    ? "bg-success/10 border-b border-success/20" 
-                    : liveResults 
-                      ? "bg-destructive/10 border-b border-destructive/20"
-                      : "bg-secondary/30 border-b"
-                )}>
-                  <div className="flex items-center gap-2">
-                    {liveValidating ? (
-                      <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                    ) : liveResults?.success ? (
-                      <CheckCircle2 className="w-4 h-4 text-success" />
-                    ) : liveResults ? (
-                      <XCircle className="w-4 h-4 text-destructive" />
-                    ) : null}
-                    <span className="font-medium text-sm">
-                      {liveValidating 
-                        ? 'Testing API endpoints...' 
-                        : liveResults?.success 
-                          ? 'All tests passed!' 
-                          : `${liveResults?.summary.failed || 0} tests failed`
-                      }
-                    </span>
-                  </div>
-                  {liveResults && (
-                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        {liveResults.summary.avgResponseTime}ms avg
+              {/* Live Validation Results */}
+              {showLiveResults && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="border rounded-lg overflow-hidden"
+                >
+                  <div className={cn(
+                    "flex items-center justify-between p-3",
+                    liveResults?.success 
+                      ? "bg-success/10 border-b border-success/20" 
+                      : liveResults 
+                        ? "bg-destructive/10 border-b border-destructive/20"
+                        : "bg-secondary/30 border-b"
+                  )}>
+                    <div className="flex items-center gap-2">
+                      {liveValidating ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                      ) : liveResults?.success ? (
+                        <CheckCircle2 className="w-4 h-4 text-success" />
+                      ) : liveResults ? (
+                        <XCircle className="w-4 h-4 text-destructive" />
+                      ) : null}
+                      <span className="font-medium text-sm">
+                        {liveValidating 
+                          ? 'Testing API endpoints...' 
+                          : liveResults?.success 
+                            ? 'All tests passed!' 
+                            : `${liveResults?.summary.failed || 0} tests failed`
+                        }
                       </span>
-                      <span className="text-success">{liveResults.summary.passed} passed</span>
-                      {liveResults.summary.failed > 0 && (
-                        <span className="text-destructive">{liveResults.summary.failed} failed</span>
-                      )}
+                    </div>
+                    {liveResults && (
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                        <span className="flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          {liveResults.summary.avgResponseTime}ms avg
+                        </span>
+                        <span className="text-success">{liveResults.summary.passed} passed</span>
+                        {liveResults.summary.failed > 0 && (
+                          <span className="text-destructive">{liveResults.summary.failed} failed</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  
+                  {liveResults && !liveResults.success && (
+                    <div className="p-3 space-y-2">
+                      {liveResults.results.filter(r => !r.success).map((res) => (
+                        <div 
+                          key={res.resourceId}
+                          className="flex items-start gap-2 p-2 rounded bg-destructive/5 text-sm"
+                        >
+                          <XCircle className="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{res.resourceName}</span>
+                              {res.statusCode && (
+                                <Badge variant="outline" className="text-[10px] text-destructive border-destructive/30">
+                                  {res.statusCode}
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {getErrorGuidance(res)}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   )}
+                </motion.div>
+              )}
+
+              {/* Provider Filter */}
+              {result && (result.graphResources > 0 && result.azureResources > 0) && (
+                <div className="flex rounded-lg border border-border overflow-hidden">
+                  {[
+                    { id: 'all', label: 'All' },
+                    { id: 'graph', label: `M365 (${result.graphResources})`, icon: Cloud },
+                    { id: 'azure', label: `Azure (${result.azureResources})`, icon: Server },
+                  ].map((option) => (
+                    <button
+                      key={option.id}
+                      className={cn(
+                        "flex items-center gap-1.5 px-3 py-1.5 text-xs transition-colors",
+                        filterProvider === option.id 
+                          ? "bg-primary text-primary-foreground" 
+                          : "bg-card hover:bg-secondary/50 text-muted-foreground"
+                      )}
+                      onClick={() => setFilterProvider(option.id as typeof filterProvider)}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
                 </div>
-                
-                {liveResults && !liveResults.success && (
-                  <div className="p-3 space-y-2 max-h-[150px] overflow-y-auto">
-                    {liveResults.results.filter(r => !r.success).map((res) => (
-                      <div 
-                        key={res.resourceId}
-                        className="flex items-start gap-2 p-2 rounded bg-destructive/5 text-sm"
-                      >
-                        <XCircle className="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium">{res.resourceName}</span>
-                            {res.statusCode && (
-                              <Badge variant="outline" className="text-[10px] text-destructive border-destructive/30">
-                                {res.statusCode}
-                              </Badge>
-                            )}
-                          </div>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            {getErrorGuidance(res)}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </motion.div>
-            )}
+              )}
 
-            {/* Provider Filter */}
-            {result && (result.graphResources > 0 && result.azureResources > 0) && (
-              <div className="flex rounded-lg border border-border overflow-hidden">
-                {[
-                  { id: 'all', label: 'All' },
-                  { id: 'graph', label: `M365 (${result.graphResources})`, icon: Cloud },
-                  { id: 'azure', label: `Azure (${result.azureResources})`, icon: Server },
-                ].map((option) => (
-                  <button
-                    key={option.id}
-                    className={cn(
-                      "flex items-center gap-1.5 px-3 py-1.5 text-xs transition-colors",
-                      filterProvider === option.id 
-                        ? "bg-primary text-primary-foreground" 
-                        : "bg-card hover:bg-secondary/50 text-muted-foreground"
-                    )}
-                    onClick={() => setFilterProvider(option.id as typeof filterProvider)}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* Resource List - Failed resources first */}
-            <ScrollArea className="h-[250px] -mx-6 px-6">
-              <div className="space-y-2 pr-4">
+              {/* Resource List - Failed resources first */}
+              <div className="space-y-2">
                 <p className="text-sm font-medium text-foreground">Resource Status</p>
                 {result.results
                   .filter(r => filterProvider === 'all' || r.provider === filterProvider)
@@ -608,36 +608,36 @@ export function PreflightCheckDialog({
                   </motion.div>
                 ))}
               </div>
-            </ScrollArea>
 
-            {/* Granted Permissions (collapsible) */}
-            <div className="border-t border-border pt-4">
-              <button
-                onClick={() => setShowGrantedPermissions(!showGrantedPermissions)}
-                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-              >
-                {showGrantedPermissions ? (
-                  <ChevronUp className="w-4 h-4" />
-                ) : (
-                  <ChevronDown className="w-4 h-4" />
-                )}
-                View granted permissions ({result.grantedRoles.length})
-              </button>
-              {showGrantedPermissions && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  className="mt-2 flex flex-wrap gap-1"
+              {/* Granted Permissions (collapsible) */}
+              <div className="border-t border-border pt-4">
+                <button
+                  onClick={() => setShowGrantedPermissions(!showGrantedPermissions)}
+                  className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  {result.grantedRoles.map(role => (
-                    <Badge key={role} variant="secondary" className="text-xs font-mono">
-                      {role}
-                    </Badge>
-                  ))}
-                </motion.div>
-              )}
+                  {showGrantedPermissions ? (
+                    <ChevronUp className="w-4 h-4" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4" />
+                  )}
+                  View granted permissions ({result.grantedRoles.length})
+                </button>
+                {showGrantedPermissions && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    className="mt-2 flex flex-wrap gap-1"
+                  >
+                    {result.grantedRoles.map(role => (
+                      <Badge key={role} variant="secondary" className="text-xs font-mono">
+                        {role}
+                      </Badge>
+                    ))}
+                  </motion.div>
+                )}
+              </div>
             </div>
-          </div>
+          </ScrollArea>
         ) : null}
 
         <DialogFooter className="gap-2">
