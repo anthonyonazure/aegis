@@ -277,7 +277,7 @@ export const ReportsView = () => {
     const templates = REPORT_TEMPLATES;
     setBatchProgress({ current: 0, total: templates.length });
 
-    const dateRangeStart = new Date('2026-01-17').toISOString();
+    const dateRangeStart = new Date('2026-01-01').toISOString();
     const dateRangeEnd = new Date('2026-01-18').toISOString();
 
     toast({
