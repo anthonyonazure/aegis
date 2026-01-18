@@ -376,7 +376,19 @@ export function useExport() {
         try {
           const updatedJob = await getExportJob(job.id);
           if (updatedJob) {
-            // Only update from polling if not getting updates from hybrid export
+            // Update progress and message from the job
+            if (updatedJob.progress !== undefined) {
+              setProgress(updatedJob.progress);
+            }
+            
+            // Extract current resource from metadata if available
+            const metadata = updatedJob.metadata as { currentResource?: string; completed?: number; total?: number } | null;
+            if (metadata?.currentResource) {
+              const completed = metadata.completed || 0;
+              const total = metadata.total || 0;
+              setExportMessage(`Exporting ${metadata.currentResource} (${completed}/${total})`);
+            }
+            
             if (updatedJob.status === 'completed' || updatedJob.status === 'failed') {
               // Stop polling
               if (pollingRef.current) {
@@ -389,7 +401,7 @@ export function useExport() {
         } catch (err) {
           console.error('Error polling job status:', err);
         }
-      }, 2000); // Poll every 2 seconds
+      }, 500); // Poll every 500ms for smoother updates
 
       // Also subscribe to realtime updates as a backup
       const unsubscribe = subscribeToExportJob(job.id, (updatedJob: { progress?: number; status?: string; error?: string }) => {

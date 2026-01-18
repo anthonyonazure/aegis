@@ -166,14 +166,20 @@ export const ExportView = ({
         >
           <Card className="glass-panel border-primary/20">
             <CardContent className="p-4">
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-foreground font-medium">
-                    {exportMessage || 'Exporting resources...'}
-                  </span>
-                  <span className="text-muted-foreground">{progress}%</span>
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                    <span className="text-foreground font-medium">
+                      {exportMessage || 'Exporting resources...'}
+                    </span>
+                  </div>
+                  <span className="text-muted-foreground font-mono">{progress}%</span>
                 </div>
                 <Progress value={progress} className="h-2" />
+                <div className="text-xs text-muted-foreground">
+                  {selectedResources.length} resources selected • {selectedFormats.length} format{selectedFormats.length !== 1 ? 's' : ''}
+                </div>
               </div>
             </CardContent>
           </Card>

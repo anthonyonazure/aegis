@@ -620,10 +620,18 @@ serve(async (req) => {
         completed++;
         const progress = Math.round((completed / total) * 100);
         
-        // Update progress
+        // Update progress with current resource info
         await supabase
           .from('export_jobs')
-          .update({ progress })
+          .update({ 
+            progress,
+            metadata: { 
+              currentResource: resource,
+              completed,
+              total,
+              lastUpdate: new Date().toISOString()
+            }
+          })
           .eq('id', exportJobId);
       }
 
