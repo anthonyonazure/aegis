@@ -8,9 +8,15 @@ import {
   getJobOutput,
   type AutomationConfig 
 } from './automationApi';
+import { exportAzureResources, getAzureTokenFromStoredCredentials } from './azureApi';
 
 const GRAPH_API_FUNCTION = 'graph-api';
 const CONVERT_FUNCTION = 'convert-format';
+
+// Helper to check if a resource is an Azure infrastructure resource
+export function isAzureResource(resourceType: string): boolean {
+  return resourceType.startsWith('azure-');
+}
 
 // Validation schemas for client-side validation
 const UUIDSchema = z.string().uuid('Invalid UUID format');
@@ -279,29 +285,40 @@ export async function getAvailableAutomationConfig(): Promise<AutomationConfig |
   }
 }
 
-// Split resources into Graph API and PowerShell categories
+// Split resources into Graph API, PowerShell, and Azure categories
 export function categorizeResources(resources: string[]): {
   graphResources: string[];
   powerShellResources: string[];
+  azureResources: string[];
 } {
   const graphResources: string[] = [];
   const powerShellResources: string[] = [];
+  const azureResources: string[] = [];
 
   for (const resource of resources) {
-    if (isPowerShellResource(resource)) {
+    if (isAzureResource(resource)) {
+      azureResources.push(resource);
+    } else if (isPowerShellResource(resource)) {
       powerShellResources.push(resource);
     } else {
       graphResources.push(resource);
     }
   }
 
-  return { graphResources, powerShellResources };
+  return { graphResources, powerShellResources, azureResources };
 }
 
-// Hybrid export that uses Graph API for standard resources and Azure Automation for PowerShell resources
+// Hybrid export that uses Graph API for standard resources, Azure API for Azure resources, and Azure Automation for PowerShell resources
 export interface HybridExportResult {
   success: boolean;
   graphResults?: ExportResult['results'];
+  azureResults?: Array<{
+    resource: string;
+    subscription: string;
+    success: boolean;
+    count?: number;
+    error?: string;
+  }>;
   automationResults?: Array<{
     resource: string;
     success: boolean;
@@ -311,6 +328,8 @@ export interface HybridExportResult {
   automationJobId?: string;
   automationSkipped?: boolean;
   automationSkipReason?: string;
+  azureSkipped?: boolean;
+  azureSkipReason?: string;
   error?: string;
 }
 
@@ -319,15 +338,19 @@ export async function exportResourcesHybrid(
   resources: string[],
   exportJobId: string,
   tenantConnectionId?: string,
-  onProgress?: (progress: number, message: string) => void
+  onProgress?: (progress: number, message: string) => void,
+  selectedSubscriptionIds?: string[]
 ): Promise<HybridExportResult> {
-  const { graphResources, powerShellResources } = categorizeResources(resources);
+  const { graphResources, powerShellResources, azureResources } = categorizeResources(resources);
   
   let graphResults: ExportResult['results'] = [];
+  let azureResults: HybridExportResult['azureResults'] = [];
   let automationResults: HybridExportResult['automationResults'] = [];
   let automationSkipped = false;
   let automationSkipReason: string | undefined;
   let automationJobId: string | undefined;
+  let azureSkipped = false;
+  let azureSkipReason: string | undefined;
 
   const totalResources = resources.length;
   let completedResources = 0;
@@ -349,7 +372,68 @@ export async function exportResourcesHybrid(
     }
   }
 
-  // Step 2: Export PowerShell resources via Azure Automation
+  // Step 2: Export Azure infrastructure resources via Azure Management API
+  if (azureResources.length > 0) {
+    onProgress?.(
+      Math.round((completedResources / totalResources) * 100),
+      `Exporting ${azureResources.length} Azure resources...`
+    );
+
+    if (!tenantConnectionId) {
+      azureSkipped = true;
+      azureSkipReason = 'Tenant connection required for Azure resource export.';
+      azureResults = azureResources.map(resource => ({
+        resource,
+        subscription: '',
+        success: false,
+        error: 'Tenant connection required',
+      }));
+    } else if (!selectedSubscriptionIds || selectedSubscriptionIds.length === 0) {
+      azureSkipped = true;
+      azureSkipReason = 'No Azure subscriptions selected. Select subscriptions in the Auth view to export Azure resources.';
+      azureResults = azureResources.map(resource => ({
+        resource,
+        subscription: '',
+        success: false,
+        error: 'No subscriptions selected',
+      }));
+    } else {
+      // Get Azure Management token
+      const tokenResult = await getAzureTokenFromStoredCredentials(tenantConnectionId);
+      
+      if (!tokenResult.success || !tokenResult.accessToken) {
+        azureSkipped = true;
+        azureSkipReason = tokenResult.error || 'Failed to get Azure Management token';
+        azureResults = azureResources.map(resource => ({
+          resource,
+          subscription: '',
+          success: false,
+          error: 'Failed to authenticate with Azure',
+        }));
+      } else {
+        const exportResult = await exportAzureResources(
+          tokenResult.accessToken,
+          selectedSubscriptionIds,
+          azureResources,
+          exportJobId
+        );
+        
+        if (exportResult.success) {
+          azureResults = exportResult.results || [];
+          completedResources += azureResources.length;
+        } else {
+          azureResults = azureResources.map(resource => ({
+            resource,
+            subscription: '',
+            success: false,
+            error: exportResult.error || 'Azure export failed',
+          }));
+        }
+      }
+    }
+  }
+
+  // Step 3: Export PowerShell resources via Azure Automation
   if (powerShellResources.length > 0) {
     onProgress?.(
       Math.round((completedResources / totalResources) * 100),
