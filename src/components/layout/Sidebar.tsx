@@ -27,6 +27,7 @@ import {
   HardDrive,
   HeartPulse,
   FileKey,
+  Gauge,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -40,6 +41,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { id: 'governance', label: 'Governance Center', icon: Gauge },
   { id: 'customers', label: 'Customers', icon: Building2 },
   { id: 'health-dashboard', label: 'Tenant Health', icon: Activity },
   { id: 'secure-score', label: 'Secure Score', icon: Shield },
