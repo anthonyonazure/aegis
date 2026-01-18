@@ -110,12 +110,17 @@ export const AuditView = () => {
   // Filter logs when selection or allLogs changes
   useEffect(() => {
     if (selectedTenantId) {
-      setLogs(allLogs.filter(log => log.tenant_connection_id === selectedTenantId));
-    } else if (selectedCustomerId && tenantConnectionIds.length > 0) {
+      // When a specific tenant is selected, show logs for that tenant OR logs without a tenant (global actions)
       setLogs(allLogs.filter(log => 
-        log.tenant_connection_id && tenantConnectionIds.includes(log.tenant_connection_id)
+        log.tenant_connection_id === selectedTenantId || log.tenant_connection_id === null
+      ));
+    } else if (selectedCustomerId && tenantConnectionIds.length > 0) {
+      // When a customer is selected, show logs for their tenants OR logs without a tenant (global actions)
+      setLogs(allLogs.filter(log => 
+        log.tenant_connection_id === null || tenantConnectionIds.includes(log.tenant_connection_id)
       ));
     } else {
+      // No filter - show all logs
       setLogs(allLogs);
     }
   }, [allLogs, selectedTenantId, selectedCustomerId, tenantConnectionIds]);
