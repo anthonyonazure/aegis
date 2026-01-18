@@ -30,6 +30,9 @@ import {
   performPreflightCheck,
   getMissingPermissionsSummary,
   PreflightCheckResult,
+  getAzureRoleGuidance,
+  getPermissionsCopyText,
+  isAzureRbacPermission,
 } from '@/lib/permissionsCheck';
 import { useToast } from '@/hooks/use-toast';
 
@@ -126,13 +129,18 @@ export function PreflightCheckDialog({
 
   const handleCopyMissingPermissions = () => {
     if (!result) return;
-    const missing = getMissingPermissionsSummary(result.results);
-    navigator.clipboard.writeText(missing.join('\n'));
+    const copyText = getPermissionsCopyText(result.results);
+    navigator.clipboard.writeText(copyText);
     toast({
       title: 'Copied!',
-      description: 'Missing permissions copied to clipboard',
+      description: 'Permission setup instructions copied to clipboard',
     });
   };
+
+  // Get Azure role guidance for missing Azure resources
+  const missingAzureResources = result?.results.filter(r => r.provider === 'azure' && !r.hasPermission) || [];
+  const missingGraphResources = result?.results.filter(r => r.provider === 'graph' && !r.hasPermission) || [];
+  const azureGuidance = missingAzureResources.length > 0 ? getAzureRoleGuidance(missingAzureResources) : null;
 
   const accessiblePercent = result
     ? Math.round((result.accessibleResources / result.totalResources) * 100)
@@ -196,47 +204,71 @@ export function PreflightCheckDialog({
               />
             </div>
 
-            {/* Warning if some will fail */}
-            {result.deniedResources > 0 && (
+            {/* Azure RBAC Warning - Show when Azure resources are missing */}
+            {azureGuidance && (
               <motion.div
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className={cn(
-                  "flex items-start gap-3 p-4 rounded-lg border",
-                  accessiblePercent < 50 
-                    ? "bg-destructive/10 border-destructive/20" 
-                    : "bg-warning/10 border-warning/20"
-                )}
+                className="flex items-start gap-3 p-4 rounded-lg border bg-blue-500/10 border-blue-500/20"
               >
-                <AlertTriangle className={cn(
-                  "w-5 h-5 flex-shrink-0 mt-0.5",
-                  accessiblePercent < 50 ? "text-destructive" : "text-warning"
-                )} />
+                <Server className="w-5 h-5 flex-shrink-0 mt-0.5 text-blue-500" />
                 <div className="flex-1">
-                  <p className={cn(
-                    "font-medium",
-                    accessiblePercent < 50 ? "text-destructive" : "text-warning"
-                  )}>
-                    {accessiblePercent < 50 
-                      ? `Most resources will fail (${result.deniedResources} of ${result.totalResources})` 
-                      : `Some resources will fail to export (${result.deniedResources})`
-                    }
+                  <p className="font-medium text-blue-600 dark:text-blue-400">
+                    Azure: Assign "Reader" Role
                   </p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    {accessiblePercent < 50 
-                      ? "Your App Registration is missing critical permissions. Add them in Azure Portal and grant admin consent before exporting."
-                      : "Add the missing permissions in Azure AD and grant admin consent, or proceed with partial export."
-                    }
+                    {azureGuidance.recommendation}
                   </p>
                   <div className="flex items-center gap-2 mt-3 flex-wrap">
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       size="sm"
-                      onClick={handleCopyMissingPermissions}
+                      asChild
                     >
-                      <Copy className="w-3 h-3 mr-1" />
-                      Copy Missing Permissions
+                      <a 
+                        href={azureGuidance.portalUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <ExternalLink className="w-3 h-3 mr-1" />
+                        Open Subscriptions
+                      </a>
                     </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      asChild
+                    >
+                      <a 
+                        href="https://learn.microsoft.com/en-us/azure/role-based-access-control/role-assignments-portal"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <ExternalLink className="w-3 h-3 mr-1" />
+                        How to Assign Roles
+                      </a>
+                    </Button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Graph API Warning - Show when Graph resources are missing */}
+            {missingGraphResources.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex items-start gap-3 p-4 rounded-lg border bg-purple-500/10 border-purple-500/20"
+              >
+                <Cloud className="w-5 h-5 flex-shrink-0 mt-0.5 text-purple-500" />
+                <div className="flex-1">
+                  <p className="font-medium text-purple-600 dark:text-purple-400">
+                    M365: Add API Permissions ({missingGraphResources.length} resources)
+                  </p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Add the missing Graph API permissions in Azure Portal → App Registrations → API Permissions, then click "Grant admin consent".
+                  </p>
+                  <div className="flex items-center gap-2 mt-3 flex-wrap">
                     <Button
                       variant="outline"
                       size="sm"
@@ -248,30 +280,44 @@ export function PreflightCheckDialog({
                         rel="noopener noreferrer"
                       >
                         <ExternalLink className="w-3 h-3 mr-1" />
-                        Open Azure AD
+                        Open App Registrations
                       </a>
-                    </Button>
-                    <Button
-                      variant="default"
-                      size="sm"
-                      onClick={handleRefreshPermissions}
-                      disabled={refreshing}
-                    >
-                      {refreshing ? (
-                        <>
-                          <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                          Refreshing...
-                        </>
-                      ) : (
-                        <>
-                          <Shield className="w-3 h-3 mr-1" />
-                          Refresh Permissions
-                        </>
-                      )}
                     </Button>
                   </div>
                 </div>
               </motion.div>
+            )}
+
+            {/* General action buttons */}
+            {result.deniedResources > 0 && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={handleCopyMissingPermissions}
+                >
+                  <Copy className="w-3 h-3 mr-1" />
+                  Copy Setup Instructions
+                </Button>
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={handleRefreshPermissions}
+                  disabled={refreshing}
+                >
+                  {refreshing ? (
+                    <>
+                      <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                      Refreshing...
+                    </>
+                  ) : (
+                    <>
+                      <Shield className="w-3 h-3 mr-1" />
+                      Refresh Permissions
+                    </>
+                  )}
+                </Button>
+              </div>
             )}
 
             {/* Provider Filter */}
@@ -332,24 +378,32 @@ export function PreflightCheckDialog({
                             <Cloud className="w-3 h-3 text-muted-foreground" />
                           )}
                         </div>
-                        {!res.hasPermission && res.missingPermissions.length > 0 && (
+                        {!res.hasPermission && (
                           <div className="flex flex-wrap gap-1 mt-1.5">
-                            {res.missingPermissions.slice(0, 2).map((perm) => (
-                              <code 
-                                key={perm} 
-                                className="text-[10px] text-destructive font-mono bg-destructive/10 px-1 py-0.5 rounded cursor-pointer"
-                                onClick={() => {
-                                  navigator.clipboard.writeText(perm);
-                                  toast({ title: 'Copied!' });
-                                }}
-                              >
-                                {perm}
-                              </code>
-                            ))}
-                            {res.missingPermissions.length > 2 && (
-                              <span className="text-[10px] text-muted-foreground">
-                                +{res.missingPermissions.length - 2} more
+                            {res.provider === 'azure' ? (
+                              <span className="text-[10px] text-blue-600 dark:text-blue-400">
+                                Requires: Reader role on subscription
                               </span>
+                            ) : (
+                              <>
+                                {res.missingPermissions.slice(0, 2).map((perm) => (
+                                  <code 
+                                    key={perm} 
+                                    className="text-[10px] text-destructive font-mono bg-destructive/10 px-1 py-0.5 rounded cursor-pointer"
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(perm);
+                                      toast({ title: 'Copied!' });
+                                    }}
+                                  >
+                                    {perm}
+                                  </code>
+                                ))}
+                                {res.missingPermissions.length > 2 && (
+                                  <span className="text-[10px] text-muted-foreground">
+                                    +{res.missingPermissions.length - 2} more
+                                  </span>
+                                )}
+                              </>
                             )}
                           </div>
                         )}

@@ -691,3 +691,68 @@ export function getMissingPermissionsSummary(results: PreflightResult[]): string
 
   return Array.from(missingSet).sort();
 }
+
+/**
+ * Check if a permission is an Azure RBAC action (e.g., Microsoft.Compute/virtualMachines/read)
+ */
+export function isAzureRbacPermission(permission: string): boolean {
+  return permission.startsWith('Microsoft.') || permission === '*/read' || permission === 'Reader';
+}
+
+/**
+ * Get user-friendly Azure role guidance instead of showing individual RBAC actions
+ */
+export function getAzureRoleGuidance(missingAzureResources: PreflightResult[]): {
+  summary: string;
+  recommendation: string;
+  roleToAssign: string;
+  portalUrl: string;
+} {
+  const count = missingAzureResources.length;
+  
+  return {
+    summary: `${count} Azure resource${count === 1 ? '' : 's'} missing permissions`,
+    recommendation: 'Assign the "Reader" role to your App Registration (Service Principal) on each Azure subscription you want to export.',
+    roleToAssign: 'Reader',
+    portalUrl: 'https://portal.azure.com/#view/Microsoft_Azure_Billing/SubscriptionsBlade',
+  };
+}
+
+/**
+ * Get copy-friendly instructions for missing permissions
+ */
+export function getPermissionsCopyText(results: PreflightResult[]): string {
+  const graphMissing = results.filter(r => r.provider === 'graph' && !r.hasPermission);
+  const azureMissing = results.filter(r => r.provider === 'azure' && !r.hasPermission);
+  
+  const lines: string[] = [];
+  
+  if (graphMissing.length > 0) {
+    lines.push('=== Microsoft Graph API Permissions ===');
+    lines.push('Add these permissions to your App Registration in Azure Portal > App Registrations > API Permissions:');
+    lines.push('');
+    const graphPerms = new Set<string>();
+    graphMissing.forEach(r => r.missingPermissions.forEach(p => graphPerms.add(p)));
+    Array.from(graphPerms).sort().forEach(p => lines.push(`  • ${p}`));
+    lines.push('');
+    lines.push('Then click "Grant admin consent" to apply the permissions.');
+    lines.push('');
+  }
+  
+  if (azureMissing.length > 0) {
+    lines.push('=== Azure RBAC (Resource Manager) ===');
+    lines.push('Assign the "Reader" role to your Service Principal:');
+    lines.push('');
+    lines.push('1. Go to Azure Portal > Subscriptions');
+    lines.push('2. Select your subscription');
+    lines.push('3. Click "Access control (IAM)" in the left menu');
+    lines.push('4. Click "Add" > "Add role assignment"');
+    lines.push('5. Select "Reader" role');
+    lines.push('6. Search for your App Registration name and select it');
+    lines.push('7. Click "Review + assign"');
+    lines.push('');
+    lines.push('Repeat for each subscription you want to export.');
+  }
+  
+  return lines.join('\n');
+}
