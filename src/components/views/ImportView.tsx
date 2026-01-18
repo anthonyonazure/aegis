@@ -12,7 +12,8 @@ import {
   Trash2,
   FileUp,
   RefreshCw,
-  Building2
+  Building2,
+  Filter
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -20,6 +21,7 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   Select,
   SelectContent,
@@ -101,6 +103,7 @@ interface ImportJob {
   created_at: string;
   completed_at: string | null;
   metadata?: ImportJobMetadata;
+  tenant_connection_id: string | null;
 }
 
 interface ExportJob {
@@ -109,6 +112,7 @@ interface ExportJob {
   status: string;
   created_at: string;
   categories: string[];
+  tenant_connection_id: string | null;
 }
 
 interface ParsedResource {
@@ -127,9 +131,11 @@ interface ValidationResult {
 
 export const ImportView = () => {
   const { toast } = useToast();
-  const { isConnected, getValidToken, connectionId, selectedTenantId, tenants } = useTenant();
+  const { isConnected, getValidToken, connectionId, selectedTenantId, selectedCustomerId, tenants, customers } = useTenant();
   
+  const [allImportJobs, setAllImportJobs] = useState<ImportJob[]>([]);
   const [importJobs, setImportJobs] = useState<ImportJob[]>([]);
+  const [allExportJobs, setAllExportJobs] = useState<ExportJob[]>([]);
   const [exportJobs, setExportJobs] = useState<ExportJob[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedExportJob, setSelectedExportJob] = useState<string>('');
@@ -144,50 +150,88 @@ export const ImportView = () => {
   const [showValidationResults, setShowValidationResults] = useState(false);
   const [rollbackJobId, setRollbackJobId] = useState<string | null>(null);
   const [isRollingBack, setIsRollingBack] = useState(false);
+  const [tenantConnectionIds, setTenantConnectionIds] = useState<string[]>([]);
 
-  // Get tenant name for display
+  // Get tenant/customer name for display
   const selectedTenant = tenants.find(t => t.id === selectedTenantId);
   const tenantDisplayName = selectedTenant?.displayName || selectedTenant?.tenantName || 'All Tenants';
+  const selectedCustomerName = selectedCustomerId 
+    ? customers.find(c => c.id === selectedCustomerId)?.name 
+    : null;
 
   useEffect(() => {
     loadData();
-  }, [selectedTenantId]);
+  }, []);
+
+  // Load tenant connections for selected customer
+  useEffect(() => {
+    const loadTenantConnections = async () => {
+      if (!selectedCustomerId) {
+        setTenantConnectionIds([]);
+        return;
+      }
+      
+      const { data } = await supabase
+        .from('tenant_connections')
+        .select('id')
+        .eq('customer_id', selectedCustomerId);
+      
+      setTenantConnectionIds(data?.map(t => t.id) || []);
+    };
+    
+    loadTenantConnections();
+  }, [selectedCustomerId]);
+
+  // Filter jobs when customer/tenant selection changes
+  useEffect(() => {
+    if (selectedTenantId) {
+      // Filter by specific tenant
+      setImportJobs(allImportJobs.filter(job => job.tenant_connection_id === selectedTenantId));
+      setExportJobs(allExportJobs.filter(job => job.tenant_connection_id === selectedTenantId));
+    } else if (selectedCustomerId && tenantConnectionIds.length > 0) {
+      // Filter by customer's tenants
+      setImportJobs(allImportJobs.filter(job => 
+        job.tenant_connection_id && tenantConnectionIds.includes(job.tenant_connection_id)
+      ));
+      setExportJobs(allExportJobs.filter(job => 
+        job.tenant_connection_id && tenantConnectionIds.includes(job.tenant_connection_id)
+      ));
+    } else {
+      // Show all
+      setImportJobs(allImportJobs);
+      setExportJobs(allExportJobs);
+    }
+    
+    // Clear selection if it's no longer valid
+    if (selectedExportJob && !exportJobs.find(j => j.id === selectedExportJob)) {
+      setSelectedExportJob('');
+    }
+  }, [selectedCustomerId, selectedTenantId, tenantConnectionIds, allImportJobs, allExportJobs]);
 
   const loadData = async () => {
     setIsLoading(true);
     try {
-      // Build queries with tenant filter
-      let importQuery = supabase
-        .from('import_jobs')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      let exportQuery = supabase
-        .from('export_jobs')
-        .select('id, name, status, created_at, categories')
-        .eq('status', 'completed')
-        .order('created_at', { ascending: false });
-
-      // Filter by selected tenant if one is selected
-      if (selectedTenantId) {
-        importQuery = importQuery.eq('tenant_connection_id', selectedTenantId);
-        exportQuery = exportQuery.eq('tenant_connection_id', selectedTenantId);
-      }
-
       const [importRes, exportRes] = await Promise.all([
-        importQuery,
-        exportQuery
+        supabase
+          .from('import_jobs')
+          .select('*')
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('export_jobs')
+          .select('id, name, status, created_at, categories, tenant_connection_id')
+          .eq('status', 'completed')
+          .order('created_at', { ascending: false })
       ]);
 
       if (importRes.error) throw importRes.error;
       if (exportRes.error) throw exportRes.error;
 
-      setImportJobs((importRes.data || []).map(job => ({
+      setAllImportJobs((importRes.data || []).map(job => ({
         ...job,
         errors: Array.isArray(job.errors) ? job.errors as unknown as Array<{ resource: string; error: string }> : [],
         metadata: job.metadata as ImportJobMetadata | undefined,
       })));
-      setExportJobs(exportRes.data || []);
+      setAllExportJobs(exportRes.data || []);
     } catch (error) {
       console.error('Failed to load data:', error);
       toast({
@@ -677,20 +721,23 @@ export const ImportView = () => {
           <p className="text-muted-foreground mt-1">
             Restore configurations to your tenant from exports or JSON files
           </p>
-          {selectedTenantId && (
-            <div className="flex items-center gap-2 mt-2">
-              <Building2 className="w-4 h-4 text-primary" />
-              <span className="text-sm text-primary font-medium">
-                Filtered to: {tenantDisplayName}
-              </span>
-            </div>
-          )}
         </div>
         <Button variant="outline" onClick={loadData} disabled={isLoading}>
           <RefreshCw className={cn("w-4 h-4 mr-2", isLoading && "animate-spin")} />
           Refresh
         </Button>
       </div>
+
+      {/* Customer/tenant filter indicator */}
+      {selectedCustomerId && (
+        <Alert className="border-primary/50 bg-primary/5">
+          <Filter className="h-4 w-4" />
+          <AlertDescription>
+            Showing import data for <strong>{selectedCustomerName}</strong>
+            {selectedTenantId && ` (${tenantDisplayName})`}
+          </AlertDescription>
+        </Alert>
+      )}
 
       {!isConnected && (
         <motion.div
