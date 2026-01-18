@@ -24,6 +24,7 @@ import {
   Rocket,
   CalendarClock,
   Ticket,
+  HardDrive,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -52,6 +53,7 @@ const navItems: NavItem[] = [
   { id: 'compliance-dashboard', label: 'Compliance Dashboard', icon: BarChart3 },
   { id: 'psa-integrations', label: 'PSA Integrations', icon: Ticket },
   { id: 'schedules', label: 'Scheduled Exports', icon: Calendar },
+  { id: 'automated-backups', label: 'Automated Backups', icon: HardDrive },
   { id: 'webhooks', label: 'Webhooks', icon: Webhook },
   { id: 'reports', label: 'Reports', icon: FileText },
   { id: 'billing', label: 'Billing & Usage', icon: BarChart3 },
