@@ -153,14 +153,14 @@ export const PermissionsReferenceView = () => {
   const filteredGraphCategories = useMemo(() => filterCategories(graphCategories), [graphCategories, searchQuery]);
   const filteredAzureCategories = useMemo(() => filterCategories(azureCategories), [azureCategories, searchQuery]);
 
-  const copyToClipboard = async (text: string, id: string) => {
+  const copyToClipboard = async (text: string, id: string, customTitle?: string, customDescription?: string) => {
     try {
       await navigator.clipboard.writeText(text);
       setCopiedId(id);
       setTimeout(() => setCopiedId(null), 2000);
       toast({
-        title: 'Copied!',
-        description: 'Permissions copied to clipboard',
+        title: customTitle || 'Copied!',
+        description: customDescription || 'Permissions copied to clipboard',
       });
     } catch {
       toast({
@@ -272,11 +272,7 @@ Write-Host "After running this script, you still need to grant admin consent in 
 Write-Host "Go to: Azure Portal → App Registrations → Your App → API Permissions → Grant admin consent" -ForegroundColor Yellow
 `;
     
-    copyToClipboard(script, 'powershell');
-    toast({
-      title: 'PowerShell Script Copied',
-      description: 'Script copied to clipboard. Update the variables before running.',
-    });
+    copyToClipboard(script, 'powershell', 'PowerShell Script Copied', 'Script copied to clipboard. Update the variables before running.');
   };
 
   const renderResourceCard = (resource: PermissionRequirement) => {
@@ -333,8 +329,8 @@ Write-Host "Go to: Azure Portal → App Registrations → Your App → API Permi
         onOpenChange={() => toggleCategory(category.id)}
       >
         <div className="border border-border rounded-lg overflow-hidden">
-          <CollapsibleTrigger className="w-full p-4 flex items-center justify-between hover:bg-muted/50 transition-colors">
-            <div className="flex items-center gap-3">
+          <div className="w-full p-4 flex items-center justify-between hover:bg-muted/50 transition-colors">
+            <CollapsibleTrigger className="flex items-center gap-3 flex-1 text-left">
               {isExpanded ? (
                 <ChevronDown className="h-4 w-4 text-muted-foreground" />
               ) : (
@@ -349,7 +345,7 @@ Write-Host "Go to: Azure Portal → App Registrations → Your App → API Permi
                   {uniquePerms.length} permission{uniquePerms.length !== 1 ? 's' : ''}
                 </Badge>
               )}
-            </div>
+            </CollapsibleTrigger>
             <Button
               variant="ghost"
               size="sm"
@@ -366,7 +362,7 @@ Write-Host "Go to: Azure Portal → App Registrations → Your App → API Permi
               )}
               Copy All
             </Button>
-          </CollapsibleTrigger>
+          </div>
           <CollapsibleContent>
             <div className="p-4 pt-0 space-y-2">
               {category.resources.map(resource => renderResourceCard(resource))}
