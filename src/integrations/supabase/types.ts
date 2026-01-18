@@ -1281,6 +1281,41 @@ export type Database = {
           },
         ]
       }
+      secure_score_history: {
+        Row: {
+          id: string
+          max_score: number
+          recorded_at: string
+          score: number
+          tenant_connection_id: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          max_score: number
+          recorded_at?: string
+          score: number
+          tenant_connection_id: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          max_score?: number
+          recorded_at?: string
+          score?: number
+          tenant_connection_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "secure_score_history_tenant_connection_id_fkey"
+            columns: ["tenant_connection_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       service_principal_configs: {
         Row: {
           client_id: string
@@ -1513,6 +1548,53 @@ export type Database = {
             foreignKeyName: "tenant_health_checks_tenant_connection_id_fkey"
             columns: ["tenant_connection_id"]
             isOneToOne: false
+            referencedRelation: "tenant_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_secure_scores: {
+        Row: {
+          control_scores: Json | null
+          created_at: string
+          current_score: number
+          id: string
+          improvement_actions: Json | null
+          max_score: number
+          score_percentage: number | null
+          tenant_connection_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          control_scores?: Json | null
+          created_at?: string
+          current_score?: number
+          id?: string
+          improvement_actions?: Json | null
+          max_score?: number
+          score_percentage?: number | null
+          tenant_connection_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          control_scores?: Json | null
+          created_at?: string
+          current_score?: number
+          id?: string
+          improvement_actions?: Json | null
+          max_score?: number
+          score_percentage?: number | null
+          tenant_connection_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_secure_scores_tenant_connection_id_fkey"
+            columns: ["tenant_connection_id"]
+            isOneToOne: true
             referencedRelation: "tenant_connections"
             referencedColumns: ["id"]
           },

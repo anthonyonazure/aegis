@@ -38,6 +38,7 @@ const navItems: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'customers', label: 'Customers', icon: Building2 },
   { id: 'health-dashboard', label: 'Tenant Health', icon: Activity },
+  { id: 'secure-score', label: 'Secure Score', icon: Shield },
   { id: 'resources', label: 'Resources', icon: FolderTree },
   { id: 'export', label: 'Export', icon: Download },
   { id: 'import', label: 'Import / Restore', icon: Upload },
