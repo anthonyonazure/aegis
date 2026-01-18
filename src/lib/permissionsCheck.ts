@@ -729,29 +729,40 @@ export function getPermissionsCopyText(results: PreflightResult[]): string {
   
   if (graphMissing.length > 0) {
     lines.push('=== Microsoft Graph API Permissions ===');
-    lines.push('Add these permissions to your App Registration in Azure Portal > App Registrations > API Permissions:');
+    lines.push('Add these permissions to your App Registration:');
+    lines.push('Azure Portal → App Registrations → Your App → API Permissions → Add a permission → Microsoft Graph → Application permissions');
     lines.push('');
+    lines.push('For EXPORT ONLY (Read):');
     const graphPerms = new Set<string>();
     graphMissing.forEach(r => r.missingPermissions.forEach(p => graphPerms.add(p)));
     Array.from(graphPerms).sort().forEach(p => lines.push(`  • ${p}`));
     lines.push('');
-    lines.push('Then click "Grant admin consent" to apply the permissions.');
+    lines.push('For EXPORT + IMPORT (ReadWrite) - replace .Read. with .ReadWrite. in each permission above');
+    lines.push('');
+    lines.push('After adding permissions, click "Grant admin consent for [Your Tenant]"');
     lines.push('');
   }
   
   if (azureMissing.length > 0) {
     lines.push('=== Azure RBAC (Resource Manager) ===');
-    lines.push('Assign the "Reader" role to your Service Principal:');
     lines.push('');
-    lines.push('1. Go to Azure Portal > Subscriptions');
+    lines.push('For EXPORT ONLY: Assign "Reader" role');
+    lines.push('For EXPORT + IMPORT: Assign "Contributor" role');
+    lines.push('');
+    lines.push('Steps:');
+    lines.push('1. Go to Azure Portal → Subscriptions');
     lines.push('2. Select your subscription');
     lines.push('3. Click "Access control (IAM)" in the left menu');
-    lines.push('4. Click "Add" > "Add role assignment"');
-    lines.push('5. Select "Reader" role');
-    lines.push('6. Search for your App Registration name and select it');
-    lines.push('7. Click "Review + assign"');
+    lines.push('4. Click "Add" → "Add role assignment"');
+    lines.push('5. Select "Reader" or "Contributor" role');
+    lines.push('6. Click "Members" tab → "Select members"');
+    lines.push('7. Search for your App Registration name and select it');
+    lines.push('8. Click "Review + assign"');
     lines.push('');
-    lines.push('Repeat for each subscription you want to export.');
+    lines.push('Repeat for each subscription you want to manage.');
+    lines.push('');
+    lines.push('NOTE: You do NOT need to add individual permissions like');
+    lines.push('"Microsoft.Compute/virtualMachines/read" - the role includes everything!');
   }
   
   return lines.join('\n');
