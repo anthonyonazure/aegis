@@ -1,7 +1,7 @@
-import { RESOURCE_CATEGORIES } from '@/types/tenant';
+import { ALL_RESOURCE_CATEGORIES } from '@/types/tenant';
 
 function getSubcategory(categoryId: string, subId: string) {
-  const category = RESOURCE_CATEGORIES.find((c) => c.id === categoryId);
+  const category = ALL_RESOURCE_CATEGORIES.find((c) => c.id === categoryId);
   return category?.subcategories.find((s) => s.id === subId);
 }
 
@@ -16,8 +16,8 @@ export function isSupportedResourceId(resourceId: string): boolean {
   if (sub.supported === false) return false;
   if (sub.supported === true) return true;
 
-  // Default rule: Graph-backed resources are supported
-  return !!sub.graphEndpoint;
+  // Default rule: Graph-backed OR Azure ARM-backed resources are supported
+  return !!sub.graphEndpoint || !!sub.azureResourceType;
 }
 
 export function filterSupportedResourceIds(resourceIds: string[]) {
