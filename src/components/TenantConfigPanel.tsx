@@ -291,7 +291,7 @@ export const TenantConfigPanel = ({ customer, onBack }: TenantConfigPanelProps) 
     }
   };
 
-  // Test connection for new tenant (uses form values directly)
+  // Test connection for new tenant (uses edge function to avoid CORS)
   const handleTestNewConnection = async () => {
     if (!formTenantId.trim() || !formClientId.trim() || !formClientSecret.trim()) {
       toast({
@@ -305,28 +305,31 @@ export const TenantConfigPanel = ({ customer, onBack }: TenantConfigPanelProps) 
     try {
       setTestingConnection(true);
 
-      const tokenUrl = `https://login.microsoftonline.com/${formTenantId.trim()}/oauth2/v2.0/token`;
-      const params = new URLSearchParams({
-        client_id: formClientId.trim(),
-        client_secret: formClientSecret.trim(),
-        scope: 'https://graph.microsoft.com/.default',
-        grant_type: 'client_credentials',
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
+
+      const response = await supabase.functions.invoke('graph-api', {
+        body: {
+          action: 'test-connection',
+          tenantId: formTenantId.trim(),
+          clientId: formClientId.trim(),
+          clientSecret: formClientSecret.trim(),
+        },
       });
 
-      const response = await fetch(tokenUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: params.toString(),
-      });
+      if (response.error) {
+        throw new Error(response.error.message || 'Connection test failed');
+      }
 
-      if (response.ok) {
+      if (response.data?.success) {
         toast({
           title: 'Connection Successful',
-          description: 'Successfully authenticated with Microsoft Graph',
+          description: response.data.tenantName 
+            ? `Connected to ${response.data.tenantName}` 
+            : 'Successfully authenticated with Microsoft Graph',
         });
       } else {
-        const error = await response.json();
-        throw new Error(error.error_description || 'Authentication failed');
+        throw new Error(response.data?.error || 'Authentication failed');
       }
     } catch (error) {
       console.error('Connection test failed:', error);
@@ -397,29 +400,31 @@ export const TenantConfigPanel = ({ customer, onBack }: TenantConfigPanelProps) 
     try {
       setTestingConnection(true);
 
-      // Test the connection by requesting a token
-      const tokenUrl = `https://login.microsoftonline.com/${configuringTenant.tenant_id}/oauth2/v2.0/token`;
-      const params = new URLSearchParams({
-        client_id: formClientId.trim(),
-        client_secret: formClientSecret.trim(),
-        scope: 'https://graph.microsoft.com/.default',
-        grant_type: 'client_credentials',
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
+
+      const response = await supabase.functions.invoke('graph-api', {
+        body: {
+          action: 'test-connection',
+          tenantId: configuringTenant.tenant_id,
+          clientId: formClientId.trim(),
+          clientSecret: formClientSecret.trim(),
+        },
       });
 
-      const response = await fetch(tokenUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: params.toString(),
-      });
+      if (response.error) {
+        throw new Error(response.error.message || 'Connection test failed');
+      }
 
-      if (response.ok) {
+      if (response.data?.success) {
         toast({
           title: 'Connection Successful',
-          description: 'Successfully authenticated with Microsoft Graph',
+          description: response.data.tenantName 
+            ? `Connected to ${response.data.tenantName}` 
+            : 'Successfully authenticated with Microsoft Graph',
         });
       } else {
-        const error = await response.json();
-        throw new Error(error.error_description || 'Authentication failed');
+        throw new Error(response.data?.error || 'Authentication failed');
       }
     } catch (error) {
       console.error('Connection test failed:', error);
