@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -27,7 +26,8 @@ import {
   GitCompare,
   DollarSign,
   FileCheck,
-  Loader2
+  Loader2,
+  Eye
 } from 'lucide-react';
 import { 
   getReports, 
@@ -42,6 +42,8 @@ import { Customer } from '@/types/tenant';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
+import { ReportViewerDialog } from '@/components/ReportViewerDialog';
+import { generateReportPdf } from '@/lib/reportPdfGenerator';
 
 export const ReportsView = () => {
   const { toast } = useToast();
@@ -50,6 +52,8 @@ export const ReportsView = () => {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [showGenerateDialog, setShowGenerateDialog] = useState(false);
+  const [selectedReport, setSelectedReport] = useState<Report | null>(null);
+  const [showViewer, setShowViewer] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -473,10 +477,16 @@ export const ReportsView = () => {
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
                             {report.status === 'completed' && (
-                              <Button variant="ghost" size="sm">
-                                <Download className="w-4 h-4 mr-1" />
-                                Download
-                              </Button>
+                              <>
+                                <Button variant="ghost" size="sm" onClick={() => { setSelectedReport(report); setShowViewer(true); }}>
+                                  <Eye className="w-4 h-4 mr-1" />
+                                  View
+                                </Button>
+                                <Button variant="ghost" size="sm" onClick={() => generateReportPdf(report, customers.find(c => c.id === report.customer_id)?.name)}>
+                                  <Download className="w-4 h-4 mr-1" />
+                                  PDF
+                                </Button>
+                              </>
                             )}
                             <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDelete(report.id)}>
                               <Trash2 className="w-4 h-4" />
@@ -492,6 +502,13 @@ export const ReportsView = () => {
           )}
         </CardContent>
       </Card>
+
+      <ReportViewerDialog
+        report={selectedReport}
+        customerName={customers.find(c => c.id === selectedReport?.customer_id)?.name}
+        open={showViewer}
+        onOpenChange={setShowViewer}
+      />
     </div>
   );
 };
