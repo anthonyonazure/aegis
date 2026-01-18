@@ -1311,6 +1311,50 @@ export type Database = {
           },
         ]
       }
+      tenant_health_checks: {
+        Row: {
+          check_type: string
+          created_at: string
+          details: Json | null
+          error_message: string | null
+          health_status: string
+          id: string
+          response_time_ms: number | null
+          tenant_connection_id: string
+          user_id: string
+        }
+        Insert: {
+          check_type?: string
+          created_at?: string
+          details?: Json | null
+          error_message?: string | null
+          health_status?: string
+          id?: string
+          response_time_ms?: number | null
+          tenant_connection_id: string
+          user_id: string
+        }
+        Update: {
+          check_type?: string
+          created_at?: string
+          details?: Json | null
+          error_message?: string | null
+          health_status?: string
+          id?: string
+          response_time_ms?: number | null
+          tenant_connection_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_health_checks_tenant_connection_id_fkey"
+            columns: ["tenant_connection_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       validation_results: {
         Row: {
           completed_at: string | null

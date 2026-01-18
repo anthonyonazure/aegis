@@ -21,6 +21,7 @@ import { PoliciesView } from '@/components/views/PoliciesView';
 import { PSAIntegrationsView } from '@/components/views/PSAIntegrationsView';
 import { ReportsView } from '@/components/views/ReportsView';
 import { BillingView } from '@/components/views/BillingView';
+import { TenantHealthDashboardView } from '@/components/views/TenantHealthDashboardView';
 import { PreflightCheckDialog } from '@/components/PreflightCheckDialog';
 import { RESOURCE_CATEGORIES, ExportFormat } from '@/types/tenant';
 import { filterSupportedResourceIds } from '@/lib/resourceSupport';
@@ -261,6 +262,8 @@ const Index = () => {
         return <ReportsView />;
       case 'billing':
         return <BillingView />;
+      case 'health-dashboard':
+        return <TenantHealthDashboardView />;
       case 'git':
         return <GitView />;
       case 'auth':
