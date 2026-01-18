@@ -17,6 +17,7 @@ import {
   Plus,
   Minus,
   RefreshCw,
+  Filter,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -27,6 +28,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
 import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import {
   Select,
@@ -36,6 +38,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
+import { useTenant } from '@/contexts/TenantContext';
 import {
   PolicyTemplate,
   PolicyDeployment,
@@ -64,7 +67,9 @@ interface PolicyDeploymentViewProps {
 }
 
 export const PolicyDeploymentView = ({ templateId, onBack }: PolicyDeploymentViewProps) => {
+  const { selectedCustomerId: contextCustomerId, selectedTenantId: contextTenantId, customers: contextCustomers } = useTenant();
   const [template, setTemplate] = useState<PolicyTemplate | null>(null);
+  const [allDeployments, setAllDeployments] = useState<PolicyDeployment[]>([]);
   const [deployments, setDeployments] = useState<PolicyDeployment[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [groups, setGroups] = useState<TenantGroup[]>([]);
@@ -79,6 +84,7 @@ export const PolicyDeploymentView = ({ templateId, onBack }: PolicyDeploymentVie
   const [showChangesDialog, setShowChangesDialog] = useState(false);
   const [showRollbackDialog, setShowRollbackDialog] = useState(false);
   const [selectedResultChanges, setSelectedResultChanges] = useState<DeploymentChange[]>([]);
+  const [tenantConnectionIds, setTenantConnectionIds] = useState<string[]>([]);
   
   // Form state
   const [deploymentName, setDeploymentName] = useState('');
@@ -90,9 +96,52 @@ export const PolicyDeploymentView = ({ templateId, onBack }: PolicyDeploymentVie
 
   const { toast } = useToast();
 
+  // Get selected customer name for display
+  const contextCustomerName = contextCustomerId 
+    ? contextCustomers.find(c => c.id === contextCustomerId)?.name 
+    : null;
+
   useEffect(() => {
     loadData();
   }, [templateId]);
+
+  // Load tenant connections for context customer filter
+  useEffect(() => {
+    const loadTenantConnections = async () => {
+      if (!contextCustomerId) {
+        setTenantConnectionIds([]);
+        return;
+      }
+      
+      const { data } = await supabase
+        .from('tenant_connections')
+        .select('id')
+        .eq('customer_id', contextCustomerId);
+      
+      setTenantConnectionIds(data?.map(t => t.id) || []);
+    };
+    
+    loadTenantConnections();
+  }, [contextCustomerId]);
+
+  // Filter deployments when context customer/tenant selection changes
+  useEffect(() => {
+    if (contextTenantId) {
+      // Filter by specific tenant - check if deployment targets include this tenant
+      setDeployments(allDeployments.filter(d => 
+        d.targetTenantIds?.includes(contextTenantId)
+      ));
+    } else if (contextCustomerId) {
+      // Filter by customer
+      setDeployments(allDeployments.filter(d => 
+        d.targetCustomerId === contextCustomerId ||
+        (d.targetTenantIds && d.targetTenantIds.some(id => tenantConnectionIds.includes(id)))
+      ));
+    } else {
+      // Show all
+      setDeployments(allDeployments);
+    }
+  }, [contextCustomerId, contextTenantId, tenantConnectionIds, allDeployments]);
 
   useEffect(() => {
     if (targetType === 'customer' && selectedCustomerId) {
@@ -120,7 +169,7 @@ export const PolicyDeploymentView = ({ templateId, onBack }: PolicyDeploymentVie
       ]);
       
       setTemplate(templateData);
-      setDeployments(deploymentsData);
+      setAllDeployments(deploymentsData);
       setCustomers(customersData);
       
       if (templateData) {
@@ -413,6 +462,17 @@ export const PolicyDeploymentView = ({ templateId, onBack }: PolicyDeploymentVie
           </p>
         </div>
       </div>
+
+      {/* Customer filter indicator */}
+      {contextCustomerId && (
+        <Alert className="border-primary/50 bg-primary/5">
+          <Filter className="h-4 w-4" />
+          <AlertDescription>
+            Showing deployments for <strong>{contextCustomerName}</strong>
+            {contextTenantId && ' (filtered by selected tenant)'}
+          </AlertDescription>
+        </Alert>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Deployment Form */}
