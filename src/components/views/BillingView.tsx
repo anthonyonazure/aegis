@@ -18,11 +18,11 @@ import {
   Calendar
 } from 'lucide-react';
 import { 
-  getBillingUsage, 
-  getAggregatedBilling,
+  getBillingUsage,
   BillingUsage
 } from '@/lib/reportDatabase';
-import { getCustomers, Customer } from '@/lib/customerDatabase';
+import { getCustomers } from '@/lib/customerDatabase';
+import { Customer } from '@/types/tenant';
 import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
