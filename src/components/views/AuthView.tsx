@@ -48,16 +48,13 @@ const graphPermissions = [
   { scope: 'Team.ReadBasic.All', description: 'Teams configurations' },
 ];
 
-const azurePermissions = [
-  { scope: 'Reader', description: 'Read all resources in subscriptions', required: true },
-  { scope: 'Microsoft.Resources/subscriptions/read', description: 'List subscriptions', required: true },
-  { scope: 'Microsoft.Compute/*/read', description: 'VMs, disks, availability sets', required: false },
-  { scope: 'Microsoft.Network/*/read', description: 'VNets, NSGs, load balancers', required: false },
-  { scope: 'Microsoft.Storage/*/read', description: 'Storage accounts & containers', required: false },
-  { scope: 'Microsoft.KeyVault/*/read', description: 'Key Vaults & secrets metadata', required: false },
-  { scope: 'Microsoft.Web/*/read', description: 'App Services & functions', required: false },
-  { scope: 'Microsoft.Sql/*/read', description: 'SQL databases & servers', required: false },
-  { scope: 'Contributor (optional)', description: 'Required for import/restore', required: false },
+const azureRbacSteps = [
+  { step: 1, title: 'Open Azure Portal', action: 'Go to portal.azure.com → Subscriptions' },
+  { step: 2, title: 'Select Subscription', action: 'Choose the subscription you want to export' },
+  { step: 3, title: 'Access Control', action: 'Click "Access control (IAM)" in the left menu' },
+  { step: 4, title: 'Add Role Assignment', action: 'Click "Add" → "Add role assignment"' },
+  { step: 5, title: 'Choose Reader Role', action: 'Select "Reader" role and click Next' },
+  { step: 6, title: 'Assign to App', action: 'Search for your App Registration name, select it, and click "Review + assign"' },
 ];
 
 export const AuthView = () => {
@@ -509,32 +506,63 @@ export const AuthView = () => {
                 </div>
               )}
 
-              {/* Azure RBAC Permissions */}
+              {/* Azure RBAC Setup Guide */}
               {(connectionType === 'azure' || connectionType === 'both') && (
                 <div>
                   <h4 className="font-medium text-foreground mb-3 flex items-center gap-2">
-                    <Server className="w-4 h-4" /> Azure RBAC Permissions
+                    <Server className="w-4 h-4" /> Azure RBAC Setup
                   </h4>
+                  
+                  {/* Simple summary */}
+                  <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20 mb-4">
+                    <p className="font-medium text-blue-600 dark:text-blue-400 mb-1">
+                      Just assign the "Reader" role
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      This single role grants all the read permissions needed to export Azure resources. 
+                      No need to add individual permissions like "Microsoft.Compute/virtualMachines/read".
+                    </p>
+                  </div>
+
+                  {/* Step by step guide */}
                   <div className="space-y-2">
-                    {azurePermissions.map((perm) => (
+                    {azureRbacSteps.map((item) => (
                       <div 
-                        key={perm.scope}
-                        className="flex items-center justify-between p-3 rounded-lg bg-secondary/30"
+                        key={item.step}
+                        className="flex items-start gap-3 p-3 rounded-lg bg-secondary/30"
                       >
-                        <div className="flex items-center gap-3">
-                          <code className="text-sm font-mono text-primary">{perm.scope}</code>
-                          <span className="text-sm text-muted-foreground hidden md:inline">
-                            {perm.description}
-                          </span>
-                          {perm.required && (
-                            <span className="text-xs bg-warning/20 text-warning px-1.5 py-0.5 rounded">Required</span>
-                          )}
+                        <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/20 text-primary text-xs font-bold flex items-center justify-center">
+                          {item.step}
+                        </span>
+                        <div>
+                          <p className="font-medium text-foreground text-sm">{item.title}</p>
+                          <p className="text-xs text-muted-foreground">{item.action}</p>
                         </div>
                       </div>
                     ))}
                   </div>
+
+                  <div className="flex items-center gap-2 mt-4">
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={() => window.open('https://portal.azure.com/#view/Microsoft_Azure_Billing/SubscriptionsBlade', '_blank')}
+                    >
+                      <ExternalLink className="w-4 h-4 mr-1" />
+                      Open Subscriptions
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => window.open('https://learn.microsoft.com/en-us/azure/role-based-access-control/role-assignments-portal', '_blank')}
+                    >
+                      <ExternalLink className="w-4 h-4 mr-1" />
+                      MS Docs: Assign Roles
+                    </Button>
+                  </div>
+
                   <p className="text-xs text-muted-foreground mt-3">
-                    Assign these roles to your App Registration at the subscription or management group level in Azure Portal.
+                    <strong>Note:</strong> Repeat for each subscription you want to export. For imports/restores, you'll need "Contributor" role instead.
                   </p>
                 </div>
               )}
