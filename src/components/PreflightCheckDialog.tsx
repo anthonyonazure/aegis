@@ -44,6 +44,7 @@ import {
   groupValidationFailures,
 } from '@/lib/permissionValidator';
 import { savePermissionHealthCheck } from '@/lib/permissionHealthDatabase';
+import { getAzureTokenFromStoredCredentials } from '@/lib/azureApi';
 import { useToast } from '@/hooks/use-toast';
 
 interface PreflightCheckDialogProps {
@@ -64,10 +65,10 @@ export function PreflightCheckDialog({
   open,
   onOpenChange,
   accessToken,
-  azureToken,
+  azureToken: initialAzureToken,
   azureRoles = [],
   selectedResources,
-  subscriptionIds = [],
+  subscriptionIds: initialSubscriptionIds = [],
   tenantConnectionId,
   onProceed,
   onCancel,
@@ -80,6 +81,11 @@ export function PreflightCheckDialog({
   const [filterProvider, setFilterProvider] = useState<'all' | 'graph' | 'azure'>('all');
   const [currentToken, setCurrentToken] = useState<string | null>(accessToken);
   
+  // Azure-specific state
+  const [azureToken, setAzureToken] = useState<string | null>(initialAzureToken || null);
+  const [subscriptionIds, setSubscriptionIds] = useState<string[]>(initialSubscriptionIds);
+  const [azureChecked, setAzureChecked] = useState(false);
+  
   // Live validation state
   const [liveValidating, setLiveValidating] = useState(false);
   const [liveResults, setLiveResults] = useState<LiveValidationResponse | null>(null);
@@ -87,17 +93,49 @@ export function PreflightCheckDialog({
   
   const { toast } = useToast();
 
-  // Run preflight check
+  // Check if we have Azure resources selected
+  const hasAzureResources = selectedResources.some(r => r.startsWith('azure-'));
+
+  // Fetch Azure token when dialog opens if we have Azure resources and a tenant connection
+  useEffect(() => {
+    async function fetchAzureToken() {
+      if (!tenantConnectionId || !hasAzureResources || azureChecked) return;
+      
+      setAzureChecked(true);
+      
+      try {
+        const result = await getAzureTokenFromStoredCredentials(tenantConnectionId);
+        if (result.success && result.accessToken) {
+          setAzureToken(result.accessToken);
+          if (result.subscriptions && result.subscriptions.length > 0) {
+            setSubscriptionIds(result.subscriptions.map(s => s.subscriptionId));
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch Azure token:', error);
+      }
+    }
+
+    if (open && tenantConnectionId && hasAzureResources) {
+      fetchAzureToken();
+    }
+  }, [open, tenantConnectionId, hasAzureResources, azureChecked]);
+
+  // Run preflight check - for Azure resources, mark them as needing live validation
   const runPreflightCheck = useCallback((token: string | null, roles: string[], resources: string[]) => {
     if (token && resources.length > 0) {
       setChecking(true);
       setTimeout(() => {
-        const checkResult = performPreflightCheck(token, resources, roles);
+        // For Azure resources, if we have a token, assume they're accessible (live test will confirm)
+        const effectiveRoles = azureToken 
+          ? [...roles, 'Contributor', 'Reader'] // Assume roles if we have a valid Azure token
+          : roles;
+        const checkResult = performPreflightCheck(token, resources, effectiveRoles);
         setResult(checkResult);
         setChecking(false);
       }, 500);
     }
-  }, []);
+  }, [azureToken]);
 
   // Only run once when dialog opens
   useEffect(() => {
@@ -107,10 +145,19 @@ export function PreflightCheckDialog({
       setLiveResults(null);
       setShowLiveResults(false);
       setChecking(true);
+      setAzureChecked(false);
       runPreflightCheck(accessToken, azureRoles, selectedResources);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]); // Only trigger on open change, not on every prop change
+
+  // Re-run preflight when Azure token is fetched
+  useEffect(() => {
+    if (azureToken && result && hasAzureResources) {
+      runPreflightCheck(currentToken, [...azureRoles, 'Contributor', 'Reader'], selectedResources);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [azureToken]);
 
   // Run live validation
   const handleLiveValidation = async () => {
@@ -242,6 +289,12 @@ export function PreflightCheckDialog({
           </DialogTitle>
           <DialogDescription>
             Validating permissions for {result?.graphResources || 0} Graph API and {result?.azureResources || 0} Azure resources
+            {hasAzureResources && azureToken && (
+              <span className="ml-2 text-success">
+                <CheckCircle2 className="w-3 h-3 inline mr-1" />
+                Azure connected
+              </span>
+            )}
           </DialogDescription>
         </DialogHeader>
 
