@@ -251,8 +251,9 @@ export const PERMISSION_REQUIREMENTS: PermissionRequirement[] = [
 ];
 
 // Azure ARM permission requirements
+// Resource IDs MUST match the category/subcategory ids in tenant.ts
 export const AZURE_PERMISSION_REQUIREMENTS: PermissionRequirement[] = [
-  // Compute
+  // Compute (azure-compute category)
   {
     resourceId: 'azure-compute/virtual-machines',
     resourceName: 'Virtual Machines',
@@ -277,8 +278,20 @@ export const AZURE_PERMISSION_REQUIREMENTS: PermissionRequirement[] = [
     requiredPermissions: ['Microsoft.Compute/availabilitySets/read'],
     alternativePermissions: ['*/read', 'Reader'],
   },
+  {
+    resourceId: 'azure-compute/images',
+    resourceName: 'VM Images',
+    requiredPermissions: ['Microsoft.Compute/images/read'],
+    alternativePermissions: ['*/read', 'Reader'],
+  },
+  {
+    resourceId: 'azure-compute/galleries',
+    resourceName: 'Shared Image Galleries',
+    requiredPermissions: ['Microsoft.Compute/galleries/read'],
+    alternativePermissions: ['*/read', 'Reader'],
+  },
   
-  // Networking
+  // Networking (azure-networking category)
   {
     resourceId: 'azure-networking/virtual-networks',
     resourceName: 'Virtual Networks',
@@ -286,9 +299,21 @@ export const AZURE_PERMISSION_REQUIREMENTS: PermissionRequirement[] = [
     alternativePermissions: ['*/read', 'Reader'],
   },
   {
+    resourceId: 'azure-networking/subnets',
+    resourceName: 'Subnets',
+    requiredPermissions: ['Microsoft.Network/virtualNetworks/subnets/read'],
+    alternativePermissions: ['*/read', 'Reader'],
+  },
+  {
     resourceId: 'azure-networking/network-security-groups',
     resourceName: 'Network Security Groups',
     requiredPermissions: ['Microsoft.Network/networkSecurityGroups/read'],
+    alternativePermissions: ['*/read', 'Reader'],
+  },
+  {
+    resourceId: 'azure-networking/public-ip-addresses',
+    resourceName: 'Public IP Addresses',
+    requiredPermissions: ['Microsoft.Network/publicIPAddresses/read'],
     alternativePermissions: ['*/read', 'Reader'],
   },
   {
@@ -304,9 +329,15 @@ export const AZURE_PERMISSION_REQUIREMENTS: PermissionRequirement[] = [
     alternativePermissions: ['*/read', 'Reader'],
   },
   {
-    resourceId: 'azure-networking/public-ips',
-    resourceName: 'Public IP Addresses',
-    requiredPermissions: ['Microsoft.Network/publicIPAddresses/read'],
+    resourceId: 'azure-networking/vpn-gateways',
+    resourceName: 'VPN Gateways',
+    requiredPermissions: ['Microsoft.Network/vpnGateways/read'],
+    alternativePermissions: ['*/read', 'Reader'],
+  },
+  {
+    resourceId: 'azure-networking/private-endpoints',
+    resourceName: 'Private Endpoints',
+    requiredPermissions: ['Microsoft.Network/privateEndpoints/read'],
     alternativePermissions: ['*/read', 'Reader'],
   },
   {
@@ -316,7 +347,7 @@ export const AZURE_PERMISSION_REQUIREMENTS: PermissionRequirement[] = [
     alternativePermissions: ['*/read', 'Reader'],
   },
   
-  // Storage
+  // Storage (azure-storage category)
   {
     resourceId: 'azure-storage/storage-accounts',
     resourceName: 'Storage Accounts',
@@ -335,8 +366,20 @@ export const AZURE_PERMISSION_REQUIREMENTS: PermissionRequirement[] = [
     requiredPermissions: ['Microsoft.Storage/storageAccounts/fileServices/shares/read'],
     alternativePermissions: ['*/read', 'Reader'],
   },
+  {
+    resourceId: 'azure-storage/tables',
+    resourceName: 'Storage Tables',
+    requiredPermissions: ['Microsoft.Storage/storageAccounts/tableServices/tables/read'],
+    alternativePermissions: ['*/read', 'Reader'],
+  },
+  {
+    resourceId: 'azure-storage/queues',
+    resourceName: 'Storage Queues',
+    requiredPermissions: ['Microsoft.Storage/storageAccounts/queueServices/queues/read'],
+    alternativePermissions: ['*/read', 'Reader'],
+  },
   
-  // Identity & Security
+  // Identity & Security (azure-identity category)
   {
     resourceId: 'azure-identity/key-vaults',
     resourceName: 'Key Vaults',
@@ -350,23 +393,41 @@ export const AZURE_PERMISSION_REQUIREMENTS: PermissionRequirement[] = [
     alternativePermissions: ['*/read', 'Reader'],
   },
   {
+    resourceId: 'azure-identity/role-assignments',
+    resourceName: 'Role Assignments',
+    requiredPermissions: ['Microsoft.Authorization/roleAssignments/read'],
+    alternativePermissions: ['*/read', 'Reader'],
+  },
+  {
+    resourceId: 'azure-identity/role-definitions',
+    resourceName: 'Custom Role Definitions',
+    requiredPermissions: ['Microsoft.Authorization/roleDefinitions/read'],
+    alternativePermissions: ['*/read', 'Reader'],
+  },
+  {
     resourceId: 'azure-identity/policy-assignments',
     resourceName: 'Policy Assignments',
     requiredPermissions: ['Microsoft.Authorization/policyAssignments/read'],
     alternativePermissions: ['*/read', 'Reader'],
   },
   {
-    resourceId: 'azure-identity/role-assignments',
-    resourceName: 'Role Assignments',
-    requiredPermissions: ['Microsoft.Authorization/roleAssignments/read'],
+    resourceId: 'azure-identity/policy-definitions',
+    resourceName: 'Policy Definitions',
+    requiredPermissions: ['Microsoft.Authorization/policyDefinitions/read'],
     alternativePermissions: ['*/read', 'Reader'],
   },
   
-  // PaaS
+  // PaaS (azure-paas category)
   {
     resourceId: 'azure-paas/app-services',
     resourceName: 'App Services',
     requiredPermissions: ['Microsoft.Web/sites/read'],
+    alternativePermissions: ['*/read', 'Reader'],
+  },
+  {
+    resourceId: 'azure-paas/app-service-plans',
+    resourceName: 'App Service Plans',
+    requiredPermissions: ['Microsoft.Web/serverfarms/read'],
     alternativePermissions: ['*/read', 'Reader'],
   },
   {
@@ -376,19 +437,43 @@ export const AZURE_PERMISSION_REQUIREMENTS: PermissionRequirement[] = [
     alternativePermissions: ['*/read', 'Reader'],
   },
   {
+    resourceId: 'azure-paas/sql-servers',
+    resourceName: 'SQL Servers',
+    requiredPermissions: ['Microsoft.Sql/servers/read'],
+    alternativePermissions: ['*/read', 'Reader'],
+  },
+  {
     resourceId: 'azure-paas/sql-databases',
     resourceName: 'SQL Databases',
     requiredPermissions: ['Microsoft.Sql/servers/databases/read'],
     alternativePermissions: ['*/read', 'Reader'],
   },
   {
-    resourceId: 'azure-paas/cosmos-db',
+    resourceId: 'azure-paas/cosmos-accounts',
     resourceName: 'Cosmos DB Accounts',
     requiredPermissions: ['Microsoft.DocumentDB/databaseAccounts/read'],
     alternativePermissions: ['*/read', 'Reader'],
   },
   {
-    resourceId: 'azure-paas/container-registry',
+    resourceId: 'azure-paas/redis-caches',
+    resourceName: 'Redis Caches',
+    requiredPermissions: ['Microsoft.Cache/redis/read'],
+    alternativePermissions: ['*/read', 'Reader'],
+  },
+  {
+    resourceId: 'azure-paas/service-bus',
+    resourceName: 'Service Bus Namespaces',
+    requiredPermissions: ['Microsoft.ServiceBus/namespaces/read'],
+    alternativePermissions: ['*/read', 'Reader'],
+  },
+  {
+    resourceId: 'azure-paas/event-hubs',
+    resourceName: 'Event Hubs',
+    requiredPermissions: ['Microsoft.EventHub/namespaces/read'],
+    alternativePermissions: ['*/read', 'Reader'],
+  },
+  {
+    resourceId: 'azure-paas/container-registries',
     resourceName: 'Container Registries',
     requiredPermissions: ['Microsoft.ContainerRegistry/registries/read'],
     alternativePermissions: ['*/read', 'Reader'],
@@ -400,7 +485,7 @@ export const AZURE_PERMISSION_REQUIREMENTS: PermissionRequirement[] = [
     alternativePermissions: ['*/read', 'Reader'],
   },
   
-  // Monitoring
+  // Monitoring (azure-monitoring category)
   {
     resourceId: 'azure-monitoring/log-analytics',
     resourceName: 'Log Analytics Workspaces',
@@ -414,15 +499,27 @@ export const AZURE_PERMISSION_REQUIREMENTS: PermissionRequirement[] = [
     alternativePermissions: ['*/read', 'Reader'],
   },
   {
-    resourceId: 'azure-monitoring/diagnostic-settings',
-    resourceName: 'Diagnostic Settings',
-    requiredPermissions: ['Microsoft.Insights/diagnosticSettings/read'],
+    resourceId: 'azure-monitoring/action-groups',
+    resourceName: 'Action Groups',
+    requiredPermissions: ['Microsoft.Insights/actionGroups/read'],
     alternativePermissions: ['*/read', 'Reader'],
   },
   {
-    resourceId: 'azure-monitoring/alerts',
-    resourceName: 'Alert Rules',
-    requiredPermissions: ['Microsoft.Insights/alertRules/read'],
+    resourceId: 'azure-monitoring/metric-alerts',
+    resourceName: 'Metric Alerts',
+    requiredPermissions: ['Microsoft.Insights/metricAlerts/read'],
+    alternativePermissions: ['*/read', 'Reader'],
+  },
+  {
+    resourceId: 'azure-monitoring/activity-log-alerts',
+    resourceName: 'Activity Log Alerts',
+    requiredPermissions: ['Microsoft.Insights/activityLogAlerts/read'],
+    alternativePermissions: ['*/read', 'Reader'],
+  },
+  {
+    resourceId: 'azure-monitoring/diagnostic-settings',
+    resourceName: 'Diagnostic Settings',
+    requiredPermissions: ['Microsoft.Insights/diagnosticSettings/read'],
     alternativePermissions: ['*/read', 'Reader'],
   },
 ];
