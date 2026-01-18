@@ -50,6 +50,7 @@ import { logAuditEvent } from '@/lib/auditLog';
 import { DiffViewer } from '@/components/DiffViewer';
 import { notifyDriftDetected } from '@/lib/webhookNotifications';
 import { createDriftTickets } from '@/lib/autoTicketing';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface ExportedResource {
   id: string;
@@ -65,6 +66,7 @@ interface ExportJob {
   name: string;
   created_at: string;
   categories: string[];
+  tenant_connection_id: string | null;
 }
 
 interface DriftHistory {
@@ -81,14 +83,17 @@ interface DriftHistory {
 
 export const DriftDetectionView = () => {
   const { toast } = useToast();
-  const { isConnected } = useTenant();
+  const { isConnected, selectedCustomerId, selectedTenantId, customers } = useTenant();
+  const [allExportJobs, setAllExportJobs] = useState<ExportJob[]>([]);
   const [exportJobs, setExportJobs] = useState<ExportJob[]>([]);
   const [baselineExport, setBaselineExport] = useState<string>('');
   const [compareExport, setCompareExport] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
   const [isComparing, setIsComparing] = useState(false);
   const [results, setResults] = useState<DriftResult[]>([]);
+  const [allHistory, setAllHistory] = useState<DriftHistory[]>([]);
   const [history, setHistory] = useState<DriftHistory[]>([]);
+  const [tenantConnectionIds, setTenantConnectionIds] = useState<string[]>([]);
   
   // State for visual diff dialog
   const [diffDialogOpen, setDiffDialogOpen] = useState(false);
@@ -99,9 +104,70 @@ export const DriftDetectionView = () => {
   const [providerFilter, setProviderFilter] = useState<ResourceProvider>('all');
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
 
+  // Get selected customer name for display
+  const selectedCustomerName = selectedCustomerId 
+    ? customers.find(c => c.id === selectedCustomerId)?.name 
+    : null;
+
   useEffect(() => {
     loadData();
   }, []);
+
+  // Load tenant connections for selected customer
+  useEffect(() => {
+    const loadTenantConnections = async () => {
+      if (!selectedCustomerId) {
+        setTenantConnectionIds([]);
+        return;
+      }
+      
+      const { data } = await supabase
+        .from('tenant_connections')
+        .select('id')
+        .eq('customer_id', selectedCustomerId);
+      
+      setTenantConnectionIds(data?.map(t => t.id) || []);
+    };
+    
+    loadTenantConnections();
+  }, [selectedCustomerId]);
+
+  // Filter export jobs and history when customer/tenant selection changes
+  useEffect(() => {
+    if (selectedTenantId) {
+      // Filter by specific tenant
+      setExportJobs(allExportJobs.filter(job => job.tenant_connection_id === selectedTenantId));
+      
+      // Filter history by matching export jobs
+      const filteredJobIds = allExportJobs
+        .filter(job => job.tenant_connection_id === selectedTenantId)
+        .map(job => job.id);
+      setHistory(allHistory.filter(h => h.baseline_export_id && filteredJobIds.includes(h.baseline_export_id)));
+    } else if (selectedCustomerId && tenantConnectionIds.length > 0) {
+      // Filter by customer's tenants
+      setExportJobs(allExportJobs.filter(job => 
+        job.tenant_connection_id && tenantConnectionIds.includes(job.tenant_connection_id)
+      ));
+      
+      // Filter history by matching export jobs
+      const filteredJobIds = allExportJobs
+        .filter(job => job.tenant_connection_id && tenantConnectionIds.includes(job.tenant_connection_id))
+        .map(job => job.id);
+      setHistory(allHistory.filter(h => h.baseline_export_id && filteredJobIds.includes(h.baseline_export_id)));
+    } else {
+      // Show all
+      setExportJobs(allExportJobs);
+      setHistory(allHistory);
+    }
+    
+    // Clear selections if they're no longer valid
+    if (baselineExport && !exportJobs.find(j => j.id === baselineExport)) {
+      setBaselineExport('');
+    }
+    if (compareExport && !exportJobs.find(j => j.id === compareExport)) {
+      setCompareExport('');
+    }
+  }, [selectedCustomerId, selectedTenantId, tenantConnectionIds, allExportJobs, allHistory]);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -109,21 +175,21 @@ export const DriftDetectionView = () => {
       const [exportRes, historyRes] = await Promise.all([
         supabase
           .from('export_jobs')
-          .select('id, name, created_at, categories')
+          .select('id, name, created_at, categories, tenant_connection_id')
           .eq('status', 'completed')
           .order('created_at', { ascending: false }),
         supabase
           .from('drift_detections')
           .select('*')
           .order('created_at', { ascending: false })
-          .limit(20),
+          .limit(50),
       ]);
 
       if (exportRes.error) throw exportRes.error;
       if (historyRes.error) throw historyRes.error;
 
-      setExportJobs(exportRes.data || []);
-      setHistory(historyRes.data || []);
+      setAllExportJobs(exportRes.data || []);
+      setAllHistory(historyRes.data || []);
     } catch (error) {
       console.error('Failed to load data:', error);
       toast({
@@ -372,6 +438,17 @@ export const DriftDetectionView = () => {
           Refresh
         </Button>
       </div>
+
+      {/* Customer filter indicator */}
+      {selectedCustomerId && (
+        <Alert className="border-primary/50 bg-primary/5">
+          <Filter className="h-4 w-4" />
+          <AlertDescription>
+            Showing drift detection data for <strong>{selectedCustomerName}</strong>
+            {selectedTenantId && ' (filtered by selected tenant)'}
+          </AlertDescription>
+        </Alert>
+      )}
 
       <Tabs defaultValue="compare" className="space-y-4">
         <TabsList>

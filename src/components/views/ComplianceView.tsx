@@ -10,13 +10,15 @@ import {
   RefreshCw,
   FileText,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  Filter
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   Select,
   SelectContent,
@@ -31,6 +33,7 @@ import {
 } from '@/components/ui/collapsible';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useTenant } from '@/contexts/TenantContext';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { COMPLIANCE_BASELINES, runComplianceCheck } from '@/lib/complianceRules';
@@ -43,6 +46,7 @@ interface ExportJob {
   name: string;
   created_at: string;
   categories: string[];
+  tenant_connection_id: string | null;
 }
 
 interface ComplianceResult {
@@ -64,22 +68,85 @@ interface ComplianceHistory {
   warning_count: number;
   failed_count: number;
   created_at: string;
+  export_job_id: string | null;
 }
 
 export const ComplianceView = () => {
   const { toast } = useToast();
+  const { selectedCustomerId, selectedTenantId, customers } = useTenant();
+  const [allExportJobs, setAllExportJobs] = useState<ExportJob[]>([]);
   const [exportJobs, setExportJobs] = useState<ExportJob[]>([]);
   const [selectedExport, setSelectedExport] = useState<string>('');
   const [selectedBaseline, setSelectedBaseline] = useState<string>('microsoft-recommended');
   const [isLoading, setIsLoading] = useState(true);
   const [isRunning, setIsRunning] = useState(false);
   const [results, setResults] = useState<ComplianceResult[]>([]);
+  const [allHistory, setAllHistory] = useState<ComplianceHistory[]>([]);
   const [history, setHistory] = useState<ComplianceHistory[]>([]);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [tenantConnectionIds, setTenantConnectionIds] = useState<string[]>([]);
+
+  // Get selected customer name for display
+  const selectedCustomerName = selectedCustomerId 
+    ? customers.find(c => c.id === selectedCustomerId)?.name 
+    : null;
 
   useEffect(() => {
     loadData();
   }, []);
+
+  // Load tenant connections for selected customer
+  useEffect(() => {
+    const loadTenantConnections = async () => {
+      if (!selectedCustomerId) {
+        setTenantConnectionIds([]);
+        return;
+      }
+      
+      const { data } = await supabase
+        .from('tenant_connections')
+        .select('id')
+        .eq('customer_id', selectedCustomerId);
+      
+      setTenantConnectionIds(data?.map(t => t.id) || []);
+    };
+    
+    loadTenantConnections();
+  }, [selectedCustomerId]);
+
+  // Filter export jobs and history when customer/tenant selection changes
+  useEffect(() => {
+    if (selectedTenantId) {
+      // Filter by specific tenant
+      setExportJobs(allExportJobs.filter(job => job.tenant_connection_id === selectedTenantId));
+      
+      // Filter history by matching export jobs
+      const filteredJobIds = allExportJobs
+        .filter(job => job.tenant_connection_id === selectedTenantId)
+        .map(job => job.id);
+      setHistory(allHistory.filter(h => h.export_job_id && filteredJobIds.includes(h.export_job_id)));
+    } else if (selectedCustomerId && tenantConnectionIds.length > 0) {
+      // Filter by customer's tenants
+      setExportJobs(allExportJobs.filter(job => 
+        job.tenant_connection_id && tenantConnectionIds.includes(job.tenant_connection_id)
+      ));
+      
+      // Filter history by matching export jobs
+      const filteredJobIds = allExportJobs
+        .filter(job => job.tenant_connection_id && tenantConnectionIds.includes(job.tenant_connection_id))
+        .map(job => job.id);
+      setHistory(allHistory.filter(h => h.export_job_id && filteredJobIds.includes(h.export_job_id)));
+    } else {
+      // Show all
+      setExportJobs(allExportJobs);
+      setHistory(allHistory);
+    }
+    
+    // Clear selection if it's no longer valid
+    if (selectedExport && !exportJobs.find(j => j.id === selectedExport)) {
+      setSelectedExport('');
+    }
+  }, [selectedCustomerId, selectedTenantId, tenantConnectionIds, allExportJobs, allHistory]);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -87,21 +154,21 @@ export const ComplianceView = () => {
       const [exportRes, historyRes] = await Promise.all([
         supabase
           .from('export_jobs')
-          .select('id, name, created_at, categories')
+          .select('id, name, created_at, categories, tenant_connection_id')
           .eq('status', 'completed')
           .order('created_at', { ascending: false }),
         supabase
           .from('compliance_results')
           .select('*')
           .order('created_at', { ascending: false })
-          .limit(20),
+          .limit(50),
       ]);
 
       if (exportRes.error) throw exportRes.error;
       if (historyRes.error) throw historyRes.error;
 
-      setExportJobs(exportRes.data || []);
-      setHistory(historyRes.data || []);
+      setAllExportJobs(exportRes.data || []);
+      setAllHistory(historyRes.data || []);
     } catch (error) {
       console.error('Failed to load data:', error);
       toast({
@@ -291,6 +358,17 @@ export const ComplianceView = () => {
           Refresh
         </Button>
       </div>
+
+      {/* Customer filter indicator */}
+      {selectedCustomerId && (
+        <Alert className="border-primary/50 bg-primary/5">
+          <Filter className="h-4 w-4" />
+          <AlertDescription>
+            Showing compliance data for <strong>{selectedCustomerName}</strong>
+            {selectedTenantId && ' (filtered by selected tenant)'}
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Run Check */}
       <Card className="glass-panel border-border/50">
