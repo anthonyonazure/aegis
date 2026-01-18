@@ -165,6 +165,21 @@ const GRAPH_ENDPOINTS: Record<string, { endpoint: string; useBeta?: boolean; cre
   // Licensing - Graph API supported
   'licensing/subscribed-skus': { endpoint: '/subscribedSkus', useBeta: false, supportsImport: false },
   'licensing/user-licenses': { endpoint: '/users?$select=id,displayName,userPrincipalName,assignedLicenses&$top=999', useBeta: false, supportsImport: false },
+  'licensing/group-licenses': { endpoint: '/groups?$select=id,displayName,assignedLicenses&$top=999', useBeta: false, supportsImport: false },
+  'licensing/service-plans': { endpoint: '/subscribedSkus', useBeta: false, supportsImport: false }, // Service plans are part of SKUs
+  'licensing/license-details': { endpoint: '/subscribedSkus', useBeta: false, supportsImport: false }, // Detailed license info
+
+  // License Optimization - Graph API reports (beta)
+  'license-optimization/inactive-users': { endpoint: '/reports/getOffice365ActiveUserDetail(period=\'D30\')', useBeta: true, supportsImport: false },
+  'license-optimization/duplicate-licenses': { endpoint: '/users?$select=id,displayName,assignedLicenses&$top=999', useBeta: false, supportsImport: false },
+  'license-optimization/unused-services': { endpoint: '/reports/getOffice365ServicesUserCounts(period=\'D30\')', useBeta: true, supportsImport: false },
+  'license-optimization/license-utilization': { endpoint: '/reports/getOffice365ActiveUserCounts(period=\'D30\')', useBeta: true, supportsImport: false },
+  'license-optimization/mailbox-usage': { endpoint: '/reports/getMailboxUsageDetail(period=\'D30\')', useBeta: true, supportsImport: false },
+  'license-optimization/onedrive-usage': { endpoint: '/reports/getOneDriveUsageAccountDetail(period=\'D30\')', useBeta: true, supportsImport: false },
+  'license-optimization/teams-usage': { endpoint: '/reports/getTeamsUserActivityUserDetail(period=\'D30\')', useBeta: true, supportsImport: false },
+
+  // Copilot
+  'copilot/copilot-licenses': { endpoint: '/subscribedSkus', useBeta: false, supportsImport: false }, // Filter for Copilot SKUs client-side
 };
 
 // Prepare resource data for import by removing read-only properties
