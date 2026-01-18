@@ -2196,6 +2196,10 @@ export type Database = {
         | "zero_trust"
         | "microsoft_security"
         | "custom"
+        | "iso27018"
+        | "soc2"
+        | "iso9001"
+        | "irap"
       customer_tier: "starter" | "professional" | "enterprise"
       deployment_status:
         | "pending"
@@ -2339,6 +2343,10 @@ export const Constants = {
         "zero_trust",
         "microsoft_security",
         "custom",
+        "iso27018",
+        "soc2",
+        "iso9001",
+        "irap",
       ],
       customer_tier: ["starter", "professional", "enterprise"],
       deployment_status: [
