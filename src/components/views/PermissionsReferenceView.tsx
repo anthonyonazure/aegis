@@ -12,6 +12,7 @@ import {
   Shield,
   Cloud,
   ClipboardList,
+  Terminal,
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -194,6 +195,109 @@ export const PermissionsReferenceView = () => {
   const copyAllGraphPermissions = () => {
     const text = allGraphPermissions.join('\n');
     copyToClipboard(text, 'all-graph');
+  };
+
+  const generateAzurePowerShellScript = () => {
+    const role = writeMode ? 'Contributor' : 'Reader';
+    const script = `# PowerShell script to assign Azure RBAC "${role}" role to an App Registration
+# Run this in Azure Cloud Shell or with Az PowerShell module installed
+# Requires: Az PowerShell module (Install-Module Az -Scope CurrentUser)
+
+# Variables - UPDATE THESE BEFORE RUNNING
+$AppId = "YOUR_APP_CLIENT_ID"      # Your App Registration's Application (Client) ID
+$TenantId = "YOUR_TENANT_ID"       # Your Azure AD Tenant ID
+$SubscriptionIds = @(              # List of Subscription IDs to grant access to
+    "YOUR_SUBSCRIPTION_ID_1"
+    # "YOUR_SUBSCRIPTION_ID_2"     # Add more subscriptions as needed
+)
+
+# ============================================
+# STEP 1: Connect to Azure
+# ============================================
+Write-Host "Connecting to Azure..." -ForegroundColor Cyan
+Connect-AzAccount -TenantId $TenantId
+
+# ============================================
+# STEP 2: Get the Service Principal
+# ============================================
+Write-Host "Finding Service Principal for App Registration..." -ForegroundColor Cyan
+$ServicePrincipal = Get-AzADServicePrincipal -ApplicationId $AppId
+
+if (-not $ServicePrincipal) {
+    Write-Error "Service Principal not found for AppId: $AppId"
+    Write-Host "Make sure your App Registration has a Service Principal (Enterprise Application)." -ForegroundColor Yellow
+    exit 1
+}
+Write-Host "Found: $($ServicePrincipal.DisplayName) (ObjectId: $($ServicePrincipal.Id))" -ForegroundColor Green
+
+# ============================================
+# STEP 3: Assign ${role} Role to Each Subscription
+# ============================================
+$RoleName = "${role}"
+$SuccessCount = 0
+$FailCount = 0
+
+foreach ($SubId in $SubscriptionIds) {
+    Write-Host ""
+    Write-Host "Processing Subscription: $SubId" -ForegroundColor Cyan
+    
+    # Set the context to the subscription
+    try {
+        Set-AzContext -SubscriptionId $SubId -ErrorAction Stop | Out-Null
+    } catch {
+        Write-Error "  Failed to access subscription: $SubId"
+        Write-Host "  Error: $_" -ForegroundColor Red
+        $FailCount++
+        continue
+    }
+    
+    # Check if role assignment already exists
+    $ExistingAssignment = Get-AzRoleAssignment -ObjectId $ServicePrincipal.Id -RoleDefinitionName $RoleName -Scope "/subscriptions/$SubId" -ErrorAction SilentlyContinue
+    
+    if ($ExistingAssignment) {
+        Write-Host "  ✓ $RoleName role already assigned" -ForegroundColor Yellow
+        $SuccessCount++
+        continue
+    }
+    
+    # Create the role assignment
+    try {
+        New-AzRoleAssignment \`
+            -ObjectId $ServicePrincipal.Id \`
+            -RoleDefinitionName $RoleName \`
+            -Scope "/subscriptions/$SubId" \`
+            -ErrorAction Stop | Out-Null
+        
+        Write-Host "  ✓ Successfully assigned $RoleName role" -ForegroundColor Green
+        $SuccessCount++
+    } catch {
+        Write-Error "  Failed to assign role to subscription: $SubId"
+        Write-Host "  Error: $_" -ForegroundColor Red
+        $FailCount++
+    }
+}
+
+# ============================================
+# STEP 4: Summary
+# ============================================
+Write-Host ""
+Write-Host "============================================" -ForegroundColor Green
+Write-Host "COMPLETE!" -ForegroundColor Green
+Write-Host "  Successful: $SuccessCount subscription(s)" -ForegroundColor Green
+if ($FailCount -gt 0) {
+    Write-Host "  Failed: $FailCount subscription(s)" -ForegroundColor Red
+}
+Write-Host "============================================" -ForegroundColor Green
+
+Write-Host ""
+Write-Host "Your App Registration now has '$RoleName' access to the specified subscriptions." -ForegroundColor Cyan
+${writeMode ? `Write-Host "This allows the app to read AND modify Azure resources (VMs, Storage, etc.)." -ForegroundColor Yellow` : `Write-Host "This allows the app to read Azure resources (VMs, Storage, etc.)." -ForegroundColor Cyan`}
+
+# Disconnect (optional)
+# Disconnect-AzAccount
+`;
+    
+    copyToClipboard(script, 'azure-script', 'Azure PowerShell Script Copied', 'Script copied to clipboard. Update the variables before running.');
   };
 
   const copyAzureInstructions = () => {
@@ -660,6 +764,7 @@ Write-Host "Script completed!" -ForegroundColor Green
                   </Button>
                   <Button
                     size="sm"
+                    variant="outline"
                     className="gap-1.5"
                     onClick={copyAzureInstructions}
                   >
@@ -669,6 +774,18 @@ Write-Host "Script completed!" -ForegroundColor Green
                       <Copy className="h-4 w-4" />
                     )}
                     Copy Instructions
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="gap-1.5 bg-orange-600 hover:bg-orange-700"
+                    onClick={generateAzurePowerShellScript}
+                  >
+                    {copiedId === 'azure-script' ? (
+                      <Check className="h-4 w-4" />
+                    ) : (
+                      <Terminal className="h-4 w-4" />
+                    )}
+                    PowerShell Script
                   </Button>
                 </div>
               </div>
