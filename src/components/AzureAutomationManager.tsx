@@ -65,13 +65,32 @@ export function AzureAutomationManager() {
     setIsLoading(false);
   };
 
+  // Extract just the resource name if a full Azure resource ID is provided
+  const extractResourceName = (value: string): string => {
+    // If it's a full resource ID path, extract just the name
+    if (value.includes('/')) {
+      const parts = value.split('/');
+      return parts[parts.length - 1];
+    }
+    return value.trim();
+  };
+
   const handleCreate = async () => {
     if (!newConfig.name || !newConfig.subscription_id || !newConfig.resource_group || !newConfig.automation_account_name) {
       toast.error('Please fill in all required fields');
       return;
     }
 
-    const result = await createAutomationConfig(newConfig);
+    // Clean up input values - extract just names if full paths were provided
+    const cleanedConfig = {
+      ...newConfig,
+      subscription_id: extractResourceName(newConfig.subscription_id),
+      resource_group: extractResourceName(newConfig.resource_group),
+      automation_account_name: extractResourceName(newConfig.automation_account_name),
+      runbook_name: extractResourceName(newConfig.runbook_name) || 'Export-M365Config',
+    };
+
+    const result = await createAutomationConfig(cleanedConfig);
     if (result.success) {
       toast.success('Azure Automation configuration created');
       setShowAddDialog(false);
