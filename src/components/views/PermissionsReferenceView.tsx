@@ -452,6 +452,216 @@ Write-Host "Script completed!" -ForegroundColor Green
     copyToClipboard(script, 'powershell', 'PowerShell Script Copied', 'Script copied to clipboard. Update the variables before running.');
   };
 
+  const generateCombinedPowerShellScript = () => {
+    const permissions = allGraphPermissions;
+    const role = writeMode ? 'Contributor' : 'Reader';
+    const script = `# ============================================================
+# COMBINED PowerShell Script: Graph API Permissions + Azure RBAC
+# ============================================================
+# This script configures BOTH:
+#   1. Microsoft Graph API permissions on your App Registration
+#   2. Azure RBAC role assignments on your subscriptions
+#
+# Requirements:
+#   - Microsoft.Graph module: Install-Module Microsoft.Graph -Scope CurrentUser
+#   - Az module: Install-Module Az -Scope CurrentUser
+# ============================================================
+
+# ============================================
+# CONFIGURATION - UPDATE THESE BEFORE RUNNING
+# ============================================
+$AppId = "YOUR_APP_CLIENT_ID"           # Your App Registration's Application (Client) ID
+$TenantId = "YOUR_TENANT_ID"            # Your Azure AD Tenant ID
+$SubscriptionIds = @(                   # List of Subscription IDs for Azure RBAC
+    "YOUR_SUBSCRIPTION_ID_1"
+    # "YOUR_SUBSCRIPTION_ID_2"           # Add more as needed
+)
+
+Write-Host ""
+Write-Host "========================================" -ForegroundColor Magenta
+Write-Host " COMBINED PERMISSIONS CONFIGURATION    " -ForegroundColor Magenta
+Write-Host "========================================" -ForegroundColor Magenta
+Write-Host ""
+
+# ############################################
+# PART 1: MICROSOFT GRAPH API PERMISSIONS
+# ############################################
+
+Write-Host "============================================" -ForegroundColor Cyan
+Write-Host "PART 1: Microsoft Graph API Permissions" -ForegroundColor Cyan
+Write-Host "============================================" -ForegroundColor Cyan
+Write-Host ""
+
+# Connect to Microsoft Graph
+Write-Host "Connecting to Microsoft Graph..." -ForegroundColor Cyan
+Connect-MgGraph -TenantId $TenantId -Scopes "Application.ReadWrite.All", "AppRoleAssignment.ReadWrite.All"
+
+# Get the App Registration
+Write-Host "Finding your App Registration..." -ForegroundColor Cyan
+$App = Get-MgApplication -Filter "appId eq '$AppId'"
+if (-not $App) {
+    Write-Error "App Registration not found with AppId: $AppId"
+    exit 1
+}
+Write-Host "Found: $($App.DisplayName)" -ForegroundColor Green
+
+# Get or create Service Principal
+$ServicePrincipal = Get-MgServicePrincipal -Filter "appId eq '$AppId'"
+if (-not $ServicePrincipal) {
+    Write-Host "Creating Service Principal for the app..." -ForegroundColor Yellow
+    $ServicePrincipal = New-MgServicePrincipal -AppId $AppId
+}
+
+# Microsoft Graph API Service Principal
+$GraphApiId = "00000003-0000-0000-c000-000000000000"
+$GraphSP = Get-MgServicePrincipal -Filter "appId eq '$GraphApiId'"
+
+# Define required permissions
+$RequiredPermissions = @(
+${permissions.map(p => `    "${p}"`).join(',\n')}
+)
+
+# Add permissions
+Write-Host ""
+Write-Host "Adding $($RequiredPermissions.Count) API permissions..." -ForegroundColor Cyan
+
+$ResourceAccess = @()
+$GraphAddedCount = 0
+$GraphSkippedCount = 0
+
+foreach ($PermissionName in $RequiredPermissions) {
+    $Role = $GraphSP.AppRoles | Where-Object { $_.Value -eq $PermissionName }
+    if ($Role) {
+        $ResourceAccess += @{
+            Id = $Role.Id
+            Type = "Role"
+        }
+        Write-Host "  + $PermissionName" -ForegroundColor Green
+        $GraphAddedCount++
+    } else {
+        Write-Warning "  - Permission not found: $PermissionName"
+        $GraphSkippedCount++
+    }
+}
+
+# Update the application
+$RequiredResourceAccess = @{
+    ResourceAppId = $GraphApiId
+    ResourceAccess = $ResourceAccess
+}
+
+$ExistingAccess = $App.RequiredResourceAccess | Where-Object { $_.ResourceAppId -ne $GraphApiId }
+$AllResourceAccess = @($ExistingAccess) + @($RequiredResourceAccess)
+
+Write-Host ""
+Write-Host "Updating App Registration..." -ForegroundColor Cyan
+Update-MgApplication -ApplicationId $App.Id -RequiredResourceAccess $AllResourceAccess
+
+Write-Host ""
+Write-Host "Graph API: Added $GraphAddedCount permissions" -ForegroundColor Green
+if ($GraphSkippedCount -gt 0) {
+    Write-Host "  Skipped $GraphSkippedCount (not found)" -ForegroundColor Yellow
+}
+
+# Disconnect from Graph
+Write-Host ""
+Write-Host "Disconnecting from Microsoft Graph..." -ForegroundColor Cyan
+Disconnect-MgGraph
+
+# ############################################
+# PART 2: AZURE RBAC ROLE ASSIGNMENTS
+# ############################################
+
+Write-Host ""
+Write-Host "============================================" -ForegroundColor DarkYellow
+Write-Host "PART 2: Azure RBAC Role Assignments" -ForegroundColor DarkYellow  
+Write-Host "============================================" -ForegroundColor DarkYellow
+Write-Host ""
+
+# Connect to Azure
+Write-Host "Connecting to Azure..." -ForegroundColor Cyan
+Connect-AzAccount -TenantId $TenantId
+
+# Get Service Principal for role assignment
+Write-Host "Finding Service Principal..." -ForegroundColor Cyan
+$AzServicePrincipal = Get-AzADServicePrincipal -ApplicationId $AppId
+
+if (-not $AzServicePrincipal) {
+    Write-Error "Service Principal not found for AppId: $AppId"
+    Write-Host "Skipping Azure RBAC assignments." -ForegroundColor Yellow
+} else {
+    Write-Host "Found: $($AzServicePrincipal.DisplayName)" -ForegroundColor Green
+    
+    $RoleName = "${role}"
+    $AzureSuccessCount = 0
+    $AzureFailCount = 0
+    
+    foreach ($SubId in $SubscriptionIds) {
+        Write-Host ""
+        Write-Host "Processing Subscription: $SubId" -ForegroundColor Cyan
+        
+        try {
+            Set-AzContext -SubscriptionId $SubId -ErrorAction Stop | Out-Null
+        } catch {
+            Write-Error "  Failed to access subscription: $SubId"
+            $AzureFailCount++
+            continue
+        }
+        
+        # Check existing assignment
+        $ExistingAssignment = Get-AzRoleAssignment -ObjectId $AzServicePrincipal.Id -RoleDefinitionName $RoleName -Scope "/subscriptions/$SubId" -ErrorAction SilentlyContinue
+        
+        if ($ExistingAssignment) {
+            Write-Host "  $RoleName role already assigned" -ForegroundColor Yellow
+            $AzureSuccessCount++
+            continue
+        }
+        
+        try {
+            New-AzRoleAssignment \`
+                -ObjectId $AzServicePrincipal.Id \`
+                -RoleDefinitionName $RoleName \`
+                -Scope "/subscriptions/$SubId" \`
+                -ErrorAction Stop | Out-Null
+            
+            Write-Host "  Successfully assigned $RoleName role" -ForegroundColor Green
+            $AzureSuccessCount++
+        } catch {
+            Write-Error "  Failed to assign role"
+            $AzureFailCount++
+        }
+    }
+    
+    Write-Host ""
+    Write-Host "Azure RBAC: $AzureSuccessCount subscription(s) configured" -ForegroundColor Green
+    if ($AzureFailCount -gt 0) {
+        Write-Host "  Failed: $AzureFailCount subscription(s)" -ForegroundColor Red
+    }
+}
+
+# ############################################
+# SUMMARY
+# ############################################
+
+Write-Host ""
+Write-Host "========================================" -ForegroundColor Magenta
+Write-Host " CONFIGURATION COMPLETE!               " -ForegroundColor Magenta
+Write-Host "========================================" -ForegroundColor Magenta
+Write-Host ""
+Write-Host "Summary:" -ForegroundColor Cyan
+Write-Host "  Graph API Permissions: $GraphAddedCount added" -ForegroundColor White
+Write-Host "  Azure RBAC ($RoleName): $AzureSuccessCount subscription(s)" -ForegroundColor White
+Write-Host ""
+Write-Host "IMPORTANT: Admin consent is still required for Graph API permissions!" -ForegroundColor Yellow
+Write-Host ""
+Write-Host "Grant consent at:" -ForegroundColor Cyan
+Write-Host "  Azure Portal -> Azure AD -> App registrations -> Your App -> API permissions -> Grant admin consent" -ForegroundColor White
+Write-Host ""
+`;
+    
+    copyToClipboard(script, 'combined-script', 'Combined Script Copied', 'Complete Graph + Azure script copied. Update variables before running.');
+  };
+
   const renderResourceCard = (resource: PermissionRequirement) => {
     const readPerm = resource.requiredPermissions[0];
     const writePerm = getWritePermission(readPerm);
@@ -568,6 +778,18 @@ Write-Host "Script completed!" -ForegroundColor Green
             Complete list of permissions required for all resource types
           </p>
         </div>
+        <Button
+          size="lg"
+          className="gap-2 bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-600/90"
+          onClick={generateCombinedPowerShellScript}
+        >
+          {copiedId === 'combined-script' ? (
+            <Check className="h-5 w-5" />
+          ) : (
+            <Terminal className="h-5 w-5" />
+          )}
+          Complete Setup Script
+        </Button>
       </div>
 
       {/* Summary Cards */}
