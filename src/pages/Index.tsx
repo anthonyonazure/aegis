@@ -52,7 +52,7 @@ const Index = () => {
   const { 
     isConnected, 
     connectionId,
-    checkExistingConnection,
+    loadCustomersAndTenants,
     getValidToken,
     refreshToken
   } = useTenant();
@@ -67,12 +67,12 @@ const Index = () => {
     }
   }, [authLoading, isAuthenticated, navigate]);
 
-  // Check for existing connection on mount
+  // Load customers and tenants on mount
   useEffect(() => {
     if (isAuthenticated) {
-      checkExistingConnection();
+      loadCustomersAndTenants();
     }
-  }, [isAuthenticated, checkExistingConnection]);
+  }, [isAuthenticated, loadCustomersAndTenants]);
 
   const handleResourceSelect = (resourceId: string) => {
     setSelectedResources(prev => 

@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
+import { TenantSelector } from '@/components/TenantSelector';
 
 interface NavItem {
   id: string;
@@ -82,6 +83,15 @@ export const Sidebar = ({ activeTab, onTabChange, isConnected = false }: Sidebar
       animate={{ x: 0, opacity: 1 }}
       transition={{ duration: 0.3 }}
     >
+      {/* Tenant Selector */}
+      <div className="p-3 border-b border-sidebar-border">
+        <TenantSelector 
+          collapsed={collapsed}
+          onNavigateToAuth={() => onTabChange('auth')}
+          onNavigateToCustomers={() => onTabChange('customers')}
+        />
+      </div>
+
       {/* Logo */}
       <div className="p-4 border-b border-sidebar-border flex items-center justify-between">
         {!collapsed && (
@@ -91,7 +101,7 @@ export const Sidebar = ({ activeTab, onTabChange, isConnected = false }: Sidebar
             </div>
             <div>
               <h1 className="font-semibold text-sm text-foreground">M365 Export</h1>
-              <p className="text-xs text-muted-foreground">Tenant Backup Tool</p>
+              <p className="text-xs text-muted-foreground">MSP Platform</p>
             </div>
           </div>
         )}
