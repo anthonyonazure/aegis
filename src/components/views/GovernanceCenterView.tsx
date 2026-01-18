@@ -19,6 +19,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { getPolicyTemplateByName } from '@/lib/policyDatabase';
 import { saveGovernanceMetrics, getGovernanceHistory, GovernanceMetricsHistory } from '@/lib/governanceDatabase';
 import { GovernanceScheduleManager } from '@/components/GovernanceScheduleManager';
+import { TenantComparisonView } from '@/components/TenantComparisonView';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 import {
@@ -57,7 +58,8 @@ import {
   Edit2,
   History,
   LineChart,
-  Calendar
+  Calendar,
+  Grid3X3
 } from 'lucide-react';
 import {
   ChartContainer,
@@ -925,10 +927,14 @@ export function GovernanceCenterView({ onNavigate, onDeployPolicy }: GovernanceC
 
       {/* Main Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-7">
+        <TabsList className="grid w-full grid-cols-8">
           <TabsTrigger value="overview" className="gap-2">
             <Gauge className="w-4 h-4" />
             Overview
+          </TabsTrigger>
+          <TabsTrigger value="comparison" className="gap-2">
+            <Grid3X3 className="w-4 h-4" />
+            Comparison
           </TabsTrigger>
           <TabsTrigger value="trends" className="gap-2">
             <LineChart className="w-4 h-4" />
@@ -1125,6 +1131,11 @@ export function GovernanceCenterView({ onNavigate, onDeployPolicy }: GovernanceC
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        {/* Comparison Tab */}
+        <TabsContent value="comparison" className="mt-6">
+          <TenantComparisonView />
         </TabsContent>
 
         {/* Trends Tab */}
