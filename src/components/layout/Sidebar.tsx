@@ -28,6 +28,7 @@ import {
   HeartPulse,
   FileKey,
   Gauge,
+  Book,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -66,6 +67,7 @@ const navItems: NavItem[] = [
   { id: 'audit', label: 'Audit Trail', icon: FileText },
   { id: 'permission-health', label: 'Permission Health', icon: HeartPulse },
   { id: 'permissions-reference', label: 'Permissions Reference', icon: FileKey },
+  { id: 'documentation', label: 'Documentation', icon: Book },
   { id: 'git', label: 'Git & CI/CD', icon: GitBranch },
   { id: 'auth', label: 'Authentication', icon: Key },
 ];
