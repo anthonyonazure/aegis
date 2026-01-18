@@ -216,6 +216,111 @@ export type Database = {
           },
         ]
       }
+      automation_job_runs: {
+        Row: {
+          automation_config_id: string
+          azure_job_id: string | null
+          completed_at: string | null
+          created_at: string
+          error_message: string | null
+          id: string
+          output: Json | null
+          resource_types: string[]
+          started_at: string | null
+          status: string
+          tenant_connection_id: string | null
+          user_id: string
+        }
+        Insert: {
+          automation_config_id: string
+          azure_job_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          output?: Json | null
+          resource_types?: string[]
+          started_at?: string | null
+          status?: string
+          tenant_connection_id?: string | null
+          user_id: string
+        }
+        Update: {
+          automation_config_id?: string
+          azure_job_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          output?: Json | null
+          resource_types?: string[]
+          started_at?: string | null
+          status?: string
+          tenant_connection_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automation_job_runs_automation_config_id_fkey"
+            columns: ["automation_config_id"]
+            isOneToOne: false
+            referencedRelation: "azure_automation_configs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automation_job_runs_tenant_connection_id_fkey"
+            columns: ["tenant_connection_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      azure_automation_configs: {
+        Row: {
+          automation_account_name: string
+          connection_status: string | null
+          created_at: string
+          id: string
+          is_active: boolean
+          last_tested_at: string | null
+          name: string
+          resource_group: string
+          runbook_name: string
+          subscription_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          automation_account_name: string
+          connection_status?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_tested_at?: string | null
+          name: string
+          resource_group: string
+          runbook_name?: string
+          subscription_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          automation_account_name?: string
+          connection_status?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_tested_at?: string | null
+          name?: string
+          resource_group?: string
+          runbook_name?: string
+          subscription_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       billing_usage: {
         Row: {
           billable_amount: number | null
