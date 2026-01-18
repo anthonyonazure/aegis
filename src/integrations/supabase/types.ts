@@ -748,6 +748,108 @@ export type Database = {
           },
         ]
       }
+      governance_metrics_history: {
+        Row: {
+          admin_users: number | null
+          assigned_licenses: number | null
+          compliance_score: number | null
+          conditional_access_policies: number | null
+          created_at: string
+          critical_actions: number | null
+          customer_id: string | null
+          guest_users: number | null
+          high_actions: number | null
+          id: string
+          license_cost_monthly: number | null
+          license_utilization: number | null
+          low_actions: number | null
+          max_secure_score: number | null
+          medium_actions: number | null
+          mfa_enabled_users: number | null
+          recorded_at: string
+          risky_sign_ins: number | null
+          risky_users: number | null
+          secure_score: number | null
+          stale_accounts: number | null
+          tenant_connection_id: string | null
+          total_licenses: number | null
+          total_users: number | null
+          unused_licenses: number | null
+          user_id: string
+        }
+        Insert: {
+          admin_users?: number | null
+          assigned_licenses?: number | null
+          compliance_score?: number | null
+          conditional_access_policies?: number | null
+          created_at?: string
+          critical_actions?: number | null
+          customer_id?: string | null
+          guest_users?: number | null
+          high_actions?: number | null
+          id?: string
+          license_cost_monthly?: number | null
+          license_utilization?: number | null
+          low_actions?: number | null
+          max_secure_score?: number | null
+          medium_actions?: number | null
+          mfa_enabled_users?: number | null
+          recorded_at?: string
+          risky_sign_ins?: number | null
+          risky_users?: number | null
+          secure_score?: number | null
+          stale_accounts?: number | null
+          tenant_connection_id?: string | null
+          total_licenses?: number | null
+          total_users?: number | null
+          unused_licenses?: number | null
+          user_id: string
+        }
+        Update: {
+          admin_users?: number | null
+          assigned_licenses?: number | null
+          compliance_score?: number | null
+          conditional_access_policies?: number | null
+          created_at?: string
+          critical_actions?: number | null
+          customer_id?: string | null
+          guest_users?: number | null
+          high_actions?: number | null
+          id?: string
+          license_cost_monthly?: number | null
+          license_utilization?: number | null
+          low_actions?: number | null
+          max_secure_score?: number | null
+          medium_actions?: number | null
+          mfa_enabled_users?: number | null
+          recorded_at?: string
+          risky_sign_ins?: number | null
+          risky_users?: number | null
+          secure_score?: number | null
+          stale_accounts?: number | null
+          tenant_connection_id?: string | null
+          total_licenses?: number | null
+          total_users?: number | null
+          unused_licenses?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "governance_metrics_history_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "governance_metrics_history_tenant_connection_id_fkey"
+            columns: ["tenant_connection_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       import_jobs: {
         Row: {
           completed_at: string | null

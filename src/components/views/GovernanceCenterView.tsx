@@ -11,11 +11,14 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { useTenant } from '@/contexts/TenantContext';
 import { supabase } from '@/integrations/supabase/client';
 import { getPolicyTemplateByName } from '@/lib/policyDatabase';
+import { saveGovernanceMetrics, getGovernanceHistory, GovernanceMetricsHistory } from '@/lib/governanceDatabase';
+import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 import {
   Shield,
@@ -50,14 +53,32 @@ import {
   ClipboardList,
   DollarSign,
   Settings,
-  Edit2
+  Edit2,
+  History,
+  LineChart
 } from 'lucide-react';
 import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
 } from '@/components/ui/chart';
-import { PieChart as RechartsPieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from 'recharts';
+import { 
+  PieChart as RechartsPieChart, 
+  Pie, 
+  Cell, 
+  ResponsiveContainer, 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  Tooltip, 
+  Legend,
+  LineChart as RechartsLineChart,
+  Line,
+  CartesianGrid,
+  Area,
+  AreaChart
+} from 'recharts';
 
 interface LicenseBreakdown {
   productName: string;
@@ -271,6 +292,8 @@ export function GovernanceCenterView({ onNavigate, onDeployPolicy }: GovernanceC
     licensesByProduct: [],
   });
   const [activeTab, setActiveTab] = useState('overview');
+  const [historyRange, setHistoryRange] = useState<'7' | '14' | '30' | '90'>('30');
+  const [metricsHistory, setMetricsHistory] = useState<GovernanceMetricsHistory[]>([]);
   const [selectedAction, setSelectedAction] = useState<ActionItem | null>(null);
   const [showActionDialog, setShowActionDialog] = useState(false);
   const [actionWorkflow, setActionWorkflow] = useState<'deploy' | 'report' | 'manual'>('deploy');
@@ -278,6 +301,19 @@ export function GovernanceCenterView({ onNavigate, onDeployPolicy }: GovernanceC
   useEffect(() => {
     loadGovernanceData();
   }, [selectedCustomerId, selectedTenantId]);
+
+  useEffect(() => {
+    loadMetricsHistory();
+  }, [historyRange, selectedCustomerId, selectedTenantId]);
+
+  const loadMetricsHistory = async () => {
+    const history = await getGovernanceHistory({
+      customerId: selectedCustomerId || undefined,
+      tenantConnectionId: selectedTenantId || undefined,
+      days: parseInt(historyRange),
+    });
+    setMetricsHistory(history);
+  };
 
   const loadGovernanceData = async () => {
     setLoading(true);
@@ -434,6 +470,41 @@ export function GovernanceCenterView({ onNavigate, onDeployPolicy }: GovernanceC
         } else {
           setDynamicActions([]);
         }
+
+        // Save metrics to history for trend tracking
+        const licenseMonthlyCost = licenseBreakdown.reduce((sum, lic) => sum + (lic.total * lic.monthlyPrice), 0);
+        const actionCounts = (data.actions || []).reduce((counts: Record<string, number>, action: any) => {
+          counts[action.severity] = (counts[action.severity] || 0) + 1;
+          return counts;
+        }, {});
+
+        await saveGovernanceMetrics({
+          tenant_connection_id: tenantConnectionId,
+          customer_id: selectedCustomerId || undefined,
+          secure_score: metrics.security.secureScore,
+          max_secure_score: metrics.security.maxSecureScore,
+          risky_sign_ins: metrics.security.riskySignInsCount,
+          conditional_access_policies: metrics.security.conditionalAccessPolicies,
+          total_users: metrics.identity.totalUsers,
+          admin_users: metrics.identity.adminUsers,
+          guest_users: metrics.identity.guestUsers,
+          mfa_enabled_users: metrics.identity.mfaEnabledUsers,
+          risky_users: metrics.identity.riskyUsers,
+          stale_accounts: metrics.identity.staleGuestAccounts + metrics.identity.staleUserAccounts,
+          total_licenses: metrics.licensing.totalLicenses,
+          assigned_licenses: metrics.licensing.assignedLicenses,
+          unused_licenses: metrics.licensing.unusedLicenses,
+          license_utilization: metrics.licensing.utilizationRate,
+          license_cost_monthly: licenseMonthlyCost,
+          compliance_score: 75, // Will be updated when we have live compliance data
+          critical_actions: actionCounts.critical || 0,
+          high_actions: actionCounts.high || 0,
+          medium_actions: actionCounts.medium || 0,
+          low_actions: actionCounts.low || 0,
+        });
+
+        // Refresh history after saving
+        await loadMetricsHistory();
 
         toast({
           title: 'Live Data Loaded',
@@ -835,10 +906,14 @@ export function GovernanceCenterView({ onNavigate, onDeployPolicy }: GovernanceC
 
       {/* Main Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="overview" className="gap-2">
             <Gauge className="w-4 h-4" />
             Overview
+          </TabsTrigger>
+          <TabsTrigger value="trends" className="gap-2">
+            <LineChart className="w-4 h-4" />
+            Trends
           </TabsTrigger>
           <TabsTrigger value="compliance" className="gap-2">
             <FileCheck className="w-4 h-4" />
@@ -1026,6 +1101,283 @@ export function GovernanceCenterView({ onNavigate, onDeployPolicy }: GovernanceC
                 </ScrollArea>
               </CardContent>
             </Card>
+          </div>
+        </TabsContent>
+
+        {/* Trends Tab */}
+        <TabsContent value="trends" className="mt-6">
+          <div className="space-y-6">
+            {/* Time Range Selector */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <History className="w-5 h-5 text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">
+                  {metricsHistory.length} data points in the last {historyRange} days
+                </span>
+              </div>
+              <Select value={historyRange} onValueChange={(v) => setHistoryRange(v as any)}>
+                <SelectTrigger className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="7">7 days</SelectItem>
+                  <SelectItem value="14">14 days</SelectItem>
+                  <SelectItem value="30">30 days</SelectItem>
+                  <SelectItem value="90">90 days</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {metricsHistory.length === 0 ? (
+              <Card>
+                <CardContent className="py-12 text-center">
+                  <History className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                  <h3 className="text-lg font-medium mb-2">No Historical Data Yet</h3>
+                  <p className="text-muted-foreground text-sm max-w-md mx-auto">
+                    Governance metrics are saved each time you refresh data from a connected tenant.
+                    Connect a tenant and click Refresh to start tracking trends.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <>
+                {/* Score Trends */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Shield className="w-5 h-5 text-blue-500" />
+                        Secure Score Trend
+                      </CardTitle>
+                      <CardDescription>Microsoft Secure Score over time</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart data={metricsHistory.map(m => ({
+                            date: format(new Date(m.recorded_at), 'MMM dd'),
+                            score: m.max_secure_score > 0 ? Math.round((m.secure_score / m.max_secure_score) * 100) : 0,
+                            raw: m.secure_score,
+                          }))}>
+                            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                            <XAxis dataKey="date" className="text-xs" />
+                            <YAxis domain={[0, 100]} className="text-xs" />
+                            <Tooltip 
+                              content={({ active, payload }) => {
+                                if (!active || !payload?.length) return null;
+                                return (
+                                  <div className="bg-popover border rounded-lg p-2 shadow-lg">
+                                    <p className="text-sm font-medium">{payload[0].payload.date}</p>
+                                    <p className="text-sm text-blue-500">Score: {payload[0].value}%</p>
+                                    <p className="text-xs text-muted-foreground">Raw: {payload[0].payload.raw}</p>
+                                  </div>
+                                );
+                              }}
+                            />
+                            <Area 
+                              type="monotone" 
+                              dataKey="score" 
+                              stroke="#3b82f6" 
+                              fill="#3b82f6" 
+                              fillOpacity={0.2} 
+                            />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <UserCheck className="w-5 h-5 text-green-500" />
+                        MFA Coverage Trend
+                      </CardTitle>
+                      <CardDescription>MFA-enabled users over time</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart data={metricsHistory.map(m => ({
+                            date: format(new Date(m.recorded_at), 'MMM dd'),
+                            coverage: m.total_users > 0 ? Math.round((m.mfa_enabled_users / m.total_users) * 100) : 0,
+                            enabled: m.mfa_enabled_users,
+                            total: m.total_users,
+                          }))}>
+                            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                            <XAxis dataKey="date" className="text-xs" />
+                            <YAxis domain={[0, 100]} className="text-xs" />
+                            <Tooltip 
+                              content={({ active, payload }) => {
+                                if (!active || !payload?.length) return null;
+                                return (
+                                  <div className="bg-popover border rounded-lg p-2 shadow-lg">
+                                    <p className="text-sm font-medium">{payload[0].payload.date}</p>
+                                    <p className="text-sm text-green-500">Coverage: {payload[0].value}%</p>
+                                    <p className="text-xs text-muted-foreground">
+                                      {payload[0].payload.enabled} / {payload[0].payload.total} users
+                                    </p>
+                                  </div>
+                                );
+                              }}
+                            />
+                            <Area 
+                              type="monotone" 
+                              dataKey="coverage" 
+                              stroke="#22c55e" 
+                              fill="#22c55e" 
+                              fillOpacity={0.2} 
+                            />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* License & Risk Trends */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <CreditCard className="w-5 h-5 text-purple-500" />
+                        License Utilization Trend
+                      </CardTitle>
+                      <CardDescription>License usage efficiency over time</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <RechartsLineChart data={metricsHistory.map(m => ({
+                            date: format(new Date(m.recorded_at), 'MMM dd'),
+                            utilization: m.license_utilization,
+                            unused: m.unused_licenses,
+                            cost: m.license_cost_monthly,
+                          }))}>
+                            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                            <XAxis dataKey="date" className="text-xs" />
+                            <YAxis domain={[0, 100]} className="text-xs" />
+                            <Tooltip 
+                              content={({ active, payload }) => {
+                                if (!active || !payload?.length) return null;
+                                return (
+                                  <div className="bg-popover border rounded-lg p-2 shadow-lg">
+                                    <p className="text-sm font-medium">{payload[0].payload.date}</p>
+                                    <p className="text-sm text-purple-500">Utilization: {payload[0].value}%</p>
+                                    <p className="text-xs text-muted-foreground">
+                                      Unused: {payload[0].payload.unused} licenses
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                      Cost: ${payload[0].payload.cost?.toLocaleString()}/mo
+                                    </p>
+                                  </div>
+                                );
+                              }}
+                            />
+                            <Line 
+                              type="monotone" 
+                              dataKey="utilization" 
+                              stroke="#8b5cf6" 
+                              strokeWidth={2}
+                              dot={false}
+                            />
+                          </RechartsLineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <AlertTriangle className="w-5 h-5 text-orange-500" />
+                        Risk Indicators Trend
+                      </CardTitle>
+                      <CardDescription>Risky sign-ins and users over time</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <RechartsLineChart data={metricsHistory.map(m => ({
+                            date: format(new Date(m.recorded_at), 'MMM dd'),
+                            riskySignIns: m.risky_sign_ins,
+                            riskyUsers: m.risky_users,
+                            staleAccounts: m.stale_accounts,
+                          }))}>
+                            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                            <XAxis dataKey="date" className="text-xs" />
+                            <YAxis className="text-xs" />
+                            <Tooltip 
+                              content={({ active, payload }) => {
+                                if (!active || !payload?.length) return null;
+                                return (
+                                  <div className="bg-popover border rounded-lg p-2 shadow-lg">
+                                    <p className="text-sm font-medium">{payload[0].payload.date}</p>
+                                    <p className="text-sm text-red-500">Risky Sign-ins: {payload[0].payload.riskySignIns}</p>
+                                    <p className="text-sm text-orange-500">Risky Users: {payload[0].payload.riskyUsers}</p>
+                                    <p className="text-sm text-yellow-500">Stale Accounts: {payload[0].payload.staleAccounts}</p>
+                                  </div>
+                                );
+                              }}
+                            />
+                            <Line 
+                              type="monotone" 
+                              dataKey="riskySignIns" 
+                              stroke="#ef4444" 
+                              strokeWidth={2}
+                              dot={false}
+                              name="Risky Sign-ins"
+                            />
+                            <Line 
+                              type="monotone" 
+                              dataKey="riskyUsers" 
+                              stroke="#f59e0b" 
+                              strokeWidth={2}
+                              dot={false}
+                              name="Risky Users"
+                            />
+                          </RechartsLineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Actions Trend */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Zap className="w-5 h-5 text-yellow-500" />
+                      Action Items Trend
+                    </CardTitle>
+                    <CardDescription>Outstanding governance actions over time</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="h-64">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={metricsHistory.map(m => ({
+                          date: format(new Date(m.recorded_at), 'MMM dd'),
+                          critical: m.critical_actions,
+                          high: m.high_actions,
+                          medium: m.medium_actions,
+                          low: m.low_actions,
+                        }))}>
+                          <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                          <XAxis dataKey="date" className="text-xs" />
+                          <YAxis className="text-xs" />
+                          <Tooltip />
+                          <Legend />
+                          <Bar dataKey="critical" stackId="a" fill="#ef4444" name="Critical" />
+                          <Bar dataKey="high" stackId="a" fill="#f59e0b" name="High" />
+                          <Bar dataKey="medium" stackId="a" fill="#eab308" name="Medium" />
+                          <Bar dataKey="low" stackId="a" fill="#3b82f6" name="Low" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </CardContent>
+                </Card>
+              </>
+            )}
           </div>
         </TabsContent>
 
