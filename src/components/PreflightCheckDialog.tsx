@@ -197,15 +197,34 @@ export function PreflightCheckDialog({
               <motion.div
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="flex items-start gap-3 p-4 rounded-lg bg-warning/10 border border-warning/20"
+                className={cn(
+                  "flex items-start gap-3 p-4 rounded-lg border",
+                  accessiblePercent < 50 
+                    ? "bg-destructive/10 border-destructive/20" 
+                    : "bg-warning/10 border-warning/20"
+                )}
               >
-                <AlertTriangle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
+                <AlertTriangle className={cn(
+                  "w-5 h-5 flex-shrink-0 mt-0.5",
+                  accessiblePercent < 50 ? "text-destructive" : "text-warning"
+                )} />
                 <div className="flex-1">
-                  <p className="font-medium text-warning">Some resources will fail to export</p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Add the missing permissions in Azure AD and grant admin consent, or proceed with partial export.
+                  <p className={cn(
+                    "font-medium",
+                    accessiblePercent < 50 ? "text-destructive" : "text-warning"
+                  )}>
+                    {accessiblePercent < 50 
+                      ? `Most resources will fail (${result.deniedResources} of ${result.totalResources})` 
+                      : `Some resources will fail to export (${result.deniedResources})`
+                    }
                   </p>
-                <div className="flex items-center gap-2 mt-3 flex-wrap">
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {accessiblePercent < 50 
+                      ? "Your App Registration is missing critical permissions. Add them in Azure Portal and grant admin consent before exporting."
+                      : "Add the missing permissions in Azure AD and grant admin consent, or proceed with partial export."
+                    }
+                  </p>
+                  <div className="flex items-center gap-2 mt-3 flex-wrap">
                     <Button 
                       variant="outline" 
                       size="sm"
@@ -385,9 +404,14 @@ export function PreflightCheckDialog({
           <Button 
             onClick={onProceed}
             disabled={checking || !result}
+            variant={result?.deniedResources && accessiblePercent < 50 ? "destructive" : "default"}
           >
             {result?.deniedResources ? (
-              <>Proceed Anyway ({result.accessibleResources} resources)</>
+              accessiblePercent < 50 ? (
+                <>Proceed Anyway ({result.accessibleResources} of {result.totalResources})</>
+              ) : (
+                <>Proceed ({result.accessibleResources} resources)</>
+              )
             ) : (
               <>Start Export</>
             )}
