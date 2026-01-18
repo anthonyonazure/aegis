@@ -10,7 +10,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
+import { useTenant } from '@/contexts/TenantContext';
 import { 
   Plus, 
   Trash2, 
@@ -27,7 +29,8 @@ import {
   DollarSign,
   FileCheck,
   Loader2,
-  Eye
+  Eye,
+  Filter
 } from 'lucide-react';
 import { 
   getReports, 
@@ -47,6 +50,8 @@ import { generateReportPdf } from '@/lib/reportPdfGenerator';
 
 export const ReportsView = () => {
   const { toast } = useToast();
+  const { selectedCustomerId, customers: contextCustomers } = useTenant();
+  const [allReports, setAllReports] = useState<Report[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -54,6 +59,11 @@ export const ReportsView = () => {
   const [showGenerateDialog, setShowGenerateDialog] = useState(false);
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
   const [showViewer, setShowViewer] = useState(false);
+
+  // Get selected customer name for display
+  const selectedCustomerName = selectedCustomerId 
+    ? contextCustomers.find(c => c.id === selectedCustomerId)?.name 
+    : null;
 
   // Form state
   const [formData, setFormData] = useState({
@@ -68,6 +78,15 @@ export const ReportsView = () => {
     loadData();
   }, []);
 
+  // Filter reports when customer selection changes
+  useEffect(() => {
+    if (selectedCustomerId) {
+      setReports(allReports.filter(report => report.customer_id === selectedCustomerId));
+    } else {
+      setReports(allReports);
+    }
+  }, [selectedCustomerId, allReports]);
+
   const loadData = async () => {
     setLoading(true);
     try {
@@ -75,7 +94,7 @@ export const ReportsView = () => {
         getReports(),
         getCustomers(),
       ]);
-      setReports(reportsData);
+      setAllReports(reportsData);
       setCustomers(customersData);
     } catch (error) {
       console.error('Failed to load data:', error);
@@ -367,6 +386,16 @@ export const ReportsView = () => {
           </Dialog>
         </div>
       </div>
+
+      {/* Customer filter indicator */}
+      {selectedCustomerId && (
+        <Alert className="border-primary/50 bg-primary/5">
+          <Filter className="h-4 w-4" />
+          <AlertDescription>
+            Showing reports for <strong>{selectedCustomerName}</strong>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
