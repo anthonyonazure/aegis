@@ -329,31 +329,33 @@ export function GovernanceCenterView({ onNavigate, onDeployPolicy }: GovernanceC
         : 75; // Default demo value
       
       // Default values (will be overwritten by live data)
-      const totalUsers = billingData?.[0]?.total_users || 0;
-      const totalLicenses = Math.floor(totalUsers * 1.2) || 0;
+      const totalUsers = billingData?.[0]?.total_users || 150; // Default demo value
+      const totalLicenses = Math.floor(totalUsers * 1.2);
       const assignedLicenses = totalUsers;
       
-      // Create default license breakdown for demo
-      const defaultLicenses: LicenseBreakdown[] = totalUsers > 0 ? [
-        { productName: 'ENTERPRISEPREMIUM', total: Math.floor(totalUsers * 0.3), assigned: Math.floor(totalUsers * 0.28), available: Math.floor(totalUsers * 0.02), monthlyPrice: licensePrices['ENTERPRISEPREMIUM'] || 57 },
-        { productName: 'ENTERPRISEPACK', total: Math.floor(totalUsers * 0.5), assigned: Math.floor(totalUsers * 0.45), available: Math.floor(totalUsers * 0.05), monthlyPrice: licensePrices['ENTERPRISEPACK'] || 38 },
-        { productName: 'AAD_PREMIUM_P2', total: Math.floor(totalUsers * 0.2), assigned: Math.floor(totalUsers * 0.15), available: Math.floor(totalUsers * 0.05), monthlyPrice: licensePrices['AAD_PREMIUM_P2'] || 12 },
-        { productName: 'POWER_BI_PRO', total: Math.floor(totalUsers * 0.1), assigned: Math.floor(totalUsers * 0.08), available: Math.floor(totalUsers * 0.02), monthlyPrice: licensePrices['POWER_BI_PRO'] || 10 },
-      ] : [];
+      // Create default license breakdown for demo - always show sample data
+      const defaultLicenses: LicenseBreakdown[] = [
+        { productName: 'ENTERPRISEPREMIUM', total: Math.max(1, Math.floor(totalUsers * 0.3)), assigned: Math.floor(totalUsers * 0.28), available: Math.max(1, Math.floor(totalUsers * 0.02)), monthlyPrice: licensePrices['ENTERPRISEPREMIUM'] || 57 },
+        { productName: 'ENTERPRISEPACK', total: Math.max(1, Math.floor(totalUsers * 0.5)), assigned: Math.floor(totalUsers * 0.45), available: Math.max(1, Math.floor(totalUsers * 0.05)), monthlyPrice: licensePrices['ENTERPRISEPACK'] || 38 },
+        { productName: 'AAD_PREMIUM_P2', total: Math.max(1, Math.floor(totalUsers * 0.2)), assigned: Math.floor(totalUsers * 0.15), available: Math.max(1, Math.floor(totalUsers * 0.05)), monthlyPrice: licensePrices['AAD_PREMIUM_P2'] || 12 },
+        { productName: 'POWER_BI_PRO', total: Math.max(1, Math.floor(totalUsers * 0.1)), assigned: Math.floor(totalUsers * 0.08), available: Math.max(1, Math.floor(totalUsers * 0.02)), monthlyPrice: licensePrices['POWER_BI_PRO'] || 10 },
+        { productName: 'EXCHANGEENTERPRISE', total: Math.max(1, Math.floor(totalUsers * 0.4)), assigned: Math.floor(totalUsers * 0.35), available: Math.max(1, Math.floor(totalUsers * 0.05)), monthlyPrice: licensePrices['EXCHANGEENTERPRISE'] || 8 },
+        { productName: 'TEAMS_EXPLORATORY', total: Math.max(1, Math.floor(totalUsers * 0.15)), assigned: Math.floor(totalUsers * 0.1), available: Math.max(1, Math.floor(totalUsers * 0.05)), monthlyPrice: licensePrices['TEAMS_EXPLORATORY'] || 0 },
+      ];
 
       setStats({
         totalTenants,
         healthyTenants,
         avgComplianceScore,
-        avgSecureScore: 0,
-        licenseUtilization: totalLicenses > 0 ? Math.round((assignedLicenses / totalLicenses) * 100) : 0,
-        activeAlerts: 0,
+        avgSecureScore: 72, // Demo value
+        licenseUtilization: totalLicenses > 0 ? Math.round((assignedLicenses / totalLicenses) * 100) : 83,
+        activeAlerts: 3,
         pendingActions: GOVERNANCE_ACTIONS.length,
         totalUsers,
-        adminUsers: Math.floor(totalUsers * 0.05) || 0,
-        guestUsers: Math.floor(totalUsers * 0.1) || 0,
-        mfaEnabled: Math.floor(totalUsers * 0.75) || 0,
-        riskyUsers: Math.floor(totalUsers * 0.02) || 0,
+        adminUsers: Math.max(5, Math.floor(totalUsers * 0.05)),
+        guestUsers: Math.max(10, Math.floor(totalUsers * 0.1)),
+        mfaEnabled: Math.floor(totalUsers * 0.75),
+        riskyUsers: Math.max(2, Math.floor(totalUsers * 0.02)),
         totalLicenses,
         assignedLicenses,
         unusedLicenses: totalLicenses - assignedLicenses,
