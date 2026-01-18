@@ -36,6 +36,7 @@ import { format } from 'date-fns';
 import { COMPLIANCE_BASELINES, runComplianceCheck } from '@/lib/complianceRules';
 import { logAuditEvent } from '@/lib/auditLog';
 import { notifyComplianceFailed, notifyComplianceWarning } from '@/lib/webhookNotifications';
+import { createComplianceTickets } from '@/lib/autoTicketing';
 
 interface ExportJob {
   id: string;
@@ -191,6 +192,22 @@ export const ComplianceView = () => {
               failed,
               checkResults.length
             );
+
+            // Auto-create PSA tickets for compliance failures
+            const ticketResult = await createComplianceTickets({
+              complianceResultId: complianceResult.id,
+              baselineName: selectedBaseline,
+              failedCount: failed,
+              warningCount: warnings,
+              totalChecks: checkResults.length,
+            });
+
+            if (ticketResult.ticketsCreated > 0) {
+              toast({
+                title: 'Tickets Created',
+                description: `${ticketResult.ticketsCreated} PSA ticket(s) created for compliance failure`,
+              });
+            }
           } else if (warnings > 0) {
             await notifyComplianceWarning(
               complianceResult.id,

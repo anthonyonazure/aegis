@@ -317,6 +317,23 @@ Deno.serve(async (req) => {
           });
         }
 
+        // Auto-create PSA tickets for tenants with drift
+        if (hasDrift) {
+          const tenantsWithDrift = tenantResults.filter(t => t.hasDrift);
+          const ticketResults = await createAutoTickets(
+            supabase,
+            schedule.user_id,
+            schedule.id,
+            schedule.name,
+            driftRun.id,
+            tenantsWithDrift
+          );
+          
+          if (ticketResults.ticketsCreated > 0) {
+            console.log(`Created ${ticketResults.ticketsCreated} PSA tickets for drift detection`);
+          }
+        }
+
         processedSchedules.push(schedule.id);
         results[schedule.id] = {
           name: schedule.name,
@@ -850,4 +867,296 @@ async function generateSignature(payload: string, secret: string): Promise<strin
   return Array.from(new Uint8Array(signature))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
+}
+
+// Auto-ticketing for PSA integrations
+async function createAutoTickets(
+  supabase: any,
+  userId: string,
+  scheduleId: string,
+  scheduleName: string,
+  driftRunId: string,
+  tenantsWithDrift: DriftResult[]
+): Promise<{ ticketsCreated: number; errors: string[] }> {
+  const errors: string[] = [];
+  let ticketsCreated = 0;
+
+  try {
+    // Get active PSA integrations that have auto-ticketing enabled for drift
+    const { data: integrations, error: intError } = await supabase
+      .from("psa_integrations")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("is_active", true)
+      .eq("auto_create_tickets", true)
+      .eq("ticket_on_drift", true);
+
+    if (intError || !integrations || integrations.length === 0) {
+      return { ticketsCreated: 0, errors: [] };
+    }
+
+    console.log(`Found ${integrations.length} active PSA integrations for auto-ticketing`);
+
+    // Create tickets for each tenant with drift
+    for (const tenant of tenantsWithDrift) {
+      for (const integration of integrations) {
+        try {
+          const title = `Scheduled Drift Detected - ${tenant.tenantName}`;
+          const description = `Scheduled drift detection "${scheduleName}" has found configuration changes.
+
+Tenant: ${tenant.tenantName}
+
+Summary:
+- Added resources: ${tenant.added}
+- Removed resources: ${tenant.removed}
+- Modified resources: ${tenant.modified}
+
+Schedule ID: ${scheduleId}
+Run ID: ${driftRunId}
+
+Please review the changes and take appropriate action.`;
+
+          // Get PSA credentials
+          const { data: credentials, error: credError } = await supabase
+            .rpc("get_psa_credential", { p_integration_id: integration.id });
+
+          if (credError || !credentials || credentials.length === 0) {
+            console.error(`No credentials found for PSA integration ${integration.name}`);
+            errors.push(`${integration.name}: No credentials found`);
+            continue;
+          }
+
+          const cred = credentials[0];
+          
+          // Create ticket based on provider
+          let externalTicketId: string | null = null;
+          
+          switch (integration.provider) {
+            case "halopsa":
+              externalTicketId = await createHaloPSATicket(
+                integration.api_url,
+                cred.api_key,
+                cred.api_secret,
+                {
+                  title,
+                  description,
+                  priority: integration.default_priority || "medium",
+                  ticketType: integration.default_ticket_type || "incident",
+                }
+              );
+              break;
+            case "autotask":
+              externalTicketId = await createAutotaskTicket(
+                integration.api_url,
+                cred.api_key,
+                cred.api_secret,
+                {
+                  title,
+                  description,
+                  priority: integration.default_priority || "medium",
+                  ticketType: integration.default_ticket_type || "incident",
+                }
+              );
+              break;
+            case "connectwise":
+              externalTicketId = await createConnectWiseTicket(
+                integration.api_url,
+                cred.api_key,
+                cred.api_secret,
+                {
+                  title,
+                  description,
+                  priority: integration.default_priority || "medium",
+                  ticketType: integration.default_ticket_type || "incident",
+                }
+              );
+              break;
+            default:
+              errors.push(`${integration.name}: Unsupported provider ${integration.provider}`);
+              continue;
+          }
+
+          if (externalTicketId) {
+            // Store ticket in database
+            await supabase.from("psa_tickets").insert({
+              user_id: userId,
+              psa_integration_id: integration.id,
+              title,
+              description,
+              priority: integration.default_priority || "medium",
+              ticket_type: integration.default_ticket_type || "incident",
+              source_type: "scheduled_drift",
+              source_id: driftRunId,
+              external_ticket_id: externalTicketId,
+              status: "open",
+            });
+
+            ticketsCreated++;
+            console.log(`Created ticket in ${integration.name}: ${externalTicketId}`);
+          }
+        } catch (err) {
+          const errorMsg = err instanceof Error ? err.message : "Unknown error";
+          errors.push(`${integration.name} (${tenant.tenantName}): ${errorMsg}`);
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Error in auto-ticketing:", err);
+  }
+
+  return { ticketsCreated, errors };
+}
+
+// PSA ticket creation helpers
+async function createHaloPSATicket(
+  apiUrl: string,
+  apiKey: string,
+  apiSecret: string,
+  ticket: { title: string; description: string; priority: string; ticketType: string }
+): Promise<string | null> {
+  try {
+    // Get OAuth token first
+    const tokenResponse = await fetch(`${apiUrl}/auth/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "client_credentials",
+        client_id: apiKey,
+        client_secret: apiSecret,
+        scope: "all",
+      }),
+    });
+
+    if (!tokenResponse.ok) {
+      console.error("HaloPSA token error:", await tokenResponse.text());
+      return null;
+    }
+
+    const tokenData = await tokenResponse.json();
+    
+    // Map priority
+    const priorityMap: Record<string, number> = {
+      critical: 1,
+      high: 2,
+      medium: 3,
+      low: 4,
+    };
+
+    // Create ticket
+    const response = await fetch(`${apiUrl}/api/Tickets`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${tokenData.access_token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify([
+        {
+          summary: ticket.title,
+          details: ticket.description,
+          priority_id: priorityMap[ticket.priority] || 3,
+          tickettype_id: ticket.ticketType === "service_request" ? 2 : 1,
+        },
+      ]),
+    });
+
+    if (!response.ok) {
+      console.error("HaloPSA ticket error:", await response.text());
+      return null;
+    }
+
+    const data = await response.json();
+    return data[0]?.id?.toString() || null;
+  } catch (err) {
+    console.error("HaloPSA ticket creation error:", err);
+    return null;
+  }
+}
+
+async function createAutotaskTicket(
+  apiUrl: string,
+  apiKey: string,
+  apiSecret: string,
+  ticket: { title: string; description: string; priority: string; ticketType: string }
+): Promise<string | null> {
+  try {
+    const priorityMap: Record<string, number> = {
+      critical: 1,
+      high: 2,
+      medium: 3,
+      low: 4,
+    };
+
+    const response = await fetch(`${apiUrl}/v1.0/Tickets`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        APIIntegrationCode: apiKey,
+        UserName: apiKey,
+        Secret: apiSecret,
+      },
+      body: JSON.stringify({
+        title: ticket.title,
+        description: ticket.description,
+        priority: priorityMap[ticket.priority] || 3,
+        status: 1,
+        ticketType: ticket.ticketType === "service_request" ? 2 : 1,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error("Autotask ticket error:", await response.text());
+      return null;
+    }
+
+    const data = await response.json();
+    return data.itemId?.toString() || null;
+  } catch (err) {
+    console.error("Autotask ticket creation error:", err);
+    return null;
+  }
+}
+
+async function createConnectWiseTicket(
+  apiUrl: string,
+  apiKey: string,
+  apiSecret: string,
+  ticket: { title: string; description: string; priority: string; ticketType: string }
+): Promise<string | null> {
+  try {
+    const priorityMap: Record<string, number> = {
+      critical: 1,
+      high: 2,
+      medium: 3,
+      low: 4,
+    };
+
+    const auth = btoa(`${apiKey}:${apiSecret}`);
+    
+    const response = await fetch(`${apiUrl}/v4_6_release/apis/3.0/service/tickets`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Basic ${auth}`,
+      },
+      body: JSON.stringify({
+        summary: ticket.title,
+        initialDescription: ticket.description,
+        priority: { id: priorityMap[ticket.priority] || 3 },
+        board: { id: 1 },
+        company: { id: 1 },
+        type: { id: ticket.ticketType === "service_request" ? 2 : 1 },
+      }),
+    });
+
+    if (!response.ok) {
+      console.error("ConnectWise ticket error:", await response.text());
+      return null;
+    }
+
+    const data = await response.json();
+    return data.id?.toString() || null;
+  } catch (err) {
+    console.error("ConnectWise ticket creation error:", err);
+    return null;
+  }
 }
