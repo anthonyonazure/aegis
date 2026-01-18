@@ -12,6 +12,8 @@ import {
   ChevronUp,
   Cloud,
   Server,
+  Zap,
+  Clock,
 } from 'lucide-react';
 import {
   Dialog,
@@ -34,14 +36,23 @@ import {
   getPermissionsCopyText,
   isAzureRbacPermission,
 } from '@/lib/permissionsCheck';
+import {
+  validatePermissionsLive,
+  LiveValidationResult,
+  LiveValidationResponse,
+  getErrorGuidance,
+  groupValidationFailures,
+} from '@/lib/permissionValidator';
 import { useToast } from '@/hooks/use-toast';
 
 interface PreflightCheckDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   accessToken: string | null;
+  azureToken?: string | null;
   azureRoles?: string[];
   selectedResources: string[];
+  subscriptionIds?: string[];
   onProceed: () => void;
   onCancel: () => void;
   onRefreshToken?: () => Promise<string | null>;
@@ -51,8 +62,10 @@ export function PreflightCheckDialog({
   open,
   onOpenChange,
   accessToken,
+  azureToken,
   azureRoles = [],
   selectedResources,
+  subscriptionIds = [],
   onProceed,
   onCancel,
   onRefreshToken,
@@ -63,6 +76,12 @@ export function PreflightCheckDialog({
   const [showGrantedPermissions, setShowGrantedPermissions] = useState(false);
   const [filterProvider, setFilterProvider] = useState<'all' | 'graph' | 'azure'>('all');
   const [currentToken, setCurrentToken] = useState<string | null>(accessToken);
+  
+  // Live validation state
+  const [liveValidating, setLiveValidating] = useState(false);
+  const [liveResults, setLiveResults] = useState<LiveValidationResponse | null>(null);
+  const [showLiveResults, setShowLiveResults] = useState(false);
+  
   const { toast } = useToast();
 
   // Run preflight check
@@ -82,11 +101,69 @@ export function PreflightCheckDialog({
     if (open && accessToken && selectedResources.length > 0) {
       setCurrentToken(accessToken);
       setResult(null);
+      setLiveResults(null);
+      setShowLiveResults(false);
       setChecking(true);
       runPreflightCheck(accessToken, azureRoles, selectedResources);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]); // Only trigger on open change, not on every prop change
+
+  // Run live validation
+  const handleLiveValidation = async () => {
+    if (!currentToken && !azureToken) {
+      toast({
+        title: 'No Token Available',
+        description: 'Please connect to Microsoft 365 or Azure first.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setLiveValidating(true);
+    setShowLiveResults(true);
+    
+    try {
+      const liveResult = await validatePermissionsLive(
+        currentToken,
+        azureToken || null,
+        selectedResources,
+        subscriptionIds
+      );
+      
+      setLiveResults(liveResult);
+      
+      if (liveResult.success) {
+        toast({
+          title: 'All Tests Passed! ✓',
+          description: `${liveResult.summary.passed} endpoints validated successfully.`,
+        });
+      } else {
+        const failures = groupValidationFailures(liveResult.results);
+        if (failures.permissionIssues.length > 0) {
+          toast({
+            title: 'Permission Issues Found',
+            description: `${failures.permissionIssues.length} resources returned 403 Forbidden. Add missing permissions or admin consent.`,
+            variant: 'destructive',
+          });
+        } else if (failures.authIssues.length > 0) {
+          toast({
+            title: 'Authentication Issues',
+            description: 'Token expired or invalid. Try reconnecting.',
+            variant: 'destructive',
+          });
+        }
+      }
+    } catch (error) {
+      toast({
+        title: 'Validation Error',
+        description: error instanceof Error ? error.message : 'Failed to run live validation',
+        variant: 'destructive',
+      });
+    } finally {
+      setLiveValidating(false);
+    }
+  };
 
   // Handle refresh permissions button
   const handleRefreshPermissions = async () => {
@@ -293,35 +370,130 @@ export function PreflightCheckDialog({
             )}
 
             {/* General action buttons */}
-            {result.deniedResources > 0 && (
-              <div className="flex items-center gap-2 flex-wrap">
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={handleCopyMissingPermissions}
-                >
-                  <Copy className="w-3 h-3 mr-1" />
-                  Copy Setup Instructions
-                </Button>
-                <Button
-                  variant="default"
-                  size="sm"
-                  onClick={handleRefreshPermissions}
-                  disabled={refreshing}
-                >
-                  {refreshing ? (
-                    <>
-                      <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                      Refreshing...
-                    </>
-                  ) : (
-                    <>
-                      <Shield className="w-3 h-3 mr-1" />
-                      Refresh Permissions
-                    </>
+            <div className="flex items-center gap-2 flex-wrap">
+              {result.deniedResources > 0 && (
+                <>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={handleCopyMissingPermissions}
+                  >
+                    <Copy className="w-3 h-3 mr-1" />
+                    Copy Setup Instructions
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRefreshPermissions}
+                    disabled={refreshing}
+                  >
+                    {refreshing ? (
+                      <>
+                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                        Refreshing...
+                      </>
+                    ) : (
+                      <>
+                        <Shield className="w-3 h-3 mr-1" />
+                        Refresh
+                      </>
+                    )}
+                  </Button>
+                </>
+              )}
+              <Button
+                variant="default"
+                size="sm"
+                onClick={handleLiveValidation}
+                disabled={liveValidating}
+                className="gap-1"
+              >
+                {liveValidating ? (
+                  <>
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Testing APIs...
+                  </>
+                ) : (
+                  <>
+                    <Zap className="w-3 h-3" />
+                    Run Live Test
+                  </>
+                )}
+              </Button>
+            </div>
+
+            {/* Live Validation Results */}
+            {showLiveResults && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="border rounded-lg overflow-hidden"
+              >
+                <div className={cn(
+                  "flex items-center justify-between p-3",
+                  liveResults?.success 
+                    ? "bg-success/10 border-b border-success/20" 
+                    : liveResults 
+                      ? "bg-destructive/10 border-b border-destructive/20"
+                      : "bg-secondary/30 border-b"
+                )}>
+                  <div className="flex items-center gap-2">
+                    {liveValidating ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                    ) : liveResults?.success ? (
+                      <CheckCircle2 className="w-4 h-4 text-success" />
+                    ) : liveResults ? (
+                      <XCircle className="w-4 h-4 text-destructive" />
+                    ) : null}
+                    <span className="font-medium text-sm">
+                      {liveValidating 
+                        ? 'Testing API endpoints...' 
+                        : liveResults?.success 
+                          ? 'All tests passed!' 
+                          : `${liveResults?.summary.failed || 0} tests failed`
+                      }
+                    </span>
+                  </div>
+                  {liveResults && (
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        {liveResults.summary.avgResponseTime}ms avg
+                      </span>
+                      <span className="text-success">{liveResults.summary.passed} passed</span>
+                      {liveResults.summary.failed > 0 && (
+                        <span className="text-destructive">{liveResults.summary.failed} failed</span>
+                      )}
+                    </div>
                   )}
-                </Button>
-              </div>
+                </div>
+                
+                {liveResults && !liveResults.success && (
+                  <div className="p-3 space-y-2 max-h-[150px] overflow-y-auto">
+                    {liveResults.results.filter(r => !r.success).map((res) => (
+                      <div 
+                        key={res.resourceId}
+                        className="flex items-start gap-2 p-2 rounded bg-destructive/5 text-sm"
+                      >
+                        <XCircle className="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{res.resourceName}</span>
+                            {res.statusCode && (
+                              <Badge variant="outline" className="text-[10px] text-destructive border-destructive/30">
+                                {res.statusCode}
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {getErrorGuidance(res)}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </motion.div>
             )}
 
             {/* Provider Filter */}
