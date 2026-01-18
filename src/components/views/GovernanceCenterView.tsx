@@ -18,6 +18,7 @@ import { useTenant } from '@/contexts/TenantContext';
 import { supabase } from '@/integrations/supabase/client';
 import { getPolicyTemplateByName } from '@/lib/policyDatabase';
 import { saveGovernanceMetrics, getGovernanceHistory, GovernanceMetricsHistory } from '@/lib/governanceDatabase';
+import { GovernanceScheduleManager } from '@/components/GovernanceScheduleManager';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 import {
@@ -55,7 +56,8 @@ import {
   Settings,
   Edit2,
   History,
-  LineChart
+  LineChart,
+  Calendar
 } from 'lucide-react';
 import {
   ChartContainer,
@@ -906,7 +908,7 @@ export function GovernanceCenterView({ onNavigate, onDeployPolicy }: GovernanceC
 
       {/* Main Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="overview" className="gap-2">
             <Gauge className="w-4 h-4" />
             Overview
@@ -914,6 +916,10 @@ export function GovernanceCenterView({ onNavigate, onDeployPolicy }: GovernanceC
           <TabsTrigger value="trends" className="gap-2">
             <LineChart className="w-4 h-4" />
             Trends
+          </TabsTrigger>
+          <TabsTrigger value="schedules" className="gap-2">
+            <Calendar className="w-4 h-4" />
+            Schedules
           </TabsTrigger>
           <TabsTrigger value="compliance" className="gap-2">
             <FileCheck className="w-4 h-4" />

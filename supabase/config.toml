@@ -50,3 +50,6 @@ verify_jwt = false
 
 [functions.fetch-governance-metrics]
 verify_jwt = false
+
+[functions.run-scheduled-governance]
+verify_jwt = false

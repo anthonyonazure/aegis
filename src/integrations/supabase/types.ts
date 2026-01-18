@@ -1776,6 +1776,168 @@ export type Database = {
           },
         ]
       }
+      scheduled_governance_configs: {
+        Row: {
+          alert_on_risky_signins: boolean | null
+          alert_on_risky_users: boolean | null
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          last_run_at: string | null
+          last_run_success: boolean | null
+          license_utilization_threshold: number | null
+          mfa_coverage_threshold: number | null
+          name: string
+          next_run_at: string | null
+          notify_on_completion: boolean | null
+          notify_on_threshold_breach: boolean | null
+          run_count: number
+          schedule_cron: string
+          schedule_description: string | null
+          secure_score_threshold: number | null
+          target_customer_id: string | null
+          target_group_id: string | null
+          target_tenant_ids: string[] | null
+          target_type: string
+          updated_at: string
+          user_id: string
+          webhook_config_id: string | null
+        }
+        Insert: {
+          alert_on_risky_signins?: boolean | null
+          alert_on_risky_users?: boolean | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          last_run_at?: string | null
+          last_run_success?: boolean | null
+          license_utilization_threshold?: number | null
+          mfa_coverage_threshold?: number | null
+          name: string
+          next_run_at?: string | null
+          notify_on_completion?: boolean | null
+          notify_on_threshold_breach?: boolean | null
+          run_count?: number
+          schedule_cron?: string
+          schedule_description?: string | null
+          secure_score_threshold?: number | null
+          target_customer_id?: string | null
+          target_group_id?: string | null
+          target_tenant_ids?: string[] | null
+          target_type?: string
+          updated_at?: string
+          user_id: string
+          webhook_config_id?: string | null
+        }
+        Update: {
+          alert_on_risky_signins?: boolean | null
+          alert_on_risky_users?: boolean | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          last_run_at?: string | null
+          last_run_success?: boolean | null
+          license_utilization_threshold?: number | null
+          mfa_coverage_threshold?: number | null
+          name?: string
+          next_run_at?: string | null
+          notify_on_completion?: boolean | null
+          notify_on_threshold_breach?: boolean | null
+          run_count?: number
+          schedule_cron?: string
+          schedule_description?: string | null
+          secure_score_threshold?: number | null
+          target_customer_id?: string | null
+          target_group_id?: string | null
+          target_tenant_ids?: string[] | null
+          target_type?: string
+          updated_at?: string
+          user_id?: string
+          webhook_config_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scheduled_governance_configs_target_customer_id_fkey"
+            columns: ["target_customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scheduled_governance_configs_target_group_id_fkey"
+            columns: ["target_group_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scheduled_governance_configs_webhook_config_id_fkey"
+            columns: ["webhook_config_id"]
+            isOneToOne: false
+            referencedRelation: "webhook_configs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      scheduled_governance_runs: {
+        Row: {
+          completed_at: string | null
+          completed_tenants: number
+          created_at: string
+          error_message: string | null
+          failed_tenants: number
+          id: string
+          results: Json | null
+          scheduled_config_id: string
+          started_at: string | null
+          status: string
+          tenants_with_alerts: number
+          total_tenants: number
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          completed_tenants?: number
+          created_at?: string
+          error_message?: string | null
+          failed_tenants?: number
+          id?: string
+          results?: Json | null
+          scheduled_config_id: string
+          started_at?: string | null
+          status?: string
+          tenants_with_alerts?: number
+          total_tenants?: number
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          completed_tenants?: number
+          created_at?: string
+          error_message?: string | null
+          failed_tenants?: number
+          id?: string
+          results?: Json | null
+          scheduled_config_id?: string
+          started_at?: string | null
+          status?: string
+          tenants_with_alerts?: number
+          total_tenants?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scheduled_governance_runs_scheduled_config_id_fkey"
+            columns: ["scheduled_config_id"]
+            isOneToOne: false
+            referencedRelation: "scheduled_governance_configs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       secure_score_history: {
         Row: {
           id: string
