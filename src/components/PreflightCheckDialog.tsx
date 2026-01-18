@@ -63,23 +63,27 @@ export function PreflightCheckDialog({
   const { toast } = useToast();
 
   // Run preflight check
-  const runPreflightCheck = useCallback((token: string | null, roles: string[]) => {
-    if (token && selectedResources.length > 0) {
+  const runPreflightCheck = useCallback((token: string | null, roles: string[], resources: string[]) => {
+    if (token && resources.length > 0) {
       setChecking(true);
       setTimeout(() => {
-        const checkResult = performPreflightCheck(token, selectedResources, roles);
+        const checkResult = performPreflightCheck(token, resources, roles);
         setResult(checkResult);
         setChecking(false);
       }, 500);
     }
-  }, [selectedResources]);
+  }, []);
 
+  // Only run once when dialog opens
   useEffect(() => {
     if (open && accessToken && selectedResources.length > 0) {
       setCurrentToken(accessToken);
-      runPreflightCheck(accessToken, azureRoles);
+      setResult(null);
+      setChecking(true);
+      runPreflightCheck(accessToken, azureRoles, selectedResources);
     }
-  }, [open, accessToken, azureRoles, selectedResources, runPreflightCheck]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]); // Only trigger on open change, not on every prop change
 
   // Handle refresh permissions button
   const handleRefreshPermissions = async () => {
@@ -97,7 +101,7 @@ export function PreflightCheckDialog({
       const newToken = await onRefreshToken();
       if (newToken) {
         setCurrentToken(newToken);
-        runPreflightCheck(newToken, azureRoles);
+        runPreflightCheck(newToken, azureRoles, selectedResources);
         toast({
           title: 'Permissions Refreshed',
           description: 'Token refreshed. Checking permissions with new token...',
