@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, forwardRef } from 'react';
 import { motion } from 'framer-motion';
 import {
   CheckCircle2,
@@ -44,16 +44,17 @@ interface PreflightCheckDialogProps {
   onRefreshToken?: () => Promise<string | null>;
 }
 
-export function PreflightCheckDialog({
-  open,
-  onOpenChange,
-  accessToken,
-  azureRoles = [],
-  selectedResources,
-  onProceed,
-  onCancel,
-  onRefreshToken,
-}: PreflightCheckDialogProps) {
+export const PreflightCheckDialog = forwardRef<HTMLDivElement, PreflightCheckDialogProps>(
+  function PreflightCheckDialog({
+    open,
+    onOpenChange,
+    accessToken,
+    azureRoles = [],
+    selectedResources,
+    onProceed,
+    onCancel,
+    onRefreshToken,
+  }, ref) {
   const [checking, setChecking] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [result, setResult] = useState<PreflightCheckResult | null>(null);
@@ -396,4 +397,6 @@ export function PreflightCheckDialog({
       </DialogContent>
     </Dialog>
   );
-}
+});
+
+PreflightCheckDialog.displayName = 'PreflightCheckDialog';
