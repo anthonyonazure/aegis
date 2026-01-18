@@ -23,12 +23,20 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import {
   PERMISSION_REQUIREMENTS,
   AZURE_PERMISSION_REQUIREMENTS,
   PermissionRequirement,
 } from '@/lib/permissionsCheck';
+
+interface ScriptConfig {
+  appId: string;
+  tenantId: string;
+  subscriptionIds: string[];
+}
 
 interface CategoryGroup {
   id: string;
@@ -128,6 +136,14 @@ export const PermissionsReferenceView = () => {
   const [writeMode, setWriteMode] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [showConfigDialog, setShowConfigDialog] = useState(false);
+  const [pendingAction, setPendingAction] = useState<'copy-graph' | 'download-graph' | 'copy-azure' | 'download-azure' | 'copy-combined' | 'download-combined' | null>(null);
+  const [scriptConfig, setScriptConfig] = useState<ScriptConfig>({
+    appId: '',
+    tenantId: '',
+    subscriptionIds: [''],
+  });
+  const [subscriptionIdsText, setSubscriptionIdsText] = useState('');
   const { toast } = useToast();
 
   const graphCategories = useMemo(() => groupGraphPermissions(), []);
@@ -188,6 +204,54 @@ export const PermissionsReferenceView = () => {
     });
   };
 
+  const openConfigDialog = (action: typeof pendingAction) => {
+    setPendingAction(action);
+    setShowConfigDialog(true);
+  };
+
+  const handleConfigSubmit = () => {
+    // Parse subscription IDs from text
+    const subIds = subscriptionIdsText
+      .split('\n')
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+    
+    const config: ScriptConfig = {
+      ...scriptConfig,
+      subscriptionIds: subIds.length > 0 ? subIds : ['YOUR_SUBSCRIPTION_ID_1'],
+    };
+
+    setShowConfigDialog(false);
+
+    // Execute the pending action
+    switch (pendingAction) {
+      case 'copy-graph':
+        copyToClipboard(getGraphPowerShellScript(config), 'powershell', 'PowerShell Script Copied', 'Script copied to clipboard.');
+        break;
+      case 'download-graph':
+        downloadScript(getGraphPowerShellScript(config), `Graph-API-Permissions-${writeMode ? 'ReadWrite' : 'Read'}.ps1`);
+        break;
+      case 'copy-azure':
+        copyToClipboard(getAzurePowerShellScript(config), 'azure-script', 'Azure PowerShell Script Copied', 'Script copied to clipboard.');
+        break;
+      case 'download-azure':
+        downloadScript(getAzurePowerShellScript(config), `Azure-RBAC-${writeMode ? 'Contributor' : 'Reader'}.ps1`);
+        break;
+      case 'copy-combined':
+        copyToClipboard(getCombinedPowerShellScript(config), 'combined-script', 'Combined Script Copied', 'Script copied to clipboard.');
+        break;
+      case 'download-combined':
+        downloadScript(getCombinedPowerShellScript(config), `Complete-Setup-${writeMode ? 'ReadWrite' : 'Read'}.ps1`);
+        break;
+    }
+
+    setPendingAction(null);
+  };
+
+  const getConfiguredValue = (value: string, placeholder: string) => {
+    return value.trim() || placeholder;
+  };
+
   const toggleCategory = (categoryId: string) => {
     setExpandedCategories(prev => {
       const next = new Set(prev);
@@ -213,18 +277,23 @@ export const PermissionsReferenceView = () => {
     copyToClipboard(text, 'all-graph');
   };
 
-  const getAzurePowerShellScript = () => {
+  const getAzurePowerShellScript = (config?: ScriptConfig) => {
     const role = writeMode ? 'Contributor' : 'Reader';
+    const appId = config?.appId?.trim() || 'YOUR_APP_CLIENT_ID';
+    const tenantId = config?.tenantId?.trim() || 'YOUR_TENANT_ID';
+    const subIds = config?.subscriptionIds?.filter(s => s.trim()).length 
+      ? config.subscriptionIds.filter(s => s.trim()).map(s => `    "${s.trim()}"`).join('\n')
+      : '    "YOUR_SUBSCRIPTION_ID_1"\n    # "YOUR_SUBSCRIPTION_ID_2"     # Add more subscriptions as needed';
+    
     return `# PowerShell script to assign Azure RBAC "${role}" role to an App Registration
 # Run this in Azure Cloud Shell or with Az PowerShell module installed
 # Requires: Az PowerShell module (Install-Module Az -Scope CurrentUser)
 
-# Variables - UPDATE THESE BEFORE RUNNING
-$AppId = "YOUR_APP_CLIENT_ID"      # Your App Registration's Application (Client) ID
-$TenantId = "YOUR_TENANT_ID"       # Your Azure AD Tenant ID
+# Variables${config?.appId ? '' : ' - UPDATE THESE BEFORE RUNNING'}
+$AppId = "${appId}"      # Your App Registration's Application (Client) ID
+$TenantId = "${tenantId}"       # Your Azure AD Tenant ID
 $SubscriptionIds = @(              # List of Subscription IDs to grant access to
-    "YOUR_SUBSCRIPTION_ID_1"
-    # "YOUR_SUBSCRIPTION_ID_2"     # Add more subscriptions as needed
+${subIds}
 )
 
 # ============================================
@@ -315,14 +384,11 @@ ${writeMode ? `Write-Host "This allows the app to read AND modify Azure resource
   };
 
   const copyAzurePowerShellScript = () => {
-    const script = getAzurePowerShellScript();
-    copyToClipboard(script, 'azure-script', 'Azure PowerShell Script Copied', 'Script copied to clipboard. Update the variables before running.');
+    openConfigDialog('copy-azure');
   };
 
   const downloadAzurePowerShellScript = () => {
-    const script = getAzurePowerShellScript();
-    const filename = `Azure-RBAC-${writeMode ? 'Contributor' : 'Reader'}.ps1`;
-    downloadScript(script, filename);
+    openConfigDialog('download-azure');
   };
 
   const copyAzureInstructions = () => {
@@ -351,15 +417,18 @@ Repeat for each subscription you want to ${writeMode ? 'manage' : 'export'}.`;
     copyToClipboard(perms.join('\n'), category.id);
   };
 
-  const getGraphPowerShellScript = () => {
+  const getGraphPowerShellScript = (config?: ScriptConfig) => {
     const permissions = allGraphPermissions;
+    const appId = config?.appId?.trim() || 'YOUR_APP_CLIENT_ID';
+    const tenantId = config?.tenantId?.trim() || 'YOUR_TENANT_ID';
+    
     return `# PowerShell script to add Microsoft Graph API permissions to an App Registration
 # Run this in Azure Cloud Shell or with Azure PowerShell module installed
 # Requires: Microsoft.Graph PowerShell module (Install-Module Microsoft.Graph -Scope CurrentUser)
 
-# Variables - UPDATE THESE BEFORE RUNNING
-$AppId = "YOUR_APP_CLIENT_ID"      # Your App Registration's Application (Client) ID
-$TenantId = "YOUR_TENANT_ID"       # Your Azure AD Tenant ID
+# Variables${config?.appId ? '' : ' - UPDATE THESE BEFORE RUNNING'}
+$AppId = "${appId}"      # Your App Registration's Application (Client) ID
+$TenantId = "${tenantId}"       # Your Azure AD Tenant ID
 
 # ============================================
 # STEP 1: Connect to Microsoft Graph
@@ -513,19 +582,22 @@ Write-Host "Script completed!" -ForegroundColor Green
   };
 
   const copyGraphPowerShellScript = () => {
-    const script = getGraphPowerShellScript();
-    copyToClipboard(script, 'powershell', 'PowerShell Script Copied', 'Script copied to clipboard. Update the variables before running.');
+    openConfigDialog('copy-graph');
   };
 
   const downloadGraphPowerShellScript = () => {
-    const script = getGraphPowerShellScript();
-    const filename = `Graph-API-Permissions-${writeMode ? 'ReadWrite' : 'Read'}.ps1`;
-    downloadScript(script, filename);
+    openConfigDialog('download-graph');
   };
 
-  const getCombinedPowerShellScript = () => {
+  const getCombinedPowerShellScript = (config?: ScriptConfig) => {
     const permissions = allGraphPermissions;
     const role = writeMode ? 'Contributor' : 'Reader';
+    const appId = config?.appId?.trim() || 'YOUR_APP_CLIENT_ID';
+    const tenantId = config?.tenantId?.trim() || 'YOUR_TENANT_ID';
+    const subIds = config?.subscriptionIds?.filter(s => s.trim()).length 
+      ? config.subscriptionIds.filter(s => s.trim()).map(s => `    "${s.trim()}"`).join('\n')
+      : '    "YOUR_SUBSCRIPTION_ID_1"\n    # "YOUR_SUBSCRIPTION_ID_2"           # Add more as needed';
+    
     return `# ============================================================
 # COMBINED PowerShell Script: Graph API Permissions + Azure RBAC
 # ============================================================
@@ -539,13 +611,12 @@ Write-Host "Script completed!" -ForegroundColor Green
 # ============================================================
 
 # ============================================
-# CONFIGURATION - UPDATE THESE BEFORE RUNNING
+# CONFIGURATION${config?.appId ? '' : ' - UPDATE THESE BEFORE RUNNING'}
 # ============================================
-$AppId = "YOUR_APP_CLIENT_ID"           # Your App Registration's Application (Client) ID
-$TenantId = "YOUR_TENANT_ID"            # Your Azure AD Tenant ID
+$AppId = "${appId}"           # Your App Registration's Application (Client) ID
+$TenantId = "${tenantId}"            # Your Azure AD Tenant ID
 $SubscriptionIds = @(                   # List of Subscription IDs for Azure RBAC
-    "YOUR_SUBSCRIPTION_ID_1"
-    # "YOUR_SUBSCRIPTION_ID_2"           # Add more as needed
+${subIds}
 )
 
 Write-Host ""
@@ -766,14 +837,11 @@ Write-Host ""
   };
 
   const copyCombinedPowerShellScript = () => {
-    const script = getCombinedPowerShellScript();
-    copyToClipboard(script, 'combined-script', 'Combined Script Copied', 'Complete Graph + Azure script copied. Update variables before running.');
+    openConfigDialog('copy-combined');
   };
 
   const downloadCombinedPowerShellScript = () => {
-    const script = getCombinedPowerShellScript();
-    const filename = `Complete-Setup-${writeMode ? 'ReadWrite' : 'Read'}.ps1`;
-    downloadScript(script, filename);
+    openConfigDialog('download-combined');
   };
 
   const renderResourceCard = (resource: PermissionRequirement) => {
@@ -875,6 +943,7 @@ Write-Host ""
   };
 
   return (
+    <>
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
@@ -1205,5 +1274,88 @@ Write-Host ""
         </CardContent>
       </Card>
     </motion.div>
+
+      {/* Script Configuration Dialog */}
+      <Dialog open={showConfigDialog} onOpenChange={setShowConfigDialog}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Terminal className="h-5 w-5" />
+              Configure Script Variables
+            </DialogTitle>
+            <DialogDescription>
+              Enter your Azure AD details to pre-populate the PowerShell script. Leave empty for placeholders.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="appId">Application (Client) ID</Label>
+              <Input
+                id="appId"
+                placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                value={scriptConfig.appId}
+                onChange={(e) => setScriptConfig(prev => ({ ...prev, appId: e.target.value }))}
+              />
+              <p className="text-xs text-muted-foreground">
+                Found in Azure Portal → App registrations → Your App → Overview
+              </p>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="tenantId">Tenant ID</Label>
+              <Input
+                id="tenantId"
+                placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                value={scriptConfig.tenantId}
+                onChange={(e) => setScriptConfig(prev => ({ ...prev, tenantId: e.target.value }))}
+              />
+              <p className="text-xs text-muted-foreground">
+                Found in Azure Portal → Azure Active Directory → Overview
+              </p>
+            </div>
+
+            {(pendingAction?.includes('azure') || pendingAction?.includes('combined')) && (
+              <div className="space-y-2">
+                <Label htmlFor="subscriptionIds">Subscription IDs (one per line)</Label>
+                <Textarea
+                  id="subscriptionIds"
+                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx&#10;yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy"
+                  value={subscriptionIdsText}
+                  onChange={(e) => setSubscriptionIdsText(e.target.value)}
+                  rows={3}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Found in Azure Portal → Subscriptions → Subscription ID column
+                </p>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowConfigDialog(false);
+                setPendingAction(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleConfigSubmit} className="gap-2">
+              {pendingAction?.startsWith('download') ? (
+                <>
+                  <Download className="h-4 w-4" />
+                  Download Script
+                </>
+              ) : (
+                <>
+                  <Copy className="h-4 w-4" />
+                  Copy Script
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 };
