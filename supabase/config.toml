@@ -32,3 +32,6 @@ verify_jwt = false
 
 [functions.deploy-policy]
 verify_jwt = false
+
+[functions.run-scheduled-deployment]
+verify_jwt = false
