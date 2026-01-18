@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   FileKey,
@@ -13,6 +13,8 @@ import {
   Cloud,
   ClipboardList,
   Terminal,
+  RefreshCw,
+  Loader2,
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -31,6 +33,9 @@ import {
   AZURE_PERMISSION_REQUIREMENTS,
   PermissionRequirement,
 } from '@/lib/permissionsCheck';
+import { useTenant } from '@/contexts/TenantContext';
+import { supabase } from '@/integrations/supabase/client';
+import { listAzureSubscriptions } from '@/lib/azureApi';
 
 interface ScriptConfig {
   appId: string;
@@ -144,7 +149,10 @@ export const PermissionsReferenceView = () => {
     subscriptionIds: [''],
   });
   const [subscriptionIdsText, setSubscriptionIdsText] = useState('');
+  const [isLoadingSubscriptions, setIsLoadingSubscriptions] = useState(false);
+  const [isLoadingCredentials, setIsLoadingCredentials] = useState(false);
   const { toast } = useToast();
+  const { isConnected, tenantId, connectionId, getValidToken } = useTenant();
 
   const graphCategories = useMemo(() => groupGraphPermissions(), []);
   const azureCategories = useMemo(() => groupAzurePermissions(), []);
@@ -152,6 +160,117 @@ export const PermissionsReferenceView = () => {
   const allGraphPermissions = useMemo(() => getAllGraphPermissions(writeMode), [writeMode]);
   const totalGraphResources = PERMISSION_REQUIREMENTS.length;
   const totalAzureResources = AZURE_PERMISSION_REQUIREMENTS.length;
+
+  // Fetch stored credentials (client ID) for current tenant
+  const fetchStoredCredentials = async () => {
+    if (!connectionId) return null;
+    
+    try {
+      const { data, error } = await supabase
+        .from('tenant_credentials')
+        .select('client_id')
+        .eq('tenant_connection_id', connectionId)
+        .single();
+      
+      if (error || !data) return null;
+      return data.client_id;
+    } catch {
+      return null;
+    }
+  };
+
+  // Auto-populate from current tenant when dialog opens
+  const openConfigDialog = async (action: typeof pendingAction) => {
+    setPendingAction(action);
+    setShowConfigDialog(true);
+    
+    if (isConnected && tenantId) {
+      setIsLoadingCredentials(true);
+      try {
+        // Set tenant ID from current connection
+        setScriptConfig(prev => ({
+          ...prev,
+          tenantId: tenantId || prev.tenantId,
+        }));
+        
+        // Fetch client ID from stored credentials
+        const clientId = await fetchStoredCredentials();
+        if (clientId) {
+          setScriptConfig(prev => ({
+            ...prev,
+            appId: clientId,
+          }));
+        }
+      } finally {
+        setIsLoadingCredentials(false);
+      }
+    }
+  };
+
+  // Fetch Azure subscriptions using current tenant token
+  const fetchAzureSubscriptions = async () => {
+    if (!isConnected) {
+      toast({
+        title: 'Not Connected',
+        description: 'Connect to a tenant first to fetch subscriptions.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsLoadingSubscriptions(true);
+    try {
+      const token = await getValidToken();
+      if (!token) {
+        toast({
+          title: 'Token Error',
+          description: 'Could not get a valid access token.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      // Note: Azure subscriptions require an Azure ARM token, not Graph token
+      // We'll call the azure-api edge function to get subscriptions using stored credentials
+      const { data, error } = await supabase.functions.invoke('azure-api', {
+        body: {
+          action: 'list-subscriptions-from-stored',
+          tenantConnectionId: connectionId,
+        },
+      });
+
+      if (error || !data?.success) {
+        toast({
+          title: 'Subscription Fetch Failed',
+          description: data?.error || 'Could not fetch Azure subscriptions. Ensure your service principal has Azure RBAC roles assigned.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      if (data.subscriptions && data.subscriptions.length > 0) {
+        const subIds = data.subscriptions.map((s: { subscriptionId: string }) => s.subscriptionId);
+        setSubscriptionIdsText(subIds.join('\n'));
+        toast({
+          title: 'Subscriptions Loaded',
+          description: `Found ${data.subscriptions.length} subscription(s).`,
+        });
+      } else {
+        toast({
+          title: 'No Subscriptions',
+          description: 'No Azure subscriptions found for this service principal.',
+        });
+      }
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: 'Failed to fetch subscriptions.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoadingSubscriptions(false);
+    }
+  };
 
   // Filter categories based on search
   const filterCategories = (categories: CategoryGroup[]) => {
@@ -202,11 +321,6 @@ export const PermissionsReferenceView = () => {
       title: 'Script Downloaded',
       description: `${filename} saved to your downloads folder`,
     });
-  };
-
-  const openConfigDialog = (action: typeof pendingAction) => {
-    setPendingAction(action);
-    setShowConfigDialog(true);
   };
 
   const handleConfigSubmit = () => {
@@ -1284,18 +1398,36 @@ Write-Host ""
               Configure Script Variables
             </DialogTitle>
             <DialogDescription>
-              Enter your Azure AD details to pre-populate the PowerShell script. Leave empty for placeholders.
+              {isConnected ? (
+                <>Values auto-populated from current tenant connection. Adjust as needed.</>
+              ) : (
+                <>Enter your Azure AD details to pre-populate the PowerShell script. Leave empty for placeholders.</>
+              )}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            {isLoadingCredentials && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading credentials from current tenant...
+              </div>
+            )}
+            
             <div className="space-y-2">
               <Label htmlFor="appId">Application (Client) ID</Label>
-              <Input
-                id="appId"
-                placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                value={scriptConfig.appId}
-                onChange={(e) => setScriptConfig(prev => ({ ...prev, appId: e.target.value }))}
-              />
+              <div className="relative">
+                <Input
+                  id="appId"
+                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                  value={scriptConfig.appId}
+                  onChange={(e) => setScriptConfig(prev => ({ ...prev, appId: e.target.value }))}
+                />
+                {isConnected && scriptConfig.appId && (
+                  <Badge variant="secondary" className="absolute right-2 top-1/2 -translate-y-1/2 text-xs">
+                    From tenant
+                  </Badge>
+                )}
+              </div>
               <p className="text-xs text-muted-foreground">
                 Found in Azure Portal → App registrations → Your App → Overview
               </p>
@@ -1303,12 +1435,19 @@ Write-Host ""
             
             <div className="space-y-2">
               <Label htmlFor="tenantId">Tenant ID</Label>
-              <Input
-                id="tenantId"
-                placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                value={scriptConfig.tenantId}
-                onChange={(e) => setScriptConfig(prev => ({ ...prev, tenantId: e.target.value }))}
-              />
+              <div className="relative">
+                <Input
+                  id="tenantId"
+                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                  value={scriptConfig.tenantId}
+                  onChange={(e) => setScriptConfig(prev => ({ ...prev, tenantId: e.target.value }))}
+                />
+                {isConnected && scriptConfig.tenantId && (
+                  <Badge variant="secondary" className="absolute right-2 top-1/2 -translate-y-1/2 text-xs">
+                    From tenant
+                  </Badge>
+                )}
+              </div>
               <p className="text-xs text-muted-foreground">
                 Found in Azure Portal → Azure Active Directory → Overview
               </p>
@@ -1316,7 +1455,31 @@ Write-Host ""
 
             {(pendingAction?.includes('azure') || pendingAction?.includes('combined')) && (
               <div className="space-y-2">
-                <Label htmlFor="subscriptionIds">Subscription IDs (one per line)</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="subscriptionIds">Subscription IDs (one per line)</Label>
+                  {isConnected && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={fetchAzureSubscriptions}
+                      disabled={isLoadingSubscriptions}
+                      className="gap-1 h-7 text-xs"
+                    >
+                      {isLoadingSubscriptions ? (
+                        <>
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          Fetching...
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="h-3 w-3" />
+                          Fetch from Tenant
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
                 <Textarea
                   id="subscriptionIds"
                   placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx&#10;yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy"
@@ -1325,7 +1488,10 @@ Write-Host ""
                   rows={3}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Found in Azure Portal → Subscriptions → Subscription ID column
+                  {isConnected 
+                    ? 'Click "Fetch from Tenant" to auto-populate, or enter manually.'
+                    : 'Found in Azure Portal → Subscriptions → Subscription ID column'
+                  }
                 </p>
               </div>
             )}
