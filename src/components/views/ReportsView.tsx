@@ -168,6 +168,8 @@ export const ReportsView = () => {
     switch (type) {
       case 'executive_summary':
         return <FileText className="w-4 h-4" />;
+      case 'tenant_summary':
+        return <BarChart3 className="w-4 h-4" />;
       case 'compliance':
         return <FileCheck className="w-4 h-4" />;
       case 'drift':
@@ -176,6 +178,8 @@ export const ReportsView = () => {
         return <DollarSign className="w-4 h-4" />;
       case 'security':
         return <Shield className="w-4 h-4" />;
+      case 'psa_tickets':
+        return <Clock className="w-4 h-4" />;
       default:
         return <FileText className="w-4 h-4" />;
     }

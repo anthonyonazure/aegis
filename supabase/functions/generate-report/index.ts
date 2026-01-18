@@ -208,14 +208,14 @@ serve(async (req) => {
 
         case 'security': {
           // Security posture report
-          const { data: complianceHistory } = await supabase
-            .from('compliance_history')
+          const { data: complianceResults } = await supabase
+            .from('compliance_results')
             .select('*')
             .eq('user_id', user.id)
-            .order('checked_at', { ascending: false })
+            .order('created_at', { ascending: false })
             .limit(1);
 
-          const latestCompliance = complianceHistory?.[0];
+          const latestCompliance = complianceResults?.[0];
           const results = (latestCompliance?.results as Record<string, unknown>[]) || [];
           
           const criticalIssues = results.filter(r => r.severity === 'critical' && !r.passed);
@@ -224,7 +224,9 @@ serve(async (req) => {
 
           reportData = {
             summary: {
-              overallScore: latestCompliance?.score || 0,
+              overallScore: latestCompliance?.passed_count && latestCompliance?.total_checks 
+                ? Math.round((latestCompliance.passed_count / latestCompliance.total_checks) * 100) 
+                : 0,
               criticalIssues: criticalIssues.length,
               highIssues: highIssues.length,
               mediumIssues: mediumIssues.length,
@@ -236,7 +238,117 @@ serve(async (req) => {
               criticalIssues.length > 0 ? 'Address critical security issues immediately' : null,
               highIssues.length > 0 ? 'Review and remediate high-priority findings' : null,
             ].filter(Boolean),
-            lastChecked: latestCompliance?.checked_at,
+            lastChecked: latestCompliance?.created_at,
+            generatedAt: new Date().toISOString(),
+          };
+          break;
+        }
+
+        case 'tenant_summary': {
+          // Tenant summary report
+          const { data: tenants } = await supabase
+            .from('tenant_connections')
+            .select('*')
+            .eq('user_id', user.id);
+
+          const { data: healthChecks } = await supabase
+            .from('tenant_health_checks')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false });
+
+          const { data: customers } = await supabase
+            .from('customers')
+            .select('id, name')
+            .eq('user_id', user.id);
+
+          const customerMap = new Map(customers?.map(c => [c.id, c.name]) || []);
+
+          // Group health checks by tenant
+          const tenantHealthMap = new Map<string, { status: string; lastCheck: string }>();
+          for (const check of healthChecks || []) {
+            if (!tenantHealthMap.has(check.tenant_connection_id)) {
+              tenantHealthMap.set(check.tenant_connection_id, {
+                status: check.health_status,
+                lastCheck: check.created_at,
+              });
+            }
+          }
+
+          const tenantsWithHealth = tenants?.map(t => ({
+            id: t.id,
+            name: t.display_name || t.tenant_name || t.tenant_id,
+            customer: t.customer_id ? customerMap.get(t.customer_id) || 'Unknown' : 'Unassigned',
+            status: t.status,
+            healthStatus: tenantHealthMap.get(t.id)?.status || 'unknown',
+            lastHealthCheck: tenantHealthMap.get(t.id)?.lastCheck || null,
+            environment: t.environment,
+          })) || [];
+
+          const healthyCount = tenantsWithHealth.filter(t => t.healthStatus === 'healthy').length;
+          const unhealthyCount = tenantsWithHealth.filter(t => t.healthStatus === 'unhealthy' || t.healthStatus === 'error').length;
+
+          reportData = {
+            summary: {
+              totalTenants: tenants?.length || 0,
+              healthyTenants: healthyCount,
+              unhealthyTenants: unhealthyCount,
+              unknownStatus: tenantsWithHealth.filter(t => t.healthStatus === 'unknown').length,
+              totalCustomers: customers?.length || 0,
+            },
+            tenants: tenantsWithHealth,
+            generatedAt: new Date().toISOString(),
+          };
+          break;
+        }
+
+        case 'psa_tickets': {
+          // PSA tickets report
+          let query = supabase.from('psa_tickets').select('*').eq('user_id', user.id);
+          
+          if (body.dateRangeStart) {
+            query = query.gte('created_at', body.dateRangeStart);
+          }
+          if (body.dateRangeEnd) {
+            query = query.lte('created_at', body.dateRangeEnd);
+          }
+
+          const { data: tickets } = await query.order('created_at', { ascending: false });
+
+          const { data: integrations } = await supabase
+            .from('psa_integrations')
+            .select('id, name, provider')
+            .eq('user_id', user.id);
+
+          const integrationMap = new Map(integrations?.map(i => [i.id, { name: i.name, provider: i.provider }]) || []);
+
+          const ticketsWithIntegration = tickets?.map(t => ({
+            ...t,
+            integrationName: integrationMap.get(t.psa_integration_id)?.name || 'Unknown',
+            provider: integrationMap.get(t.psa_integration_id)?.provider || 'Unknown',
+          })) || [];
+
+          const bySource = {
+            drift: tickets?.filter(t => t.source_type === 'drift').length || 0,
+            compliance: tickets?.filter(t => t.source_type === 'compliance').length || 0,
+            scheduled_drift: tickets?.filter(t => t.source_type === 'scheduled_drift').length || 0,
+            manual: tickets?.filter(t => t.source_type === 'manual').length || 0,
+          };
+
+          const byStatus = {
+            open: tickets?.filter(t => t.status === 'open').length || 0,
+            in_progress: tickets?.filter(t => t.status === 'in_progress').length || 0,
+            closed: tickets?.filter(t => t.status === 'closed').length || 0,
+          };
+
+          reportData = {
+            summary: {
+              totalTickets: tickets?.length || 0,
+              bySource,
+              byStatus,
+              activeIntegrations: integrations?.length || 0,
+            },
+            tickets: ticketsWithIntegration.slice(0, 50),
             generatedAt: new Date().toISOString(),
           };
           break;
