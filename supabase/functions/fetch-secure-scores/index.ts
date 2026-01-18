@@ -84,17 +84,30 @@ async function fetchSecureScore(accessToken: string): Promise<{
   }
 
   const latestScore = data.value[0];
+  console.log('Raw secure score response:', JSON.stringify(latestScore, null, 2));
+  
+  // Parse control scores - Microsoft returns score and maxScore for each control
   const controlScores: ControlScore[] = (latestScore.controlScores || []).map((cs: any) => ({
     controlCategory: cs.controlCategory || 'Unknown',
     controlName: cs.controlName || 'Unknown',
-    score: cs.score || 0,
-    maxScore: cs.scoreInPercentage ? (cs.score / cs.scoreInPercentage * 100) : 0,
+    score: parseFloat(cs.score) || 0,
+    maxScore: parseFloat(cs.maxScore) || 0,
     description: cs.description,
   }));
 
+  // Calculate max score from control scores if not provided directly
+  // Microsoft Graph API provides maxScore per control, sum them up
+  const calculatedMaxScore = controlScores.reduce((sum, cs) => sum + cs.maxScore, 0);
+  
+  // Use maxScore from API or calculated from controls
+  const maxScore = latestScore.maxScore || latestScore.maxPossibleScore || calculatedMaxScore || 0;
+  const currentScore = parseFloat(latestScore.currentScore) || 0;
+
+  console.log(`Parsed scores - current: ${currentScore}, max: ${maxScore}, controls: ${controlScores.length}`);
+
   return {
-    currentScore: latestScore.currentScore || 0,
-    maxScore: latestScore.maxPossibleScore || 0,
+    currentScore,
+    maxScore,
     controlScores,
   };
 }
