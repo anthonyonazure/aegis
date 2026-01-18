@@ -29,7 +29,7 @@ import { SecureScoreDashboardView } from '@/components/views/SecureScoreDashboar
 import { AutomatedBackupsView } from '@/components/views/AutomatedBackupsView';
 import { PermissionHealthView } from '@/components/views/PermissionHealthView';
 import { PermissionsReferenceView } from '@/components/views/PermissionsReferenceView';
-import { GovernanceCenterView } from '@/components/views/GovernanceCenterView';
+import { GovernanceCenterView, RemediationContext } from '@/components/views/GovernanceCenterView';
 import { PreflightCheckDialog } from '@/components/PreflightCheckDialog';
 import { ALL_RESOURCE_CATEGORIES, ExportFormat } from '@/types/tenant';
 import { filterSupportedResourceIds } from '@/lib/resourceSupport';
@@ -51,6 +51,7 @@ const Index = () => {
   const [preflightToken, setPreflightToken] = useState<string | null>(null);
   const [preflightResources, setPreflightResources] = useState<string[]>([]);
   const [selectedPolicyTemplateId, setSelectedPolicyTemplateId] = useState<string | null>(null);
+  const [remediationContext, setRemediationContext] = useState<RemediationContext | null>(null);
   
   // Use shared tenant context
   const { 
@@ -223,8 +224,9 @@ const Index = () => {
         return (
           <GovernanceCenterView 
             onNavigate={setActiveTab}
-            onDeployPolicy={(templateId) => {
+            onDeployPolicy={(templateId, context) => {
               setSelectedPolicyTemplateId(templateId);
+              setRemediationContext(context || null);
               setActiveTab('policy-deployment');
             }}
           />
@@ -243,8 +245,10 @@ const Index = () => {
         return (
           <PolicyDeploymentView 
             templateId={selectedPolicyTemplateId || undefined}
+            remediationContext={remediationContext || undefined}
             onBack={() => {
               setSelectedPolicyTemplateId(null);
+              setRemediationContext(null);
               setActiveTab('governance');
             }}
           />

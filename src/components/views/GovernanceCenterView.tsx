@@ -122,9 +122,17 @@ interface ActionItem {
   reportTemplateId?: string;
 }
 
+export interface RemediationContext {
+  actionTitle: string;
+  actionDescription: string;
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  category: 'security' | 'compliance' | 'identity' | 'licensing';
+  suggestedTenantIds?: string[];
+}
+
 interface GovernanceCenterViewProps {
   onNavigate?: (view: string) => void;
-  onDeployPolicy?: (templateId: string) => void;
+  onDeployPolicy?: (templateId: string, context?: RemediationContext) => void;
 }
 
 // Default license prices (USD per user/month) based on Microsoft list prices
@@ -683,8 +691,17 @@ export function GovernanceCenterView({ onNavigate, onDeployPolicy }: GovernanceC
       const template = await getPolicyTemplateByName(selectedAction.policyTemplateId);
       
       if (template) {
+        // Build remediation context
+        const context: RemediationContext = {
+          actionTitle: selectedAction.title,
+          actionDescription: selectedAction.description,
+          severity: selectedAction.severity,
+          category: selectedAction.category,
+          suggestedTenantIds: selectedTenantId ? [selectedTenantId] : undefined,
+        };
+
         if (onDeployPolicy) {
-          onDeployPolicy(template.id);
+          onDeployPolicy(template.id, context);
         } else if (onNavigate) {
           onNavigate('policy-deployment');
         }
