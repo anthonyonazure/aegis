@@ -212,9 +212,6 @@ export const DashboardView = ({
     }
   };
 
-  const step2Complete = selectedResourcesCount > 0;
-  const step3Complete = selectedFormatsCount > 0;
-  const step4Complete = hasGitConfig;
 
   const statCards = [
     { label: 'Customers', value: stats.totalCustomers.toString(), icon: Building2, trend: `${stats.totalTenants} tenants` },
@@ -528,80 +525,8 @@ export const DashboardView = ({
           </Card>
         </div>
 
-        {/* Sidebar - Quick Start & Activity */}
+        {/* Sidebar - Activity */}
         <div className="space-y-4">
-          {/* Quick Start */}
-          <Card className="glass-panel">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg">Quick Start</CardTitle>
-              <CardDescription>Get up and running</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="space-y-2">
-                <button
-                  onClick={() => onNavigate('auth')}
-                  className="w-full flex items-center gap-2 text-sm p-2 rounded-lg hover:bg-secondary/50 transition-colors text-left"
-                >
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
-                    isConnected ? 'bg-success/20 text-success' : 'bg-primary/20 text-primary'
-                  }`}>
-                    {isConnected ? '✓' : '1'}
-                  </div>
-                  <span className={isConnected ? 'text-success' : 'text-foreground'}>
-                    Connect tenant
-                  </span>
-                  <ArrowRight className="w-4 h-4 ml-auto text-muted-foreground" />
-                </button>
-                <button
-                  onClick={() => onNavigate('resources')}
-                  className="w-full flex items-center gap-2 text-sm p-2 rounded-lg hover:bg-secondary/50 transition-colors text-left"
-                >
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
-                    step2Complete ? 'bg-success/20 text-success' : 'bg-secondary text-muted-foreground'
-                  }`}>
-                    {step2Complete ? '✓' : '2'}
-                  </div>
-                  <span className={step2Complete ? 'text-success' : 'text-foreground'}>
-                    Select resources
-                    {step2Complete && <span className="text-muted-foreground ml-1">({selectedResourcesCount})</span>}
-                  </span>
-                  <ArrowRight className="w-4 h-4 ml-auto text-muted-foreground" />
-                </button>
-                <button
-                  onClick={() => onNavigate('export')}
-                  className="w-full flex items-center gap-2 text-sm p-2 rounded-lg hover:bg-secondary/50 transition-colors text-left"
-                >
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
-                    step3Complete ? 'bg-success/20 text-success' : 'bg-secondary text-muted-foreground'
-                  }`}>
-                    {step3Complete ? '✓' : '3'}
-                  </div>
-                  <span className={step3Complete ? 'text-success' : 'text-foreground'}>
-                    Choose formats
-                    {step3Complete && <span className="text-muted-foreground ml-1">({selectedFormatsCount})</span>}
-                  </span>
-                  <ArrowRight className="w-4 h-4 ml-auto text-muted-foreground" />
-                </button>
-                <button
-                  onClick={() => onNavigate('git')}
-                  className="w-full flex items-center gap-2 text-sm p-2 rounded-lg hover:bg-secondary/50 transition-colors text-left"
-                >
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
-                    step4Complete ? 'bg-success/20 text-success' : 'bg-secondary text-muted-foreground'
-                  }`}>
-                    {step4Complete ? '✓' : '4'}
-                  </div>
-                  <span className={step4Complete ? 'text-success' : 'text-foreground'}>
-                    Configure Git
-                  </span>
-                  <ArrowRight className="w-4 h-4 ml-auto text-muted-foreground" />
-                </button>
-              </div>
-              <Button className="w-full mt-4" onClick={() => onNavigate(isConnected ? 'resources' : 'auth')}>
-                {isConnected ? 'Start Export' : 'Get Started'}
-              </Button>
-            </CardContent>
-          </Card>
 
           {/* Last Export */}
           <Card className="glass-panel">
