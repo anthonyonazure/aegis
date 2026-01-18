@@ -18,6 +18,9 @@ import { WebhooksView } from '@/components/views/WebhooksView';
 import { CustomersView } from '@/components/views/CustomersView';
 import { ScheduledDriftView } from '@/components/views/ScheduledDriftView';
 import { PoliciesView } from '@/components/views/PoliciesView';
+import { PSAIntegrationsView } from '@/components/views/PSAIntegrationsView';
+import { ReportsView } from '@/components/views/ReportsView';
+import { BillingView } from '@/components/views/BillingView';
 import { PreflightCheckDialog } from '@/components/PreflightCheckDialog';
 import { RESOURCE_CATEGORIES, ExportFormat } from '@/types/tenant';
 import { filterSupportedResourceIds } from '@/lib/resourceSupport';
@@ -252,6 +255,12 @@ const Index = () => {
         return <ScheduledExportsView />;
       case 'webhooks':
         return <WebhooksView />;
+      case 'psa':
+        return <PSAIntegrationsView />;
+      case 'reports':
+        return <ReportsView />;
+      case 'billing':
+        return <BillingView />;
       case 'git':
         return <GitView />;
       case 'auth':
