@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { SecurityComplianceBadges } from '@/components/SecurityComplianceBadges';
 import { useEffect, useState } from 'react';
 import { 
   Server, 
@@ -584,6 +585,9 @@ export const DashboardView = ({
           </Card>
         </div>
       </div>
+
+      {/* Security & Compliance Badges */}
+      <SecurityComplianceBadges />
     </div>
   );
 };
