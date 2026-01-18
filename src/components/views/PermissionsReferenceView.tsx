@@ -226,50 +226,123 @@ Repeat for each subscription you want to ${writeMode ? 'manage' : 'export'}.`;
     const permissions = allGraphPermissions;
     const script = `# PowerShell script to add Microsoft Graph API permissions to an App Registration
 # Run this in Azure Cloud Shell or with Azure PowerShell module installed
+# Requires: Microsoft.Graph PowerShell module (Install-Module Microsoft.Graph -Scope CurrentUser)
 
-# Variables - Update these
-$AppId = "YOUR_APP_ID"  # Replace with your App (Client) ID
-$TenantId = "YOUR_TENANT_ID"  # Replace with your Tenant ID
+# Variables - UPDATE THESE BEFORE RUNNING
+$AppId = "YOUR_APP_CLIENT_ID"      # Your App Registration's Application (Client) ID
+$TenantId = "YOUR_TENANT_ID"       # Your Azure AD Tenant ID
 
-# Connect to Microsoft Graph
-Connect-MgGraph -TenantId $TenantId -Scopes "Application.ReadWrite.All"
+# ============================================
+# STEP 1: Connect to Microsoft Graph
+# ============================================
+Write-Host "Connecting to Microsoft Graph..." -ForegroundColor Cyan
+Connect-MgGraph -TenantId $TenantId -Scopes "Application.ReadWrite.All", "AppRoleAssignment.ReadWrite.All"
 
-# Get the service principal
+# ============================================
+# STEP 2: Get Service Principals
+# ============================================
+Write-Host "Finding your App Registration..." -ForegroundColor Cyan
+$App = Get-MgApplication -Filter "appId eq '$AppId'"
+if (-not $App) {
+    Write-Error "App Registration not found with AppId: $AppId"
+    exit 1
+}
+Write-Host "Found: $($App.DisplayName)" -ForegroundColor Green
+
+# Get the Service Principal for your app (create if doesn't exist)
 $ServicePrincipal = Get-MgServicePrincipal -Filter "appId eq '$AppId'"
+if (-not $ServicePrincipal) {
+    Write-Host "Creating Service Principal for the app..." -ForegroundColor Yellow
+    $ServicePrincipal = New-MgServicePrincipal -AppId $AppId
+}
 
-# Microsoft Graph API App ID (constant)
+# Microsoft Graph API App ID (constant - same for all tenants)
 $GraphApiId = "00000003-0000-0000-c000-000000000000"
-
-# Get Microsoft Graph Service Principal
 $GraphSP = Get-MgServicePrincipal -Filter "appId eq '$GraphApiId'"
 
-# Required permissions
+# ============================================
+# STEP 3: Define Required Permissions
+# ============================================
 $RequiredPermissions = @(
 ${permissions.map(p => `    "${p}"`).join(',\n')}
 )
 
-# Find the AppRole IDs for each permission
-$AppRoles = @()
+# ============================================
+# STEP 4: Add Permissions to App Registration
+# ============================================
+Write-Host ""
+Write-Host "Adding API permissions to App Registration..." -ForegroundColor Cyan
+
+$ResourceAccess = @()
+$AddedCount = 0
+$SkippedCount = 0
+
 foreach ($PermissionName in $RequiredPermissions) {
     $Role = $GraphSP.AppRoles | Where-Object { $_.Value -eq $PermissionName }
     if ($Role) {
-        $AppRoles += @{
+        $ResourceAccess += @{
             Id = $Role.Id
-            Type = "Role"
-            ResourceId = $GraphSP.Id
+            Type = "Role"  # "Role" = Application permission, "Scope" = Delegated
         }
+        Write-Host "  + $PermissionName" -ForegroundColor Green
+        $AddedCount++
     } else {
-        Write-Warning "Permission not found: $PermissionName"
+        Write-Warning "  - Permission not found: $PermissionName"
+        $SkippedCount++
     }
 }
 
-# Output the App Roles to add
-Write-Host "Found $($AppRoles.Count) permissions to add" -ForegroundColor Green
-$AppRoles | ForEach-Object { Write-Host "  - $($_.Id)" }
+# Build the required resource access object
+$RequiredResourceAccess = @{
+    ResourceAppId = $GraphApiId
+    ResourceAccess = $ResourceAccess
+}
+
+# Get existing resource access and merge
+$ExistingAccess = $App.RequiredResourceAccess | Where-Object { $_.ResourceAppId -ne $GraphApiId }
+$AllResourceAccess = @($ExistingAccess) + @($RequiredResourceAccess)
+
+# Update the application
+Write-Host ""
+Write-Host "Updating App Registration with new permissions..." -ForegroundColor Cyan
+Update-MgApplication -ApplicationId $App.Id -RequiredResourceAccess $AllResourceAccess
 
 Write-Host ""
-Write-Host "After running this script, you still need to grant admin consent in the Azure Portal." -ForegroundColor Yellow
-Write-Host "Go to: Azure Portal → App Registrations → Your App → API Permissions → Grant admin consent" -ForegroundColor Yellow
+Write-Host "============================================" -ForegroundColor Green
+Write-Host "SUCCESS! Added $AddedCount permissions." -ForegroundColor Green
+if ($SkippedCount -gt 0) {
+    Write-Host "Skipped $SkippedCount permissions (not found)." -ForegroundColor Yellow
+}
+Write-Host "============================================" -ForegroundColor Green
+
+# ============================================
+# STEP 5: Grant Admin Consent (Optional)
+# ============================================
+Write-Host ""
+Write-Host "IMPORTANT: Admin consent is still required!" -ForegroundColor Yellow
+Write-Host ""
+Write-Host "Option 1: Grant consent via Azure Portal:" -ForegroundColor Cyan
+Write-Host "  1. Go to: https://portal.azure.com" -ForegroundColor White
+Write-Host "  2. Navigate to: Azure Active Directory > App registrations > $($App.DisplayName)" -ForegroundColor White
+Write-Host "  3. Click 'API permissions' in the left menu" -ForegroundColor White
+Write-Host "  4. Click 'Grant admin consent for [Your Tenant]'" -ForegroundColor White
+Write-Host ""
+Write-Host "Option 2: Grant consent via PowerShell (requires admin):" -ForegroundColor Cyan
+Write-Host "  # Run the following commands:" -ForegroundColor White
+
+foreach ($Permission in $RequiredPermissions) {
+    $Role = $GraphSP.AppRoles | Where-Object { $_.Value -eq $Permission }
+    if ($Role) {
+        Write-Host "  # New-MgServicePrincipalAppRoleAssignment -ServicePrincipalId '$($ServicePrincipal.Id)' -PrincipalId '$($ServicePrincipal.Id)' -ResourceId '$($GraphSP.Id)' -AppRoleId '$($Role.Id)'" -ForegroundColor DarkGray
+    }
+}
+
+Write-Host ""
+Write-Host "Disconnecting from Microsoft Graph..." -ForegroundColor Cyan
+Disconnect-MgGraph
+
+Write-Host ""
+Write-Host "Script completed!" -ForegroundColor Green
 `;
     
     copyToClipboard(script, 'powershell', 'PowerShell Script Copied', 'Script copied to clipboard. Update the variables before running.');
