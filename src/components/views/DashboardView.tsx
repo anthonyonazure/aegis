@@ -20,7 +20,13 @@ import {
   BarChart3,
   FileText,
   FolderTree,
-  Building2
+  Building2,
+  Rocket,
+  CalendarClock,
+  Activity,
+  Ticket,
+  RotateCcw,
+  Shield
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -48,6 +54,12 @@ interface DashboardStats {
   importJobs: number;
   totalCustomers: number;
   totalTenants: number;
+  policyDeployments: number;
+  scheduledDeployments: number;
+  scheduledDriftConfigs: number;
+  psaIntegrations: number;
+  psaTickets: number;
+  reportsGenerated: number;
 }
 
 export const DashboardView = ({ 
@@ -67,7 +79,13 @@ export const DashboardView = ({
     lastExportDate: null,
     importJobs: 0,
     totalCustomers: 0,
-    totalTenants: 0
+    totalTenants: 0,
+    policyDeployments: 0,
+    scheduledDeployments: 0,
+    scheduledDriftConfigs: 0,
+    psaIntegrations: 0,
+    psaTickets: 0,
+    reportsGenerated: 0
   });
   const [loading, setLoading] = useState(true);
 
@@ -91,7 +109,13 @@ export const DashboardView = ({
         complianceResult,
         importsResult,
         customersResult,
-        tenantsResult
+        tenantsResult,
+        policyDeploymentsResult,
+        scheduledDeploymentsResult,
+        scheduledDriftResult,
+        psaIntegrationsResult,
+        psaTicketsResult,
+        reportsResult
       ] = await Promise.all([
         supabase.from('export_jobs').select('id, status, completed_at').eq('user_id', user.id).order('completed_at', { ascending: false }),
         supabase.from('scheduled_exports').select('id, is_active').eq('user_id', user.id),
@@ -100,7 +124,13 @@ export const DashboardView = ({
         supabase.from('compliance_results').select('id').eq('user_id', user.id),
         supabase.from('import_jobs').select('id').eq('user_id', user.id),
         supabase.from('customers').select('id').eq('user_id', user.id),
-        supabase.from('tenant_connections').select('id').eq('user_id', user.id)
+        supabase.from('tenant_connections').select('id').eq('user_id', user.id),
+        supabase.from('policy_deployments').select('id, status').eq('user_id', user.id),
+        supabase.from('scheduled_deployment_configs').select('id, is_active').eq('user_id', user.id),
+        supabase.from('scheduled_drift_configs').select('id, is_active').eq('user_id', user.id),
+        supabase.from('psa_integrations').select('id, is_active').eq('user_id', user.id),
+        supabase.from('psa_tickets').select('id').eq('user_id', user.id),
+        supabase.from('reports').select('id').eq('user_id', user.id)
       ]);
 
       const exports = exportsResult.data || [];
@@ -111,6 +141,12 @@ export const DashboardView = ({
       const imports = importsResult.data || [];
       const customers = customersResult.data || [];
       const tenants = tenantsResult.data || [];
+      const policyDeployments = policyDeploymentsResult.data || [];
+      const scheduledDeployments = scheduledDeploymentsResult.data || [];
+      const scheduledDrift = scheduledDriftResult.data || [];
+      const psaIntegrations = psaIntegrationsResult.data || [];
+      const psaTickets = psaTicketsResult.data || [];
+      const reports = reportsResult.data || [];
 
       setStats({
         totalExports: exports.length,
@@ -122,7 +158,13 @@ export const DashboardView = ({
         lastExportDate: exports[0]?.completed_at || null,
         importJobs: imports.length,
         totalCustomers: customers.length,
-        totalTenants: tenants.length
+        totalTenants: tenants.length,
+        policyDeployments: policyDeployments.length,
+        scheduledDeployments: scheduledDeployments.filter(s => s.is_active).length,
+        scheduledDriftConfigs: scheduledDrift.filter(s => s.is_active).length,
+        psaIntegrations: psaIntegrations.filter(p => p.is_active).length,
+        psaTickets: psaTickets.length,
+        reportsGenerated: reports.length
       });
     } catch (error) {
       console.error('Error loading dashboard stats:', error);
@@ -137,8 +179,8 @@ export const DashboardView = ({
 
   const statCards = [
     { label: 'Customers', value: stats.totalCustomers.toString(), icon: Building2, trend: `${stats.totalTenants} tenants` },
-    { label: 'Total Exports', value: stats.totalExports.toString(), icon: Download, trend: `${stats.successfulExports} successful` },
-    { label: 'Scheduled Jobs', value: stats.scheduledExports.toString(), icon: Calendar, trend: 'Active schedules' },
+    { label: 'Policy Deployments', value: stats.policyDeployments.toString(), icon: Rocket, trend: `${stats.scheduledDeployments} scheduled` },
+    { label: 'PSA Tickets', value: stats.psaTickets.toString(), icon: Ticket, trend: `${stats.psaIntegrations} integrations` },
     { 
       label: 'Connection', 
       value: isConnected ? 'Online' : 'Offline', 
@@ -157,6 +199,14 @@ export const DashboardView = ({
       color: 'primary'
     },
     { 
+      id: 'tenant-health', 
+      title: 'Tenant Health', 
+      description: 'Monitor tenant connection health, API status, and license usage.',
+      icon: Activity,
+      stats: `${stats.totalTenants} tenants monitored`,
+      color: 'success'
+    },
+    { 
       id: 'resources', 
       title: 'Resource Explorer', 
       description: 'Browse and select M365 resources across 8 categories including Entra ID, Intune, and more.',
@@ -169,7 +219,7 @@ export const DashboardView = ({
       title: 'Export Configuration', 
       description: 'Export tenant settings to JSON, Terraform, Bicep, or PowerShell formats.',
       icon: Download,
-      stats: '4 export formats',
+      stats: `${stats.totalExports} exports, 4 formats`,
       color: 'primary'
     },
     { 
@@ -181,6 +231,30 @@ export const DashboardView = ({
       color: 'primary'
     },
     { 
+      id: 'policy-templates', 
+      title: 'Policy Templates', 
+      description: 'Create reusable policy templates for consistent deployments across tenants.',
+      icon: Shield,
+      stats: 'Baseline management',
+      color: 'primary'
+    },
+    { 
+      id: 'policy-deployment', 
+      title: 'Policy Deployment', 
+      description: 'Deploy policy templates to tenants with dry-run preview and rollback support.',
+      icon: Rocket,
+      stats: `${stats.policyDeployments} deployments`,
+      color: 'primary'
+    },
+    { 
+      id: 'scheduled-deployments', 
+      title: 'Scheduled Deployments', 
+      description: 'Automate policy deployments on a schedule with cron expressions.',
+      icon: CalendarClock,
+      stats: `${stats.scheduledDeployments} active schedules`,
+      color: 'primary'
+    },
+    { 
       id: 'drift', 
       title: 'Drift Detection', 
       description: 'Compare current tenant state against baseline exports to detect configuration changes.',
@@ -189,12 +263,12 @@ export const DashboardView = ({
       color: 'warning'
     },
     { 
-      id: 'validation', 
-      title: 'Validation', 
-      description: 'Validate exported configurations against schema rules and best practices.',
-      icon: ShieldCheck,
-      stats: 'Schema validation',
-      color: 'success'
+      id: 'scheduled-drift', 
+      title: 'Scheduled Drift', 
+      description: 'Automate drift detection across tenants with scheduled checks.',
+      icon: CalendarClock,
+      stats: `${stats.scheduledDriftConfigs} active schedules`,
+      color: 'warning'
     },
     { 
       id: 'compliance', 
@@ -213,6 +287,22 @@ export const DashboardView = ({
       color: 'primary'
     },
     { 
+      id: 'validation', 
+      title: 'Validation', 
+      description: 'Validate exported configurations against schema rules and best practices.',
+      icon: ShieldCheck,
+      stats: 'Schema validation',
+      color: 'success'
+    },
+    { 
+      id: 'psa-integrations', 
+      title: 'PSA Integrations', 
+      description: 'Connect to HaloPSA, Autotask, or ConnectWise for automated ticketing.',
+      icon: Ticket,
+      stats: `${stats.psaIntegrations} integrations, ${stats.psaTickets} tickets`,
+      color: 'primary'
+    },
+    { 
       id: 'schedules', 
       title: 'Scheduled Exports', 
       description: 'Automate recurring exports with flexible scheduling options.',
@@ -226,6 +316,14 @@ export const DashboardView = ({
       description: 'Configure webhook notifications for export events with retry and signature verification.',
       icon: Webhook,
       stats: `${stats.activeWebhooks} active webhooks`,
+      color: 'primary'
+    },
+    { 
+      id: 'reports', 
+      title: 'Reports', 
+      description: 'Generate and download PDF reports for compliance, drift, and tenant status.',
+      icon: FileText,
+      stats: `${stats.reportsGenerated} reports generated`,
       color: 'primary'
     },
     { 
