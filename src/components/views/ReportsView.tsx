@@ -37,7 +37,8 @@ import {
   REPORT_TYPES,
   ReportType
 } from '@/lib/reportDatabase';
-import { getCustomers, Customer } from '@/lib/customerDatabase';
+import { getCustomers } from '@/lib/customerDatabase';
+import { Customer } from '@/types/tenant';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
