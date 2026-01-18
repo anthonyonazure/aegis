@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   Select,
   SelectContent,
@@ -41,6 +42,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
+import { useTenant } from '@/contexts/TenantContext';
 import { ServicePrincipalManager } from '@/components/ServicePrincipalManager';
 import {
   ScheduledDriftConfig,
@@ -87,7 +89,9 @@ interface TenantGroup {
 }
 
 export const ScheduledDriftView = () => {
+  const [allConfigs, setAllConfigs] = useState<ScheduledDriftConfig[]>([]);
   const [configs, setConfigs] = useState<ScheduledDriftConfig[]>([]);
+  const [allRuns, setAllRuns] = useState<ScheduledDriftRun[]>([]);
   const [runs, setRuns] = useState<ScheduledDriftRun[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [tenantGroups, setTenantGroups] = useState<TenantGroup[]>([]);
@@ -101,6 +105,9 @@ export const ScheduledDriftView = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('schedules');
   const { toast } = useToast();
+  const { selectedCustomerId, customers: tenantCustomers } = useTenant();
+
+  const selectedCustomer = tenantCustomers.find(c => c.id === selectedCustomerId);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -121,6 +128,24 @@ export const ScheduledDriftView = () => {
     loadData();
   }, []);
 
+  // Filter configs and runs when customer selection changes
+  useEffect(() => {
+    if (!selectedCustomerId) {
+      setConfigs(allConfigs);
+      setRuns(allRuns);
+    } else {
+      // Filter configs that target the selected customer
+      const filteredConfigs = allConfigs.filter(c => 
+        c.target_type === 'customer' && c.target_customer_id === selectedCustomerId
+      );
+      setConfigs(filteredConfigs);
+      
+      // Filter runs for the filtered configs
+      const configIds = new Set(filteredConfigs.map(c => c.id));
+      setRuns(allRuns.filter(r => configIds.has(r.scheduled_config_id)));
+    }
+  }, [selectedCustomerId, allConfigs, allRuns]);
+
   const loadData = async () => {
     try {
       setIsLoading(true);
@@ -130,7 +155,9 @@ export const ScheduledDriftView = () => {
         getCustomers(),
       ]);
       
+      setAllConfigs(configsData);
       setConfigs(configsData);
+      setAllRuns(runsData);
       setRuns(runsData);
       setCustomers(customersData);
 
@@ -400,6 +427,17 @@ export const ScheduledDriftView = () => {
 
   return (
     <div className="space-y-6">
+      {/* Customer Filter Indicator */}
+      {selectedCustomerId && selectedCustomer && (
+        <Alert>
+          <Building2 className="h-4 w-4" />
+          <AlertDescription>
+            Showing scheduled drift detection for <strong>{selectedCustomer.name}</strong>. 
+            Clear the customer filter in the sidebar to see all schedules.
+          </AlertDescription>
+        </Alert>
+      )}
+
       <div>
         <h1 className="text-3xl font-bold">Scheduled Drift Detection</h1>
         <p className="text-muted-foreground mt-1">

@@ -13,6 +13,8 @@ import {
   XCircle,
   Settings2,
   Key,
+  AlertTriangle,
+  Building2,
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -21,6 +23,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   Dialog,
   DialogContent,
@@ -40,6 +43,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useTenant } from '@/contexts/TenantContext';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { RESOURCE_CATEGORIES } from '@/types/tenant';
@@ -66,6 +70,7 @@ interface ScheduledExport {
   run_count: number;
   created_at: string;
   service_principal_config_id: string | null;
+  tenant_connection_id: string | null;
 }
 
 const SCHEDULE_PRESETS = [
@@ -79,8 +84,10 @@ const SCHEDULE_PRESETS = [
 
 export const ScheduledExportsView = () => {
   const { toast } = useToast();
+  const { selectedCustomerId, customers } = useTenant();
   const { configs: spConfigs, isLoading: spLoading } = useServicePrincipalConfigs();
   const [schedules, setSchedules] = useState<ScheduledExport[]>([]);
+  const [allSchedules, setAllSchedules] = useState<ScheduledExport[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -93,9 +100,33 @@ export const ScheduledExportsView = () => {
   const [formFormats, setFormFormats] = useState<string[]>(['json']);
   const [formServicePrincipalId, setFormServicePrincipalId] = useState<string | null>(null);
 
+  const selectedCustomer = customers.find(c => c.id === selectedCustomerId);
+
   useEffect(() => {
     loadSchedules();
   }, []);
+
+  // Filter schedules when customer selection changes
+  useEffect(() => {
+    if (!selectedCustomerId) {
+      setSchedules(allSchedules);
+    } else {
+      // Filter schedules that are associated with tenant connections for the selected customer
+      const filterSchedules = async () => {
+        const { data: tenantConnections } = await supabase
+          .from('tenant_connections')
+          .select('id')
+          .eq('customer_id', selectedCustomerId);
+        
+        const tenantIds = new Set((tenantConnections || []).map(t => t.id));
+        const filtered = allSchedules.filter(s => 
+          s.tenant_connection_id && tenantIds.has(s.tenant_connection_id)
+        );
+        setSchedules(filtered);
+      };
+      filterSchedules();
+    }
+  }, [selectedCustomerId, allSchedules]);
 
   const loadSchedules = async () => {
     setIsLoading(true);
@@ -106,6 +137,7 @@ export const ScheduledExportsView = () => {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
+      setAllSchedules(data || []);
       setSchedules(data || []);
     } catch (error) {
       console.error('Failed to load schedules:', error);
@@ -254,6 +286,17 @@ export const ScheduledExportsView = () => {
 
   return (
     <div className="space-y-6">
+      {/* Customer Filter Indicator */}
+      {selectedCustomerId && selectedCustomer && (
+        <Alert>
+          <Building2 className="h-4 w-4" />
+          <AlertDescription>
+            Showing scheduled exports for <strong>{selectedCustomer.name}</strong>. 
+            Clear the customer filter in the sidebar to see all schedules.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
