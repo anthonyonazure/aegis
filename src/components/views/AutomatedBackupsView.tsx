@@ -8,6 +8,7 @@ import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   Dialog,
   DialogContent,
@@ -53,6 +54,7 @@ import {
   History,
   Archive,
   AlertTriangle,
+  Filter,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
@@ -72,6 +74,7 @@ import {
   getBackupStats,
 } from '@/lib/backupApi';
 import { supabase } from '@/integrations/supabase/client';
+import { useTenant } from '@/contexts/TenantContext';
 
 interface Customer {
   id: string;
@@ -85,7 +88,10 @@ interface TenantGroup {
 }
 
 export function AutomatedBackupsView() {
+  const { selectedCustomerId, selectedTenantId, customers: tenantCustomers } = useTenant();
+  const [allConfigs, setAllConfigs] = useState<BackupConfig[]>([]);
   const [configs, setConfigs] = useState<BackupConfig[]>([]);
+  const [allRuns, setAllRuns] = useState<BackupRun[]>([]);
   const [runs, setRuns] = useState<BackupRun[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -109,9 +115,38 @@ export function AutomatedBackupsView() {
     autoCleanup: true,
   });
 
+  // Get selected customer name for display
+  const selectedCustomerName = selectedCustomerId 
+    ? tenantCustomers.find(c => c.id === selectedCustomerId)?.name 
+    : null;
+
   useEffect(() => {
     loadData();
   }, []);
+
+  // Filter configs and runs when customer/tenant selection changes
+  useEffect(() => {
+    if (selectedCustomerId) {
+      // Filter configs by target customer
+      setConfigs(allConfigs.filter(config => 
+        config.targetCustomerId === selectedCustomerId ||
+        (config.targetType === 'all' && !config.targetCustomerId)
+      ));
+      
+      // Filter runs by their config's target customer
+      const filteredConfigIds = allConfigs
+        .filter(config => 
+          config.targetCustomerId === selectedCustomerId ||
+          (config.targetType === 'all' && !config.targetCustomerId)
+        )
+        .map(c => c.id);
+      setRuns(allRuns.filter(run => filteredConfigIds.includes(run.configId)));
+    } else {
+      // Show all
+      setConfigs(allConfigs);
+      setRuns(allRuns);
+    }
+  }, [selectedCustomerId, selectedTenantId, allConfigs, allRuns]);
 
   const loadData = async () => {
     try {
@@ -122,8 +157,8 @@ export function AutomatedBackupsView() {
         getBackupStats(),
         supabase.from('customers').select('id, name').order('name'),
       ]);
-      setConfigs(configsData);
-      setRuns(runsData);
+      setAllConfigs(configsData);
+      setAllRuns(runsData);
       setStats(statsData);
       setCustomers(customersData.data || []);
       
@@ -288,6 +323,17 @@ export function AutomatedBackupsView() {
           Create Schedule
         </Button>
       </div>
+
+      {/* Customer filter indicator */}
+      {selectedCustomerId && (
+        <Alert className="border-primary/50 bg-primary/5">
+          <Filter className="h-4 w-4" />
+          <AlertDescription>
+            Showing backup configurations for <strong>{selectedCustomerName}</strong>
+            {selectedTenantId && ' (filtered by selected tenant)'}
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
