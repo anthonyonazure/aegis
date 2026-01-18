@@ -1,5 +1,13 @@
 import { supabase } from '@/integrations/supabase/client';
 import { z } from 'zod';
+import { 
+  isPowerShellResource, 
+  getAutomationConfigs, 
+  startAutomationJob, 
+  pollJobUntilComplete,
+  getJobOutput,
+  type AutomationConfig 
+} from './automationApi';
 
 const GRAPH_API_FUNCTION = 'graph-api';
 const CONVERT_FUNCTION = 'convert-format';
@@ -257,4 +265,215 @@ export async function convertToFormat(
     console.error('Conversion exception:', err);
     return { success: false, error: 'Conversion failed. Please try again.' };
   }
+}
+
+// Check if an automation config is available for PowerShell exports
+export async function getAvailableAutomationConfig(): Promise<AutomationConfig | null> {
+  try {
+    const configs = await getAutomationConfigs();
+    // Return the first active, connected config
+    const activeConfig = configs.find(c => c.is_active && c.connection_status === 'connected');
+    return activeConfig || null;
+  } catch {
+    return null;
+  }
+}
+
+// Split resources into Graph API and PowerShell categories
+export function categorizeResources(resources: string[]): {
+  graphResources: string[];
+  powerShellResources: string[];
+} {
+  const graphResources: string[] = [];
+  const powerShellResources: string[] = [];
+
+  for (const resource of resources) {
+    if (isPowerShellResource(resource)) {
+      powerShellResources.push(resource);
+    } else {
+      graphResources.push(resource);
+    }
+  }
+
+  return { graphResources, powerShellResources };
+}
+
+// Hybrid export that uses Graph API for standard resources and Azure Automation for PowerShell resources
+export interface HybridExportResult {
+  success: boolean;
+  graphResults?: ExportResult['results'];
+  automationResults?: Array<{
+    resource: string;
+    success: boolean;
+    data?: unknown;
+    error?: string;
+  }>;
+  automationJobId?: string;
+  automationSkipped?: boolean;
+  automationSkipReason?: string;
+  error?: string;
+}
+
+export async function exportResourcesHybrid(
+  accessToken: string,
+  resources: string[],
+  exportJobId: string,
+  tenantConnectionId?: string,
+  onProgress?: (progress: number, message: string) => void
+): Promise<HybridExportResult> {
+  const { graphResources, powerShellResources } = categorizeResources(resources);
+  
+  let graphResults: ExportResult['results'] = [];
+  let automationResults: HybridExportResult['automationResults'] = [];
+  let automationSkipped = false;
+  let automationSkipReason: string | undefined;
+  let automationJobId: string | undefined;
+
+  const totalResources = resources.length;
+  let completedResources = 0;
+
+  // Step 1: Export Graph API resources
+  if (graphResources.length > 0) {
+    onProgress?.(0, `Exporting ${graphResources.length} resources via Graph API...`);
+    
+    const graphResult = await exportResources(accessToken, graphResources, exportJobId);
+    
+    if (graphResult.success) {
+      graphResults = graphResult.results || [];
+      completedResources += graphResources.length;
+    } else {
+      return {
+        success: false,
+        error: graphResult.error || 'Graph API export failed',
+      };
+    }
+  }
+
+  // Step 2: Export PowerShell resources via Azure Automation
+  if (powerShellResources.length > 0) {
+    onProgress?.(
+      Math.round((completedResources / totalResources) * 100),
+      `Preparing ${powerShellResources.length} PowerShell resources via Azure Automation...`
+    );
+
+    // Check for automation config
+    const automationConfig = await getAvailableAutomationConfig();
+    
+    if (!automationConfig) {
+      automationSkipped = true;
+      automationSkipReason = 'No Azure Automation account configured. Configure one in Settings > Azure Automation to export PowerShell-only resources.';
+      
+      // Mark PowerShell resources as skipped in results
+      automationResults = powerShellResources.map(resource => ({
+        resource,
+        success: false,
+        error: 'Requires Azure Automation (not configured)',
+      }));
+    } else if (!tenantConnectionId) {
+      automationSkipped = true;
+      automationSkipReason = 'No tenant connection ID provided for automation export.';
+      
+      automationResults = powerShellResources.map(resource => ({
+        resource,
+        success: false,
+        error: 'Tenant connection required for automation',
+      }));
+    } else {
+      // Start the automation job
+      onProgress?.(
+        Math.round((completedResources / totalResources) * 100),
+        'Starting Azure Automation runbook...'
+      );
+
+      const startResult = await startAutomationJob(
+        automationConfig.id,
+        tenantConnectionId,
+        powerShellResources
+      );
+
+      if (!startResult.success || !startResult.jobRunId) {
+        automationSkipped = true;
+        automationSkipReason = startResult.error || 'Failed to start automation job';
+        
+        automationResults = powerShellResources.map(resource => ({
+          resource,
+          success: false,
+          error: startResult.error || 'Failed to start automation job',
+        }));
+      } else {
+        automationJobId = startResult.jobRunId;
+
+        // Poll for job completion
+        const pollResult = await pollJobUntilComplete(
+          startResult.jobRunId,
+          (status) => {
+            onProgress?.(
+              Math.round((completedResources / totalResources) * 100),
+              `Azure Automation: ${status}`
+            );
+          },
+          120, // Max 10 minutes (120 * 5 seconds)
+          5000
+        );
+
+        if (pollResult.success && pollResult.status === 'completed') {
+          // Get the job output
+          const outputResult = await getJobOutput(startResult.jobRunId);
+          
+          if (outputResult.success && outputResult.output) {
+            // Parse output and store resources
+            automationResults = powerShellResources.map(resource => ({
+              resource,
+              success: true,
+              data: (outputResult.output as Record<string, unknown>)?.[resource],
+            }));
+
+            // Store automation results in exported_resources table
+            const outputData = outputResult.output as Record<string, unknown>;
+            for (const resource of powerShellResources) {
+              const [category, resourceType] = resource.split('/');
+              const resourceData = outputData[resource];
+              
+              if (resourceData) {
+                const insertData = {
+                  export_job_id: exportJobId,
+                  category,
+                  resource_type: resourceType,
+                  resource_name: `PowerShell: ${resourceType}`,
+                  resource_id: `automation/${resource}`,
+                  data: JSON.parse(JSON.stringify({ value: resourceData, source: 'azure-automation' })),
+                };
+                await supabase.from('exported_resources').insert([insertData]);
+              }
+            }
+            
+            completedResources += powerShellResources.length;
+          } else {
+            automationResults = powerShellResources.map(resource => ({
+              resource,
+              success: false,
+              error: 'Failed to retrieve automation output',
+            }));
+          }
+        } else {
+          automationResults = powerShellResources.map(resource => ({
+            resource,
+            success: false,
+            error: pollResult.error || 'Automation job failed or timed out',
+          }));
+        }
+      }
+    }
+  }
+
+  onProgress?.(100, 'Export complete');
+
+  return {
+    success: true,
+    graphResults,
+    automationResults,
+    automationJobId,
+    automationSkipped,
+    automationSkipReason,
+  };
 }

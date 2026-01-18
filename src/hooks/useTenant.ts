@@ -2,7 +2,10 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { 
   testTenantConnection, 
   exportResources,
+  exportResourcesHybrid,
   refreshTokenFromStoredCredentials,
+  categorizeResources,
+  getAvailableAutomationConfig,
   TestConnectionResult 
 } from '@/lib/graphApi';
 import { 
@@ -306,6 +309,7 @@ export function useExport() {
   const [isExporting, setIsExporting] = useState(false);
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
+  const [exportMessage, setExportMessage] = useState<string>('');
   const { toast } = useToast();
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -336,8 +340,27 @@ export function useExport() {
 
     setIsExporting(true);
     setProgress(0);
+    setExportMessage('Preparing export...');
 
     try {
+      // Check what resources we're dealing with
+      const { graphResources, powerShellResources } = categorizeResources(resources);
+      const hasPowerShellResources = powerShellResources.length > 0;
+      
+      // Check for automation config if we have PowerShell resources
+      let automationAvailable = false;
+      if (hasPowerShellResources) {
+        const automationConfig = await getAvailableAutomationConfig();
+        automationAvailable = !!automationConfig;
+        
+        if (!automationAvailable) {
+          toast({
+            title: 'PowerShell Resources Detected',
+            description: `${powerShellResources.length} resources require Azure Automation. Configure it in Settings to export these.`,
+          });
+        }
+      }
+
       // Create export job in database
       const job = await createExportJob({
         name: `Export ${new Date().toLocaleString()}`,
@@ -353,8 +376,7 @@ export function useExport() {
         try {
           const updatedJob = await getExportJob(job.id);
           if (updatedJob) {
-            setProgress(updatedJob.progress || 0);
-
+            // Only update from polling if not getting updates from hybrid export
             if (updatedJob.status === 'completed' || updatedJob.status === 'failed') {
               // Stop polling
               if (pollingRef.current) {
@@ -362,37 +384,15 @@ export function useExport() {
                 pollingRef.current = null;
               }
               setIsExporting(false);
-
-              if (updatedJob.status === 'completed') {
-                if (updatedJob.error) {
-                  toast({
-                    title: 'Export Complete (with errors)',
-                    description: updatedJob.error,
-                  });
-                } else {
-                  toast({
-                    title: 'Export Complete',
-                    description: `Successfully exported ${resources.length} resources`,
-                  });
-                }
-              } else {
-                toast({
-                  title: 'Export Failed',
-                  description: updatedJob.error || 'Export encountered errors',
-                  variant: 'destructive',
-                });
-              }
             }
           }
         } catch (err) {
           console.error('Error polling job status:', err);
         }
-      }, 1000); // Poll every second
+      }, 2000); // Poll every 2 seconds
 
       // Also subscribe to realtime updates as a backup
       const unsubscribe = subscribeToExportJob(job.id, (updatedJob: { progress?: number; status?: string; error?: string }) => {
-        if (updatedJob.progress !== undefined) setProgress(updatedJob.progress);
-
         if (updatedJob.status === 'completed' || updatedJob.status === 'failed') {
           // Stop polling
           if (pollingRef.current) {
@@ -404,50 +404,135 @@ export function useExport() {
         }
       });
 
-      // Start the export (this runs the edge function)
-      const result = await exportResources(accessToken, resources, job.id);
+      // Use hybrid export if we have PowerShell resources and automation is available
+      const useHybrid = hasPowerShellResources && automationAvailable && connectionId;
+      
+      let graphSuccessCount = 0;
+      let graphFailedCount = 0;
+      let automationSuccessCount = 0;
+      let automationFailedCount = 0;
+      let automationSkipReason: string | undefined;
 
-      // Stop polling since export function returned
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-        pollingRef.current = null;
-      }
+      if (useHybrid) {
+        // Use hybrid export for both Graph and PowerShell resources
+        setExportMessage('Starting hybrid export (Graph API + Azure Automation)...');
+        
+        const result = await exportResourcesHybrid(
+          accessToken,
+          resources,
+          job.id,
+          connectionId,
+          (prog, message) => {
+            setProgress(prog);
+            setExportMessage(message);
+          }
+        );
 
-      if (!result.success) {
-        toast({
-          title: 'Export Failed',
-          description: result.error || 'Failed to export resources',
-          variant: 'destructive',
-        });
-        setIsExporting(false);
-        unsubscribe();
-        return null;
+        // Stop polling since export function returned
+        if (pollingRef.current) {
+          clearInterval(pollingRef.current);
+          pollingRef.current = null;
+        }
+
+        if (!result.success) {
+          toast({
+            title: 'Export Failed',
+            description: result.error || 'Failed to export resources',
+            variant: 'destructive',
+          });
+          setIsExporting(false);
+          unsubscribe();
+          return null;
+        }
+
+        graphSuccessCount = result.graphResults?.filter(r => r.success).length || 0;
+        graphFailedCount = result.graphResults?.filter(r => !r.success).length || 0;
+        automationSuccessCount = result.automationResults?.filter(r => r.success).length || 0;
+        automationFailedCount = result.automationResults?.filter(r => !r.success).length || 0;
+        automationSkipReason = result.automationSkipReason;
+      } else {
+        // Standard Graph API only export
+        setExportMessage('Exporting via Graph API...');
+        
+        // If we have PowerShell resources but no automation, only export Graph resources
+        const resourcesToExport = hasPowerShellResources && !automationAvailable 
+          ? graphResources 
+          : resources;
+
+        if (resourcesToExport.length === 0) {
+          toast({
+            title: 'No Exportable Resources',
+            description: 'All selected resources require Azure Automation which is not configured.',
+            variant: 'destructive',
+          });
+          setIsExporting(false);
+          unsubscribe();
+          return null;
+        }
+
+        const result = await exportResources(accessToken, resourcesToExport, job.id);
+
+        // Stop polling since export function returned
+        if (pollingRef.current) {
+          clearInterval(pollingRef.current);
+          pollingRef.current = null;
+        }
+
+        if (!result.success) {
+          toast({
+            title: 'Export Failed',
+            description: result.error || 'Failed to export resources',
+            variant: 'destructive',
+          });
+          setIsExporting(false);
+          unsubscribe();
+          return null;
+        }
+
+        graphSuccessCount = result.results?.filter(r => r.success).length || 0;
+        graphFailedCount = result.results?.filter(r => !r.success).length || 0;
+        
+        // Mark PowerShell resources as skipped
+        if (hasPowerShellResources && !automationAvailable) {
+          automationFailedCount = powerShellResources.length;
+          automationSkipReason = 'Azure Automation not configured';
+        }
       }
 
       // Export function completed - update state directly
       setProgress(100);
+      setExportMessage('Export complete');
       setIsExporting(false);
       unsubscribe();
 
-      // Show appropriate toast based on results
-      const failedCount = result.results?.filter(r => !r.success).length || 0;
-      const successCount = result.results?.filter(r => r.success).length || 0;
+      // Calculate totals
+      const totalSuccess = graphSuccessCount + automationSuccessCount;
+      const totalFailed = graphFailedCount + automationFailedCount;
       
-      if (failedCount > 0 && successCount > 0) {
+      // Show appropriate toast based on results
+      if (totalFailed > 0 && totalSuccess > 0) {
+        let description = `Exported ${totalSuccess} resources, ${totalFailed} failed`;
+        if (automationSkipReason) {
+          description += `. Note: ${automationSkipReason}`;
+        }
         toast({
           title: 'Export Complete (with errors)',
-          description: `Exported ${successCount} resources, ${failedCount} failed`,
+          description,
         });
-      } else if (failedCount > 0) {
+      } else if (totalFailed > 0 && totalSuccess === 0) {
         toast({
           title: 'Export Failed',
-          description: `All ${failedCount} resources failed to export`,
+          description: automationSkipReason || `All ${totalFailed} resources failed to export`,
           variant: 'destructive',
         });
       } else {
+        let description = `Successfully exported ${totalSuccess} resources`;
+        if (automationSuccessCount > 0) {
+          description = `Exported ${graphSuccessCount} via Graph API, ${automationSuccessCount} via Azure Automation`;
+        }
         toast({
           title: 'Export Complete',
-          description: `Successfully exported ${successCount} resources`,
+          description,
         });
       }
 
@@ -473,6 +558,7 @@ export function useExport() {
     isExporting,
     currentJobId,
     progress,
+    exportMessage,
     startExport,
   };
 }

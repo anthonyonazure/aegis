@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
   FileJson,
@@ -10,6 +10,7 @@ import {
   AlertCircle,
   Loader2,
   Building2,
+  Cog,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -21,6 +22,7 @@ import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 import { ExportFormat } from '@/types/tenant';
 import { useTenant } from '@/contexts/TenantContext';
+import { isPowerShellResource, POWERSHELL_RESOURCE_TYPES } from '@/lib/automationApi';
 
 const exportFormats = [
   {
@@ -64,6 +66,7 @@ interface ExportViewProps {
   onStartExport: () => void;
   isExporting?: boolean;
   progress?: number;
+  exportMessage?: string;
   accessToken?: string | null;
   azureRoles?: string[];
   onRefreshToken?: () => Promise<string | null>;
@@ -76,6 +79,7 @@ export const ExportView = ({
   onStartExport,
   isExporting = false,
   progress = 0,
+  exportMessage = '',
 }: ExportViewProps) => {
   const [outputPath, setOutputPath] = useState('./exports');
   const [separateFiles, setSeparateFiles] = useState(true);
@@ -84,6 +88,20 @@ export const ExportView = ({
   const { selectedTenantId, tenants, isConnected, tenantName } = useTenant();
   const selectedTenant = tenants.find(t => t.id === selectedTenantId);
   const displayTenantName = tenantName || selectedTenant?.displayName || selectedTenant?.tenantName;
+
+  // Categorize selected resources
+  const { graphResourceCount, powerShellResourceCount } = useMemo(() => {
+    let graph = 0;
+    let ps = 0;
+    for (const r of selectedResources) {
+      if (isPowerShellResource(r)) {
+        ps++;
+      } else {
+        graph++;
+      }
+    }
+    return { graphResourceCount: graph, powerShellResourceCount: ps };
+  }, [selectedResources]);
 
   const canExport = selectedResources.length > 0 && selectedFormats.length > 0 && !isExporting && isConnected;
 
@@ -112,8 +130,14 @@ export const ExportView = ({
         </div>
         <div className="flex items-center gap-3">
           <Badge variant="outline" className="px-3 py-1">
-            {selectedResources.length} resources selected
+            {graphResourceCount} Graph API
           </Badge>
+          {powerShellResourceCount > 0 && (
+            <Badge variant="secondary" className="px-3 py-1 gap-1">
+              <Cog className="w-3 h-3" />
+              {powerShellResourceCount} PowerShell
+            </Badge>
+          )}
           <Button
             onClick={handleStartExport}
             disabled={!canExport}
@@ -144,7 +168,9 @@ export const ExportView = ({
             <CardContent className="p-4">
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-foreground font-medium">Exporting resources...</span>
+                  <span className="text-foreground font-medium">
+                    {exportMessage || 'Exporting resources...'}
+                  </span>
                   <span className="text-muted-foreground">{progress}%</span>
                 </div>
                 <Progress value={progress} className="h-2" />

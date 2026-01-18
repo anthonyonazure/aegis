@@ -59,7 +59,7 @@ const Index = () => {
     refreshToken
   } = useTenant();
 
-  const { isExporting, progress, startExport } = useExport();
+  const { isExporting, progress, exportMessage, startExport } = useExport();
   const { toast } = useToast();
 
   // Redirect to login if not authenticated
@@ -251,6 +251,7 @@ const Index = () => {
             onStartExport={handleStartExport}
             isExporting={isExporting}
             progress={progress}
+            exportMessage={exportMessage}
           />
         );
       case 'jobs':
