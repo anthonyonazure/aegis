@@ -1387,6 +1387,11 @@ export function GovernanceCenterView({ onNavigate, onDeployPolicy }: GovernanceC
           </div>
         </TabsContent>
 
+        {/* Schedules Tab */}
+        <TabsContent value="schedules" className="mt-6">
+          <GovernanceScheduleManager onRunComplete={loadMetricsHistory} />
+        </TabsContent>
+
         {/* Compliance Tab */}
         <TabsContent value="compliance" className="mt-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
