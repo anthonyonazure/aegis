@@ -31,11 +31,10 @@ import {
   getHealthStats,
   getRecentHealthActivity,
   subscribeToTenantHealth,
-  updateTenantHealth,
-  createHealthCheck,
   TenantHealthSummary,
   TenantHealthCheck,
 } from '@/lib/healthDatabase';
+import { checkTenantHealth, checkBulkTenantHealth, formatHealthDetails } from '@/lib/healthApi';
 import { TenantHealthStatus } from '@/types/tenant';
 import { PieChart, Pie, Cell, ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, BarChart, Bar, Legend } from 'recharts';
 
@@ -103,43 +102,77 @@ export function TenantHealthDashboardView() {
     toast.success('Health data refreshed');
   };
 
+  const [checkingTenant, setCheckingTenant] = useState<string | null>(null);
+
   const handleHealthCheck = async (tenant: TenantHealthSummary) => {
+    setCheckingTenant(tenant.tenantConnectionId);
     try {
-      // Simulate a health check (in real implementation, this would call an edge function)
-      const startTime = Date.now();
+      const response = await checkTenantHealth(tenant.tenantConnectionId);
       
-      // Random health status for demo (in production, this would be real API checks)
-      const statuses: TenantHealthStatus[] = ['healthy', 'healthy', 'healthy', 'warning', 'critical'];
-      const newStatus = statuses[Math.floor(Math.random() * statuses.length)];
-      const responseTime = Math.floor(Math.random() * 500) + 100;
-
-      await Promise.all([
-        createHealthCheck({
-          tenantConnectionId: tenant.tenantConnectionId,
-          healthStatus: newStatus,
-          responseTimeMs: responseTime,
-          checkType: 'manual',
-          details: { checkedAt: new Date().toISOString() },
-        }),
-        updateTenantHealth(tenant.tenantConnectionId, newStatus),
-      ]);
-
-      toast.success(`Health check completed for ${tenant.displayName || tenant.tenantName}`);
-      await loadData();
+      if (response.success && response.result) {
+        const { healthStatus, details, responseTimeMs } = response.result;
+        
+        // Show detailed toast based on result
+        if (healthStatus === 'healthy') {
+          toast.success(`${tenant.displayName || tenant.tenantName} is healthy`, {
+            description: `Response time: ${responseTimeMs}ms`,
+          });
+        } else if (healthStatus === 'warning') {
+          toast.warning(`${tenant.displayName || tenant.tenantName} has warnings`, {
+            description: details.errorMessage || 'Some permissions may be limited',
+          });
+        } else if (healthStatus === 'critical') {
+          toast.error(`${tenant.displayName || tenant.tenantName} is unreachable`, {
+            description: details.errorMessage || 'Check credentials and permissions',
+          });
+        } else {
+          toast.info(`${tenant.displayName || tenant.tenantName} status unknown`, {
+            description: details.errorMessage || 'No credentials stored',
+          });
+        }
+        
+        await loadData();
+      } else {
+        toast.error(`Health check failed for ${tenant.displayName || tenant.tenantName}`, {
+          description: response.error,
+        });
+      }
     } catch (error) {
       console.error('Health check failed:', error);
       toast.error('Health check failed');
+    } finally {
+      setCheckingTenant(null);
     }
   };
 
   const handleBulkHealthCheck = async () => {
+    if (tenants.length === 0) {
+      toast.info('No tenants to check');
+      return;
+    }
+
     setRefreshing(true);
     try {
-      for (const tenant of tenants) {
-        await handleHealthCheck(tenant);
+      const tenantIds = tenants.map(t => t.tenantConnectionId);
+      const response = await checkBulkTenantHealth(tenantIds);
+      
+      if (response.success && response.results) {
+        const healthy = response.results.filter(r => r.healthStatus === 'healthy').length;
+        const warning = response.results.filter(r => r.healthStatus === 'warning').length;
+        const critical = response.results.filter(r => r.healthStatus === 'critical').length;
+        
+        toast.success(`Bulk health check completed`, {
+          description: `${healthy} healthy, ${warning} warnings, ${critical} critical out of ${response.checked} checked`,
+        });
+        
+        await loadData();
+      } else {
+        toast.error('Bulk health check failed', {
+          description: response.error,
+        });
       }
-      toast.success('Bulk health check completed');
     } catch (error) {
+      console.error('Bulk health check failed:', error);
       toast.error('Bulk health check failed');
     } finally {
       setRefreshing(false);
