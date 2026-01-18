@@ -6,7 +6,8 @@ const corsHeaders = {
 };
 
 // Graph API endpoints to test for each resource type
-const GRAPH_TEST_ENDPOINTS: Record<string, { endpoint: string; description: string }> = {
+// Note: Some endpoints require beta API, marked with useBeta flag
+const GRAPH_TEST_ENDPOINTS: Record<string, { endpoint: string; description: string; useBeta?: boolean }> = {
   // Intune
   'intune/device-configurations': { 
     endpoint: '/deviceManagement/deviceConfigurations?$top=1', 
@@ -21,12 +22,16 @@ const GRAPH_TEST_ENDPOINTS: Record<string, { endpoint: string; description: stri
     description: 'App Configuration Policies' 
   },
   'intune/autopilot': { 
+    // Use beta API for autopilot profiles
     endpoint: '/deviceManagement/windowsAutopilotDeploymentProfiles?$top=1', 
-    description: 'Autopilot Profiles' 
+    description: 'Autopilot Profiles',
+    useBeta: true
   },
   'intune/scripts': { 
+    // Use beta API for device management scripts
     endpoint: '/deviceManagement/deviceManagementScripts?$top=1', 
-    description: 'PowerShell Scripts' 
+    description: 'PowerShell Scripts',
+    useBeta: true
   },
   'intune/win32-apps': { 
     endpoint: '/deviceAppManagement/mobileApps?$filter=isof(%27microsoft.graph.win32LobApp%27)&$top=1', 
@@ -51,7 +56,8 @@ const GRAPH_TEST_ENDPOINTS: Record<string, { endpoint: string; description: stri
     description: 'Named Locations' 
   },
   'conditional-access/auth-strengths': { 
-    endpoint: '/identity/conditionalAccess/authenticationStrength/policies?$top=1', 
+    // Authentication strength policies endpoint doesn't support $top
+    endpoint: '/identity/conditionalAccess/authenticationStrength/policies', 
     description: 'Authentication Strengths' 
   },
   
@@ -149,12 +155,14 @@ async function testGraphEndpoint(
   token: string,
   resourceId: string,
   endpoint: string,
-  description: string
+  description: string,
+  useBeta: boolean = false
 ): Promise<ValidationResult> {
   const startTime = Date.now();
+  const apiVersion = useBeta ? 'beta' : 'v1.0';
   
   try {
-    const response = await fetch(`https://graph.microsoft.com/v1.0${endpoint}`, {
+    const response = await fetch(`https://graph.microsoft.com/${apiVersion}${endpoint}`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -301,7 +309,8 @@ serve(async (req) => {
             graphToken,
             resourceId,
             testConfig.endpoint,
-            testConfig.description
+            testConfig.description,
+            testConfig.useBeta || false
           );
           results.push(result);
         } else {
