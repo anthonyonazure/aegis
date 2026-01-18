@@ -99,6 +99,8 @@ export const ReportsView = () => {
   const [showGenerateDialog, setShowGenerateDialog] = useState(false);
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
   const [showViewer, setShowViewer] = useState(false);
+  const [batchGenerating, setBatchGenerating] = useState(false);
+  const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
   
   // Template browsing state
   const [activeTab, setActiveTab] = useState<'templates' | 'generated'>('templates');
@@ -270,6 +272,77 @@ export const ReportsView = () => {
     }
   };
 
+  const handleGenerateAll = async () => {
+    setBatchGenerating(true);
+    const templates = REPORT_TEMPLATES;
+    setBatchProgress({ current: 0, total: templates.length });
+
+    const dateRangeStart = new Date('2026-01-17').toISOString();
+    const dateRangeEnd = new Date('2026-01-18').toISOString();
+
+    toast({
+      title: 'Batch Generation Started',
+      description: `Generating ${templates.length} reports. This may take a few minutes.`,
+    });
+
+    let successCount = 0;
+    let errorCount = 0;
+
+    // Process in batches of 5 to avoid overwhelming the system
+    const batchSize = 5;
+    for (let i = 0; i < templates.length; i += batchSize) {
+      const batch = templates.slice(i, i + batchSize);
+      
+      await Promise.all(batch.map(async (template) => {
+        try {
+          const reportType = 
+            template.category === 'compliance' ? 'compliance' :
+            template.category === 'security' ? 'security' :
+            template.category === 'drift' ? 'drift' :
+            template.category === 'billing' ? 'billing' :
+            template.category === 'tenant_health' ? 'tenant_summary' :
+            'executive_summary';
+
+          const report = await createReport({
+            name: `${template.name} - ${format(new Date(), 'MMM d, yyyy')}`,
+            report_type: reportType as ReportType,
+            customer_id: null, // All customers
+            date_range_start: dateRangeStart,
+            date_range_end: dateRangeEnd,
+            status: 'generating',
+            data: { templateId: template.id, templateName: template.name, templateCategory: template.category },
+          });
+
+          await supabase.functions.invoke('generate-report', {
+            body: {
+              reportId: report.id,
+              reportType: reportType,
+              templateId: template.id,
+              templateCategory: template.category,
+              dateRangeStart,
+              dateRangeEnd,
+            },
+          });
+
+          successCount++;
+        } catch (error) {
+          console.error(`Failed to generate report for ${template.name}:`, error);
+          errorCount++;
+        }
+      }));
+
+      setBatchProgress({ current: Math.min(i + batchSize, templates.length), total: templates.length });
+    }
+
+    setBatchGenerating(false);
+    toast({
+      title: 'Batch Generation Complete',
+      description: `Generated ${successCount} reports successfully. ${errorCount > 0 ? `${errorCount} failed.` : ''}`,
+    });
+    loadData();
+    setActiveTab('generated');
+  };
+
   const resetForm = () => {
     setFormData({
       name: '',
@@ -323,6 +396,24 @@ export const ReportsView = () => {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button 
+            variant="default" 
+            size="sm" 
+            onClick={handleGenerateAll}
+            disabled={batchGenerating}
+          >
+            {batchGenerating ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Generating {batchProgress.current}/{batchProgress.total}
+              </>
+            ) : (
+              <>
+                <Play className="w-4 h-4 mr-2" />
+                Generate All Templates
+              </>
+            )}
+          </Button>
           <Button variant="outline" size="sm" onClick={loadData}>
             <RefreshCw className="w-4 h-4 mr-2" />
             Refresh
