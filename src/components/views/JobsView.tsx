@@ -34,6 +34,32 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 
+// Helper to provide actionable guidance for common errors
+function getErrorGuidance(error: string): string {
+  const lowerError = error.toLowerCase();
+  
+  if (lowerError.includes('access denied') || lowerError.includes('403') || lowerError.includes('forbidden')) {
+    return 'Grant the required API permission in Azure Portal → App Registrations → API Permissions, then click "Grant admin consent".';
+  }
+  if (lowerError.includes('unauthorized') || lowerError.includes('401')) {
+    return 'Your session may have expired. Try disconnecting and reconnecting to the tenant.';
+  }
+  if (lowerError.includes('bad request') || lowerError.includes('400') || lowerError.includes('not supported')) {
+    return 'This resource may not be available via the Graph API. Consider using Azure Automation for PowerShell-based exports.';
+  }
+  if (lowerError.includes('not found') || lowerError.includes('404')) {
+    return 'This resource type may not exist in your tenant or requires a specific license.';
+  }
+  if (lowerError.includes('rate limit') || lowerError.includes('429')) {
+    return 'Microsoft is rate-limiting requests. Wait a few minutes and try again.';
+  }
+  if (lowerError.includes('timeout')) {
+    return 'The request took too long. Try exporting fewer resources at once.';
+  }
+  
+  return 'Check your service principal permissions and ensure the resource is available in your tenant.';
+}
+
 interface ExportJobRecord {
   id: string;
   name: string;
@@ -569,20 +595,27 @@ export const JobsView = () => {
                   <div 
                     key={idx}
                     className={cn(
-                      "p-3 rounded-lg flex items-center justify-between",
+                      "p-3 rounded-lg",
                       result.success ? "bg-success/10" : "bg-destructive/10"
                     )}
                   >
-                    <div className="flex items-center gap-2">
-                      {result.success ? (
-                        <CheckCircle2 className="w-4 h-4 text-success" />
-                      ) : (
-                        <XCircle className="w-4 h-4 text-destructive" />
-                      )}
-                      <span className="font-mono text-sm">{result.resource}</span>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        {result.success ? (
+                          <CheckCircle2 className="w-4 h-4 text-success shrink-0" />
+                        ) : (
+                          <XCircle className="w-4 h-4 text-destructive shrink-0" />
+                        )}
+                        <span className="font-mono text-sm">{result.resource}</span>
+                      </div>
                     </div>
                     {result.error && (
-                      <span className="text-xs text-destructive">{result.error}</span>
+                      <div className="mt-2 ml-6 text-sm">
+                        <span className="text-destructive">{result.error}</span>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {getErrorGuidance(result.error)}
+                        </p>
+                      </div>
                     )}
                   </div>
                 ))}

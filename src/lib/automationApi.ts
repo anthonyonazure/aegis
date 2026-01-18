@@ -55,20 +55,44 @@ export interface JobStatusResult {
 
 // PowerShell resource types that require Azure Automation
 export const POWERSHELL_RESOURCE_TYPES = [
+  // Exchange resources that require PowerShell
   'exchange/transport-rules',
   'exchange/connectors',
   'exchange/mailbox-policies',
   'exchange/anti-spam',
   'exchange/dlp-policies',
+  'exchange/anti-phishing',
+  'exchange/owa-policies',
+  'exchange/mobile-device-policies',
+  // Teams resources that require PowerShell
   'teams/messaging-policies',
   'teams/meeting-policies',
   'teams/calling-policies',
   'teams/live-event-policies',
+  'teams/guest-policies',
+  'teams/external-access',
+  'teams/app-setup-policies',
+  'teams/channel-policies',
+  // SharePoint resources that require PowerShell
   'sharepoint/tenant-settings',
   'sharepoint/sharing-policies',
+  'sharepoint/hub-sites',
+  'sharepoint/access-control',
+  'sharepoint/storage-quota',
+  'sharepoint/onedrive-settings',
+  // Defender resources that require PowerShell
   'defender/safe-attachments',
   'defender/safe-links',
   'defender/anti-phishing',
+  // License optimization reports that need Reports.Read.All or PowerShell
+  'license-optimization/inactive-users',
+  'license-optimization/unused-services',
+  'license-optimization/license-utilization',
+  'license-optimization/mailbox-usage',
+  'license-optimization/onedrive-usage',
+  'license-optimization/teams-usage',
+  // Copilot resources that need specific permissions
+  'copilot/copilot-readiness',
 ];
 
 export function isPowerShellResource(resourceType: string): boolean {
