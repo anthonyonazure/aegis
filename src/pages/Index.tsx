@@ -192,11 +192,27 @@ const Index = () => {
     setShowPreflightCheck(true);
   };
 
-  const handlePreflightProceed = async () => {
+  const handlePreflightProceed = () => {
     setShowPreflightCheck(false);
     if (preflightToken) {
-      await startExport(preflightToken, preflightResources, selectedFormats, connectionId || undefined);
+      // Start export in the background so the UI can immediately switch to Jobs
+      const exportPromise = startExport(
+        preflightToken,
+        preflightResources,
+        selectedFormats,
+        connectionId || undefined
+      );
+
       setActiveTab('jobs');
+
+      // After the export finishes successfully, take the user to Reports
+      exportPromise
+        .then((jobId) => {
+          if (jobId) setActiveTab('reports');
+        })
+        .catch(() => {
+          // Errors/toasts are handled inside startExport
+        });
     }
   };
 
