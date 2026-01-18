@@ -172,6 +172,22 @@ export const PermissionsReferenceView = () => {
     }
   };
 
+  const downloadScript = (content: string, filename: string) => {
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast({
+      title: 'Script Downloaded',
+      description: `${filename} saved to your downloads folder`,
+    });
+  };
+
   const toggleCategory = (categoryId: string) => {
     setExpandedCategories(prev => {
       const next = new Set(prev);
@@ -197,9 +213,9 @@ export const PermissionsReferenceView = () => {
     copyToClipboard(text, 'all-graph');
   };
 
-  const generateAzurePowerShellScript = () => {
+  const getAzurePowerShellScript = () => {
     const role = writeMode ? 'Contributor' : 'Reader';
-    const script = `# PowerShell script to assign Azure RBAC "${role}" role to an App Registration
+    return `# PowerShell script to assign Azure RBAC "${role}" role to an App Registration
 # Run this in Azure Cloud Shell or with Az PowerShell module installed
 # Requires: Az PowerShell module (Install-Module Az -Scope CurrentUser)
 
@@ -296,8 +312,17 @@ ${writeMode ? `Write-Host "This allows the app to read AND modify Azure resource
 # Disconnect (optional)
 # Disconnect-AzAccount
 `;
-    
+  };
+
+  const copyAzurePowerShellScript = () => {
+    const script = getAzurePowerShellScript();
     copyToClipboard(script, 'azure-script', 'Azure PowerShell Script Copied', 'Script copied to clipboard. Update the variables before running.');
+  };
+
+  const downloadAzurePowerShellScript = () => {
+    const script = getAzurePowerShellScript();
+    const filename = `Azure-RBAC-${writeMode ? 'Contributor' : 'Reader'}.ps1`;
+    downloadScript(script, filename);
   };
 
   const copyAzureInstructions = () => {
@@ -326,9 +351,9 @@ Repeat for each subscription you want to ${writeMode ? 'manage' : 'export'}.`;
     copyToClipboard(perms.join('\n'), category.id);
   };
 
-  const generatePowerShellScript = () => {
+  const getGraphPowerShellScript = () => {
     const permissions = allGraphPermissions;
-    const script = `# PowerShell script to add Microsoft Graph API permissions to an App Registration
+    return `# PowerShell script to add Microsoft Graph API permissions to an App Registration
 # Run this in Azure Cloud Shell or with Azure PowerShell module installed
 # Requires: Microsoft.Graph PowerShell module (Install-Module Microsoft.Graph -Scope CurrentUser)
 
@@ -485,14 +510,23 @@ Disconnect-MgGraph
 Write-Host ""
 Write-Host "Script completed!" -ForegroundColor Green
 `;
-    
+  };
+
+  const copyGraphPowerShellScript = () => {
+    const script = getGraphPowerShellScript();
     copyToClipboard(script, 'powershell', 'PowerShell Script Copied', 'Script copied to clipboard. Update the variables before running.');
   };
 
-  const generateCombinedPowerShellScript = () => {
+  const downloadGraphPowerShellScript = () => {
+    const script = getGraphPowerShellScript();
+    const filename = `Graph-API-Permissions-${writeMode ? 'ReadWrite' : 'Read'}.ps1`;
+    downloadScript(script, filename);
+  };
+
+  const getCombinedPowerShellScript = () => {
     const permissions = allGraphPermissions;
     const role = writeMode ? 'Contributor' : 'Reader';
-    const script = `# ============================================================
+    return `# ============================================================
 # COMBINED PowerShell Script: Graph API Permissions + Azure RBAC
 # ============================================================
 # This script configures BOTH:
@@ -729,8 +763,17 @@ Write-Host "Grant consent at:" -ForegroundColor Cyan
 Write-Host "  Azure Portal -> Azure AD -> App registrations -> Your App -> API permissions -> Grant admin consent" -ForegroundColor White
 Write-Host ""
 `;
-    
+  };
+
+  const copyCombinedPowerShellScript = () => {
+    const script = getCombinedPowerShellScript();
     copyToClipboard(script, 'combined-script', 'Combined Script Copied', 'Complete Graph + Azure script copied. Update variables before running.');
+  };
+
+  const downloadCombinedPowerShellScript = () => {
+    const script = getCombinedPowerShellScript();
+    const filename = `Complete-Setup-${writeMode ? 'ReadWrite' : 'Read'}.ps1`;
+    downloadScript(script, filename);
   };
 
   const renderResourceCard = (resource: PermissionRequirement) => {
@@ -849,18 +892,29 @@ Write-Host ""
             Complete list of permissions required for all resource types
           </p>
         </div>
-        <Button
-          size="lg"
-          className="gap-2 bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-600/90"
-          onClick={generateCombinedPowerShellScript}
-        >
-          {copiedId === 'combined-script' ? (
-            <Check className="h-5 w-5" />
-          ) : (
-            <Terminal className="h-5 w-5" />
-          )}
-          Complete Setup Script
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            size="lg"
+            variant="outline"
+            className="gap-2"
+            onClick={copyCombinedPowerShellScript}
+          >
+            {copiedId === 'combined-script' ? (
+              <Check className="h-5 w-5" />
+            ) : (
+              <Terminal className="h-5 w-5" />
+            )}
+            Copy Full Script
+          </Button>
+          <Button
+            size="lg"
+            className="gap-2 bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-600/90"
+            onClick={downloadCombinedPowerShellScript}
+          >
+            <Download className="h-5 w-5" />
+            Download Complete .ps1
+          </Button>
+        </div>
       </div>
 
       {/* Summary Cards */}
@@ -993,10 +1047,23 @@ Write-Host ""
                     variant="outline"
                     size="sm"
                     className="gap-1.5"
-                    onClick={generatePowerShellScript}
+                    onClick={copyGraphPowerShellScript}
                   >
-                    <ClipboardList className="h-4 w-4" />
-                    PowerShell Script
+                    {copiedId === 'powershell' ? (
+                      <Check className="h-4 w-4" />
+                    ) : (
+                      <Terminal className="h-4 w-4" />
+                    )}
+                    Copy Script
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={downloadGraphPowerShellScript}
+                  >
+                    <Download className="h-4 w-4" />
+                    Download .ps1
                   </Button>
                   <Button
                     size="sm"
@@ -1070,15 +1137,24 @@ Write-Host ""
                   </Button>
                   <Button
                     size="sm"
-                    className="gap-1.5 bg-orange-600 hover:bg-orange-700"
-                    onClick={generateAzurePowerShellScript}
+                    variant="outline"
+                    className="gap-1.5"
+                    onClick={copyAzurePowerShellScript}
                   >
                     {copiedId === 'azure-script' ? (
                       <Check className="h-4 w-4" />
                     ) : (
                       <Terminal className="h-4 w-4" />
                     )}
-                    PowerShell Script
+                    Copy Script
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="gap-1.5 bg-orange-600 hover:bg-orange-700"
+                    onClick={downloadAzurePowerShellScript}
+                  >
+                    <Download className="h-4 w-4" />
+                    Download .ps1
                   </Button>
                 </div>
               </div>
