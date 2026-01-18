@@ -12,6 +12,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { useTenant } from '@/contexts/TenantContext';
 import { 
@@ -101,6 +102,10 @@ export const ReportsView = () => {
   const [showViewer, setShowViewer] = useState(false);
   const [batchGenerating, setBatchGenerating] = useState(false);
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
+  
+  // Multi-select state
+  const [selectedReportIds, setSelectedReportIds] = useState<Set<string>>(new Set());
+  const [isDeleting, setIsDeleting] = useState(false);
   
   // Template browsing state
   const [activeTab, setActiveTab] = useState<'templates' | 'generated'>('templates');
@@ -271,6 +276,55 @@ export const ReportsView = () => {
       });
     }
   };
+
+  const handleBulkDelete = async () => {
+    if (selectedReportIds.size === 0) return;
+    
+    setIsDeleting(true);
+    try {
+      const deletePromises = Array.from(selectedReportIds).map(id => deleteReport(id));
+      await Promise.all(deletePromises);
+      
+      toast({ 
+        title: 'Success', 
+        description: `${selectedReportIds.size} report${selectedReportIds.size > 1 ? 's' : ''} deleted` 
+      });
+      setSelectedReportIds(new Set());
+      loadData();
+    } catch (error) {
+      console.error('Failed to delete reports:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to delete some reports',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const toggleReportSelection = (reportId: string) => {
+    setSelectedReportIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(reportId)) {
+        newSet.delete(reportId);
+      } else {
+        newSet.add(reportId);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedReportIds.size === reports.length) {
+      setSelectedReportIds(new Set());
+    } else {
+      setSelectedReportIds(new Set(reports.map(r => r.id)));
+    }
+  };
+
+  const isAllSelected = reports.length > 0 && selectedReportIds.size === reports.length;
+  const isSomeSelected = selectedReportIds.size > 0 && selectedReportIds.size < reports.length;
 
   const handleGenerateAll = async () => {
     setBatchGenerating(true);
@@ -635,9 +689,31 @@ export const ReportsView = () => {
         {/* Generated Reports Tab */}
         <TabsContent value="generated" className="mt-4">
           <Card>
-            <CardHeader>
-              <CardTitle>Generated Reports</CardTitle>
-              <CardDescription>View and download your generated reports</CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0">
+              <div>
+                <CardTitle>Generated Reports</CardTitle>
+                <CardDescription>View and download your generated reports</CardDescription>
+              </div>
+              {selectedReportIds.size > 0 && (
+                <Button 
+                  variant="destructive" 
+                  size="sm" 
+                  onClick={handleBulkDelete}
+                  disabled={isDeleting}
+                >
+                  {isDeleting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Deleting...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Delete {selectedReportIds.size} Selected
+                    </>
+                  )}
+                </Button>
+              )}
             </CardHeader>
             <CardContent>
               {loading ? (
@@ -661,6 +737,18 @@ export const ReportsView = () => {
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead className="w-[50px]">
+                          <Checkbox 
+                            checked={isAllSelected}
+                            ref={(el) => {
+                              if (el) {
+                                (el as HTMLButtonElement & { indeterminate: boolean }).indeterminate = isSomeSelected;
+                              }
+                            }}
+                            onCheckedChange={toggleSelectAll}
+                            aria-label="Select all"
+                          />
+                        </TableHead>
                         <TableHead>Name</TableHead>
                         <TableHead>Type</TableHead>
                         <TableHead>Customer</TableHead>
@@ -672,8 +760,16 @@ export const ReportsView = () => {
                     <TableBody>
                       {reports.map((report) => {
                         const customer = customers.find(c => c.id === report.customer_id);
+                        const isSelected = selectedReportIds.has(report.id);
                         return (
-                          <TableRow key={report.id}>
+                          <TableRow key={report.id} className={isSelected ? 'bg-muted/50' : ''}>
+                            <TableCell>
+                              <Checkbox 
+                                checked={isSelected}
+                                onCheckedChange={() => toggleReportSelection(report.id)}
+                                aria-label={`Select ${report.name}`}
+                              />
+                            </TableCell>
                             <TableCell className="font-medium">{report.name}</TableCell>
                             <TableCell>{getReportTypeBadge(report.report_type)}</TableCell>
                             <TableCell>
