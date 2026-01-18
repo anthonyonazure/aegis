@@ -709,6 +709,128 @@ export type Database = {
           },
         ]
       }
+      permission_changes: {
+        Row: {
+          change_type: string
+          created_at: string
+          current_status: boolean
+          error_message: string | null
+          health_check_id: string | null
+          id: string
+          previous_status: boolean | null
+          provider: string
+          resource_id: string
+          resource_name: string
+          tenant_connection_id: string | null
+          user_id: string
+        }
+        Insert: {
+          change_type: string
+          created_at?: string
+          current_status: boolean
+          error_message?: string | null
+          health_check_id?: string | null
+          id?: string
+          previous_status?: boolean | null
+          provider: string
+          resource_id: string
+          resource_name: string
+          tenant_connection_id?: string | null
+          user_id: string
+        }
+        Update: {
+          change_type?: string
+          created_at?: string
+          current_status?: boolean
+          error_message?: string | null
+          health_check_id?: string | null
+          id?: string
+          previous_status?: boolean | null
+          provider?: string
+          resource_id?: string
+          resource_name?: string
+          tenant_connection_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "permission_changes_health_check_id_fkey"
+            columns: ["health_check_id"]
+            isOneToOne: false
+            referencedRelation: "permission_health_checks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "permission_changes_tenant_connection_id_fkey"
+            columns: ["tenant_connection_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      permission_health_checks: {
+        Row: {
+          avg_response_time_ms: number | null
+          azure_failed: number
+          azure_passed: number
+          created_at: string
+          failed_count: number
+          graph_failed: number
+          graph_passed: number
+          id: string
+          notes: string | null
+          passed_count: number
+          results: Json
+          tenant_connection_id: string | null
+          test_type: string
+          total_resources: number
+          user_id: string
+        }
+        Insert: {
+          avg_response_time_ms?: number | null
+          azure_failed?: number
+          azure_passed?: number
+          created_at?: string
+          failed_count?: number
+          graph_failed?: number
+          graph_passed?: number
+          id?: string
+          notes?: string | null
+          passed_count?: number
+          results?: Json
+          tenant_connection_id?: string | null
+          test_type?: string
+          total_resources?: number
+          user_id: string
+        }
+        Update: {
+          avg_response_time_ms?: number | null
+          azure_failed?: number
+          azure_passed?: number
+          created_at?: string
+          failed_count?: number
+          graph_failed?: number
+          graph_passed?: number
+          id?: string
+          notes?: string | null
+          passed_count?: number
+          results?: Json
+          tenant_connection_id?: string | null
+          test_type?: string
+          total_resources?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "permission_health_checks_tenant_connection_id_fkey"
+            columns: ["tenant_connection_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       policy_deployments: {
         Row: {
           completed_at: string | null

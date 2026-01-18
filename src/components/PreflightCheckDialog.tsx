@@ -43,6 +43,7 @@ import {
   getErrorGuidance,
   groupValidationFailures,
 } from '@/lib/permissionValidator';
+import { savePermissionHealthCheck } from '@/lib/permissionHealthDatabase';
 import { useToast } from '@/hooks/use-toast';
 
 interface PreflightCheckDialogProps {
@@ -53,6 +54,7 @@ interface PreflightCheckDialogProps {
   azureRoles?: string[];
   selectedResources: string[];
   subscriptionIds?: string[];
+  tenantConnectionId?: string | null;
   onProceed: () => void;
   onCancel: () => void;
   onRefreshToken?: () => Promise<string | null>;
@@ -66,6 +68,7 @@ export function PreflightCheckDialog({
   azureRoles = [],
   selectedResources,
   subscriptionIds = [],
+  tenantConnectionId,
   onProceed,
   onCancel,
   onRefreshToken,
@@ -133,6 +136,12 @@ export function PreflightCheckDialog({
       
       setLiveResults(liveResult);
       
+      // Save results to database for historical tracking
+      await savePermissionHealthCheck(
+        liveResult.results,
+        tenantConnectionId || null,
+        'pre-export'
+      );
       if (liveResult.success) {
         toast({
           title: 'All Tests Passed! ✓',
