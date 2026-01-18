@@ -123,30 +123,48 @@ const GRAPH_ENDPOINTS: Record<string, { endpoint: string; useBeta?: boolean; cre
   // Security baselines: fetch deployed policies based on security baseline templates (not the template catalog)
   'defender/security-baselines': { endpoint: '/deviceManagement/configurationPolicies?$expand=settings', useBeta: true, supportsImport: false },
 
-  // Purview / Information Protection
-  'purview/sensitivity-labels': { endpoint: '/informationProtection/policy/labels', useBeta: true, supportsImport: false },
-  'purview/retention-policies': { endpoint: '/security/triggerTypes/retentionEventTypes', useBeta: true, supportsImport: false },
+  // Purview / Information Protection (requires E5 license)
+  'purview/sensitivity-labels': { endpoint: '/security/informationProtection/sensitivityLabels', useBeta: true, supportsImport: false },
+  'purview/retention-policies': { endpoint: '/security/labels/retentionLabels', useBeta: true, supportsImport: false },
 
-  // Exchange Online - using available Graph endpoints
+  // Exchange Online - Graph API supported endpoints
   'exchange/transport-rules': { endpoint: '/security/attackSimulation/simulationAutomations', useBeta: true, supportsImport: false },
   'exchange/connectors': { endpoint: '/organization', useBeta: false, supportsImport: false },
   'exchange/accepted-domains': { endpoint: '/domains', supportsImport: false },
   'exchange/mailbox-policies': { endpoint: '/policies/mobileDeviceManagementPolicies', useBeta: true, supportsImport: false },
   'exchange/anti-spam': { endpoint: '/security/threatIntelligence/hostComponents', useBeta: true, supportsImport: false },
   'exchange/dlp-policies': { endpoint: '/security/informationProtection/sensitivityLabels', useBeta: true, supportsImport: false },
+  // PowerShell-only Exchange resources (require Azure Automation)
+  'exchange/anti-phishing': { endpoint: '/admin/serviceAnnouncement/messages', useBeta: true, supportsImport: false }, // Placeholder - use PowerShell
+  'exchange/org-config': { endpoint: '/organization', useBeta: false, supportsImport: false },
+  'exchange/owa-policies': { endpoint: '/policies/mobileDeviceManagementPolicies', useBeta: true, supportsImport: false }, // Limited via Graph
+  'exchange/mobile-device-policies': { endpoint: '/policies/mobileDeviceManagementPolicies', useBeta: true, supportsImport: false },
 
-  // SharePoint & OneDrive - using available Graph endpoints
+  // SharePoint & OneDrive - Graph API supported endpoints
   'sharepoint/tenant-settings': { endpoint: '/sites/root', useBeta: false, supportsImport: false },
   'sharepoint/sharing-policies': { endpoint: '/sites/root/permissions', useBeta: false, supportsImport: false },
   'sharepoint/site-templates': { endpoint: '/sites?search=*&$select=id,displayName,webUrl', useBeta: false, supportsImport: false },
-  'sharepoint/hub-sites': { endpoint: '/sites/getAllSites?$select=id,displayName,webUrl,isHubSite,hubSiteId', useBeta: true, supportsImport: false },
+  'sharepoint/hub-sites': { endpoint: '/sites?$filter=isHubSite eq true&$select=id,displayName,webUrl', useBeta: false, supportsImport: false },
+  // PowerShell-only SharePoint resources (require Azure Automation)
+  'sharepoint/access-control': { endpoint: '/sites/root', useBeta: false, supportsImport: false }, // Limited via Graph
+  'sharepoint/storage-quota': { endpoint: '/sites/root', useBeta: false, supportsImport: false }, // Limited via Graph
+  'sharepoint/onedrive-settings': { endpoint: '/sites/root', useBeta: false, supportsImport: false }, // Limited via Graph
 
-  // Teams - using available Graph endpoints
+  // Teams - Graph API supported endpoints
   'teams/messaging-policies': { endpoint: '/teams', useBeta: false, supportsImport: false },
   'teams/meeting-policies': { endpoint: '/solutions/virtualEvents/webinars', useBeta: true, supportsImport: false },
   'teams/app-policies': { endpoint: '/appCatalogs/teamsApps', useBeta: false, supportsImport: false },
   'teams/calling-policies': { endpoint: '/communications/callRecords', useBeta: true, supportsImport: false },
   'teams/live-event-policies': { endpoint: '/solutions/virtualEvents/townhalls', useBeta: true, supportsImport: false },
+  // PowerShell-only Teams resources (require Azure Automation)
+  'teams/guest-policies': { endpoint: '/teams', useBeta: false, supportsImport: false }, // Limited via Graph
+  'teams/external-access': { endpoint: '/teams', useBeta: false, supportsImport: false }, // Limited via Graph
+  'teams/app-setup-policies': { endpoint: '/appCatalogs/teamsApps', useBeta: false, supportsImport: false }, // Limited via Graph
+  'teams/channel-policies': { endpoint: '/teams', useBeta: false, supportsImport: false }, // Limited via Graph
+
+  // Licensing - Graph API supported
+  'licensing/subscribed-skus': { endpoint: '/subscribedSkus', useBeta: false, supportsImport: false },
+  'licensing/user-licenses': { endpoint: '/users?$select=id,displayName,userPrincipalName,assignedLicenses&$top=999', useBeta: false, supportsImport: false },
 };
 
 // Prepare resource data for import by removing read-only properties
