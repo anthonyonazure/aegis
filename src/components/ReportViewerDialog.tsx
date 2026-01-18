@@ -331,6 +331,52 @@ export function ReportViewerDialog({ report, customerName, open, onOpenChange }:
     const recommendations = data.recommendations as string[] | undefined;
     const score = Number(summary.overallScore ?? 0);
     
+    const renderFinding = (finding: Record<string, unknown>, severity: 'critical' | 'high') => {
+      const ruleName = (finding.ruleName ?? finding.name ?? 'Unknown issue') as string;
+      const resourceName = (finding.resourceName ?? finding.resource ?? 'Unknown resource') as string;
+      const message = (finding.message ?? '') as string;
+      const resourceType = (finding.resourceType ?? '') as string;
+      
+      const borderClass = severity === 'critical' 
+        ? 'border-red-500/50 bg-red-500/10' 
+        : 'border-orange-500/50 bg-orange-500/10';
+      
+      return (
+        <div className={`p-4 rounded-lg border ${borderClass}`}>
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex-1">
+              <h5 className="font-semibold text-sm">{ruleName}</h5>
+              {resourceType && (
+                <p className="text-xs text-muted-foreground mt-0.5">{resourceType}</p>
+              )}
+            </div>
+            <Badge variant={severity === 'critical' ? 'destructive' : 'outline'} className={severity === 'high' ? 'border-orange-500 text-orange-500' : ''}>
+              {severity}
+            </Badge>
+          </div>
+          
+          <div className="mt-3 space-y-2">
+            <div className="flex items-start gap-2">
+              <span className="text-xs font-medium text-muted-foreground min-w-[80px]">Affected:</span>
+              <span className="text-sm">{resourceName}</span>
+            </div>
+            
+            {message && (
+              <div className="flex items-start gap-2">
+                <span className="text-xs font-medium text-muted-foreground min-w-[80px]">Issue:</span>
+                <span className="text-sm">{message}</span>
+              </div>
+            )}
+            
+            <div className="flex items-start gap-2">
+              <span className="text-xs font-medium text-muted-foreground min-w-[80px]">Fix:</span>
+              <span className="text-sm">{getRemediationSteps(ruleName, resourceType)}</span>
+            </div>
+          </div>
+        </div>
+      );
+    };
+    
     return (
       <div className="space-y-6">
         <div className="flex items-center gap-4 p-4 rounded-lg border bg-muted/30">
@@ -371,16 +417,14 @@ export function ReportViewerDialog({ report, customerName, open, onOpenChange }:
           <>
             <Separator />
             <div>
-              <h4 className="font-semibold mb-3 text-red-500 flex items-center gap-2">
-                <XCircle className="w-4 h-4" /> Critical Findings
+              <h4 className="font-semibold mb-4 text-red-500 flex items-center gap-2">
+                <XCircle className="w-4 h-4" /> Critical Findings — Immediate Action Required
               </h4>
-              <ul className="space-y-2">
+              <div className="space-y-3">
                 {criticalFindings.map((f, idx) => (
-                  <li key={idx} className="text-sm p-2 rounded border border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/30">
-                    {(f.ruleName ?? f.name ?? 'Unknown issue') as string}
-                  </li>
+                  <div key={idx}>{renderFinding(f, 'critical')}</div>
                 ))}
-              </ul>
+              </div>
             </div>
           </>
         )}
@@ -389,16 +433,14 @@ export function ReportViewerDialog({ report, customerName, open, onOpenChange }:
           <>
             <Separator />
             <div>
-              <h4 className="font-semibold mb-3 text-orange-500 flex items-center gap-2">
+              <h4 className="font-semibold mb-4 text-orange-500 flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4" /> High Priority Findings
               </h4>
-              <ul className="space-y-2">
+              <div className="space-y-3">
                 {highFindings.map((f, idx) => (
-                  <li key={idx} className="text-sm p-2 rounded border border-orange-200 bg-orange-50 dark:border-orange-900 dark:bg-orange-950/30">
-                    {(f.ruleName ?? f.name ?? 'Unknown issue') as string}
-                  </li>
+                  <div key={idx}>{renderFinding(f, 'high')}</div>
                 ))}
-              </ul>
+              </div>
             </div>
           </>
         )}
@@ -407,7 +449,7 @@ export function ReportViewerDialog({ report, customerName, open, onOpenChange }:
           <>
             <Separator />
             <div>
-              <h4 className="font-semibold mb-3">Recommendations</h4>
+              <h4 className="font-semibold mb-3">Next Steps</h4>
               <ul className="space-y-2">
                 {recommendations.map((rec, idx) => (
                   <li key={idx} className="flex items-start gap-2">
@@ -421,6 +463,60 @@ export function ReportViewerDialog({ report, customerName, open, onOpenChange }:
         )}
       </div>
     );
+  };
+
+  // Helper function to provide actionable remediation guidance
+  const getRemediationSteps = (ruleName: string, resourceType: string): string => {
+    const lowerRule = ruleName.toLowerCase();
+    const lowerType = resourceType.toLowerCase();
+    
+    // Access controls / authentication
+    if (lowerRule.includes('access control') || lowerRule.includes('164.312(a)(1)')) {
+      return 'Configure Conditional Access policies in Entra ID to require MFA and restrict access by location/device. Navigate to Entra ID → Security → Conditional Access → Create new policy.';
+    }
+    if (lowerRule.includes('automatic logoff') || lowerRule.includes('164.312(a)(2)(iii)')) {
+      return 'Set session timeout policies: Entra ID → Enterprise Applications → [App] → Properties → Session Management. Also configure SharePoint/Teams idle session timeout in admin centers.';
+    }
+    if (lowerRule.includes('mfa') || lowerRule.includes('multi-factor')) {
+      return 'Enable MFA for all users: Entra ID → Security → MFA → Getting Started. Create a Conditional Access policy requiring MFA for all cloud apps.';
+    }
+    if (lowerRule.includes('legacy auth') || lowerRule.includes('basic auth')) {
+      return 'Block legacy authentication: Create a Conditional Access policy with Client apps = "Other clients" and Access = "Block". Test in Report-only mode first.';
+    }
+    
+    // Conditional Access
+    if (lowerType.includes('conditionalaccess') || lowerRule.includes('conditional access')) {
+      return 'Review and update Conditional Access policies in Entra ID → Security → Conditional Access. Ensure policies cover all users and critical applications.';
+    }
+    
+    // Device management
+    if (lowerRule.includes('encryption') || lowerRule.includes('audit control')) {
+      return 'Enable BitLocker via Intune: Devices → Configuration profiles → Create → Endpoint protection. Ensure encryption is required for compliance.';
+    }
+    if (lowerType.includes('device') || lowerRule.includes('device')) {
+      return 'Configure device compliance policies in Intune → Devices → Compliance policies. Require encryption, PIN, and OS updates.';
+    }
+    
+    // Data protection
+    if (lowerRule.includes('transmission') || lowerRule.includes('integrity')) {
+      return 'Enforce TLS 1.2+ for all services. Review Exchange connectors and SharePoint settings to ensure encryption in transit.';
+    }
+    
+    // SharePoint/Teams
+    if (lowerType.includes('sharepoint')) {
+      return 'Review sharing settings in SharePoint Admin Center → Policies → Sharing. Restrict external sharing and enable sensitivity labels.';
+    }
+    if (lowerType.includes('teams')) {
+      return 'Configure Teams policies in Teams Admin Center → Messaging/Meeting policies. Review guest access and external communication settings.';
+    }
+    
+    // Exchange
+    if (lowerType.includes('exchange') || lowerType.includes('mail')) {
+      return 'Review mail flow rules in Exchange Admin Center → Mail flow → Rules. Enable transport encryption and configure anti-phishing policies.';
+    }
+    
+    // Default
+    return 'Review this configuration in the Microsoft 365 admin center or Entra ID portal. Consider enabling additional security controls and monitoring.';
   };
 
   const renderContent = () => {
