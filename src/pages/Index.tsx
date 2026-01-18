@@ -196,23 +196,16 @@ const Index = () => {
     setShowPreflightCheck(false);
     if (preflightToken) {
       // Start export in the background so the UI can immediately switch to Jobs
-      const exportPromise = startExport(
+      startExport(
         preflightToken,
         preflightResources,
         selectedFormats,
         connectionId || undefined
-      );
+      ).catch(() => {
+        // Errors/toasts are handled inside startExport
+      });
 
       setActiveTab('jobs');
-
-      // After the export finishes successfully, take the user to Reports
-      exportPromise
-        .then((jobId) => {
-          if (jobId) setActiveTab('reports');
-        })
-        .catch(() => {
-          // Errors/toasts are handled inside startExport
-        });
     }
   };
 
