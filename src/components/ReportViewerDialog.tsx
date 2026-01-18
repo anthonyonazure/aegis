@@ -73,54 +73,114 @@ export function ReportViewerDialog({ report, customerName, open, onOpenChange }:
     if (!summary) return <p className="text-muted-foreground">No data available</p>;
     
     const recommendations = data.recommendations as string[] | undefined;
+    const totalCustomers = summary.totalCustomers as number ?? 0;
+    const exportSuccessRate = summary.exportSuccessRate as number ?? 0;
+    const avgComplianceScore = summary.avgComplianceScore as number ?? 0;
+    const driftDetectedCount = summary.driftDetectedCount as number ?? 0;
+    
+    // Generate insights based on data
+    const insights: string[] = [];
+    if (totalCustomers === 0) {
+      insights.push('No customer tenants configured yet. Add tenants to start monitoring and exporting configurations.');
+    }
+    if (exportSuccessRate < 80 && exportSuccessRate > 0) {
+      insights.push(`Export success rate is ${exportSuccessRate}%. Check failed exports for permission issues or connectivity problems.`);
+    }
+    if (avgComplianceScore < 70 && avgComplianceScore > 0) {
+      insights.push(`Average compliance score of ${avgComplianceScore}% indicates security gaps. Review compliance checks for specific issues.`);
+    } else if (avgComplianceScore >= 90) {
+      insights.push(`Excellent compliance score of ${avgComplianceScore}%. Continue monitoring to maintain security posture.`);
+    }
+    if (driftDetectedCount > 0) {
+      insights.push(`Configuration drift detected in ${driftDetectedCount} run(s). Review changes and determine if they're authorized.`);
+    }
     
     return (
       <div className="space-y-6">
+        {/* Overview explanation */}
+        <Card className="bg-muted/30 border-primary/20">
+          <CardContent className="p-4">
+            <p className="text-sm text-muted-foreground">
+              This executive summary provides a high-level overview of your M365 tenant management activities, 
+              including export operations, compliance status, and configuration drift detection across all monitored tenants.
+            </p>
+          </CardContent>
+        </Card>
+
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           <MetricCard 
-            label="Total Customers" 
-            value={summary.totalCustomers as number ?? 0} 
+            label="Customer Tenants" 
+            value={totalCustomers} 
             icon={<Users className="w-4 h-4" />}
+            description="Number of M365 tenants being managed"
           />
           <MetricCard 
-            label="Total Exports" 
+            label="Configuration Exports" 
             value={summary.totalExports as number ?? 0} 
             icon={<FileText className="w-4 h-4" />}
+            description="Total export operations performed"
           />
           <MetricCard 
             label="Export Success Rate" 
-            value={`${summary.exportSuccessRate ?? 0}%`} 
+            value={`${exportSuccessRate}%`} 
             icon={<CheckCircle2 className="w-4 h-4" />}
-            valueClassName={getScoreColor(summary.exportSuccessRate as number ?? 0)}
+            valueClassName={getScoreColor(exportSuccessRate)}
+            description="Percentage of exports completed successfully"
           />
           <MetricCard 
             label="Avg Compliance Score" 
-            value={`${summary.avgComplianceScore ?? 0}%`} 
+            value={`${avgComplianceScore}%`} 
             icon={<FileCheck className="w-4 h-4" />}
-            valueClassName={getScoreColor(summary.avgComplianceScore as number ?? 0)}
+            valueClassName={getScoreColor(avgComplianceScore)}
+            description="Average security compliance across tenants"
           />
           <MetricCard 
-            label="Drift Detection Runs" 
+            label="Drift Scans" 
             value={summary.driftDetectionRuns as number ?? 0} 
             icon={<GitCompare className="w-4 h-4" />}
+            description="Number of configuration drift checks"
           />
           <MetricCard 
-            label="Drift Detected" 
-            value={summary.driftDetectedCount as number ?? 0} 
+            label="Drift Issues Found" 
+            value={driftDetectedCount} 
             icon={<AlertTriangle className="w-4 h-4" />}
-            valueClassName={(summary.driftDetectedCount as number ?? 0) > 0 ? 'text-yellow-500' : ''}
+            valueClassName={driftDetectedCount > 0 ? 'text-yellow-500' : 'text-green-500'}
+            description={driftDetectedCount > 0 ? 'Unauthorized changes detected' : 'No unexpected changes'}
           />
         </div>
+
+        {insights.length > 0 && (
+          <>
+            <Separator />
+            <div>
+              <h4 className="font-semibold mb-3 flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-primary" />
+                Key Insights
+              </h4>
+              <div className="space-y-2">
+                {insights.map((insight, idx) => (
+                  <div key={idx} className="flex items-start gap-3 p-3 rounded-lg bg-muted/30 border">
+                    <CheckCircle2 className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+                    <span className="text-sm">{insight}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
 
         {recommendations && recommendations.length > 0 && (
           <>
             <Separator />
             <div>
-              <h4 className="font-semibold mb-3">Recommendations</h4>
+              <h4 className="font-semibold mb-3 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-yellow-500" />
+                Recommended Actions
+              </h4>
               <ul className="space-y-2">
                 {recommendations.map((rec, idx) => (
-                  <li key={idx} className="flex items-start gap-2">
-                    <AlertTriangle className="w-4 h-4 text-yellow-500 mt-0.5 shrink-0" />
+                  <li key={idx} className="flex items-start gap-3 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+                    <span className="text-sm font-medium text-yellow-600 dark:text-yellow-400 min-w-[24px]">{idx + 1}.</span>
                     <span className="text-sm">{rec}</span>
                   </li>
                 ))}
@@ -136,37 +196,70 @@ export function ReportViewerDialog({ report, customerName, open, onOpenChange }:
     if (!summary) return <p className="text-muted-foreground">No data available</p>;
     
     const history = data.history as Record<string, unknown>[] | undefined;
+    const averageScore = summary.averageScore as number ?? 0;
+    const lowestScore = summary.lowestScore as number ?? 0;
+    const trend = summary.trend as string ?? 'stable';
+    
+    // Generate compliance insights
+    const getComplianceInsight = () => {
+      if (averageScore >= 90) return 'Your tenants are well-configured and meet most security requirements.';
+      if (averageScore >= 70) return 'Most security controls are in place, but some areas need attention.';
+      if (averageScore >= 50) return 'Significant security gaps exist. Prioritize addressing failed checks.';
+      return 'Critical security issues detected. Immediate action required to protect your environment.';
+    };
+    
+    const getTrendExplanation = () => {
+      if (trend === 'improving') return 'Compliance scores are trending upward — your remediation efforts are working.';
+      if (trend === 'declining') return 'Compliance scores are declining. Review recent configuration changes.';
+      return 'Compliance scores have remained stable over the measured period.';
+    };
     
     return (
       <div className="space-y-6">
+        {/* Overview explanation */}
+        <Card className="bg-muted/30 border-primary/20">
+          <CardContent className="p-4">
+            <p className="text-sm text-muted-foreground">
+              This report shows how well your M365 configurations align with security best practices and compliance requirements. 
+              Higher scores indicate better adherence to security baselines.
+            </p>
+          </CardContent>
+        </Card>
+
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           <MetricCard 
-            label="Total Checks" 
+            label="Compliance Checks Run" 
             value={summary.totalChecks as number ?? 0} 
             icon={<FileCheck className="w-4 h-4" />}
+            description="Number of compliance assessments performed"
           />
           <MetricCard 
             label="Average Score" 
-            value={`${summary.averageScore ?? 0}%`} 
+            value={`${averageScore}%`} 
             icon={<BarChart3 className="w-4 h-4" />}
-            valueClassName={getScoreColor(summary.averageScore as number ?? 0)}
+            valueClassName={getScoreColor(averageScore)}
+            description={getComplianceInsight()}
           />
           <MetricCard 
             label="Lowest Score" 
-            value={`${summary.lowestScore ?? 0}%`} 
+            value={`${lowestScore}%`} 
             icon={<TrendingDown className="w-4 h-4" />}
-            valueClassName={getScoreColor(summary.lowestScore as number ?? 0)}
+            valueClassName={getScoreColor(lowestScore)}
+            description="Tenant with the most security gaps"
           />
           <MetricCard 
-            label="Highest Score" 
+            label="Best Score" 
             value={`${summary.highestScore ?? 0}%`} 
             icon={<TrendingUp className="w-4 h-4" />}
             valueClassName={getScoreColor(summary.highestScore as number ?? 0)}
+            description="Best performing tenant"
           />
-          <div className="col-span-2 flex items-center gap-2 p-3 rounded-lg border bg-muted/30">
-            <span className="text-sm text-muted-foreground">Trend:</span>
-            {getTrendIcon(summary.trend as string)}
-            <span className="text-sm font-medium capitalize">{summary.trend as string ?? 'Stable'}</span>
+          <div className="col-span-2 p-4 rounded-lg border bg-muted/30">
+            <div className="flex items-center gap-2 mb-2">
+              {getTrendIcon(trend)}
+              <span className="text-sm font-medium capitalize">{trend} Trend</span>
+            </div>
+            <p className="text-xs text-muted-foreground">{getTrendExplanation()}</p>
           </div>
         </div>
 
@@ -174,24 +267,36 @@ export function ReportViewerDialog({ report, customerName, open, onOpenChange }:
           <>
             <Separator />
             <div>
-              <h4 className="font-semibold mb-3">Recent Compliance Checks</h4>
+              <h4 className="font-semibold mb-3">Compliance Check History</h4>
+              <p className="text-xs text-muted-foreground mb-3">
+                Each row shows a compliance assessment with pass/fail counts against security baselines.
+              </p>
               <div className="space-y-2">
-                {history.slice(0, 5).map((h, idx) => (
-                  <div key={idx} className="flex items-center justify-between p-2 rounded border bg-muted/20">
-                    <span className="text-sm">
-                      {h.checked_at ? format(new Date(h.checked_at as string), 'MMM d, yyyy HH:mm') : 'N/A'}
-                    </span>
-                    <div className="flex items-center gap-4">
-                      <Badge variant="outline" className={getScoreColor(Number(h.score ?? 0))}>
-                        {String(h.score ?? 0)}%
-                      </Badge>
-                      <div className="flex items-center gap-2 text-xs">
-                        <span className="text-green-500">{String(h.passed_count ?? 0)} passed</span>
-                        <span className="text-red-500">{String(h.failed_count ?? 0)} failed</span>
+                {history.slice(0, 5).map((h, idx) => {
+                  const passedCount = Number(h.passed_count ?? 0);
+                  const failedCount = Number(h.failed_count ?? 0);
+                  const score = Number(h.score ?? 0);
+                  return (
+                    <div key={idx} className="p-3 rounded-lg border bg-muted/20">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium">
+                          {h.checked_at ? format(new Date(h.checked_at as string), 'MMM d, yyyy \'at\' HH:mm') : 'N/A'}
+                        </span>
+                        <Badge variant="outline" className={getScoreColor(score)}>
+                          {score}% compliant
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-4 mt-2 text-xs">
+                        <span className="text-green-500 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" /> {passedCount} checks passed
+                        </span>
+                        <span className="text-red-500 flex items-center gap-1">
+                          <XCircle className="w-3 h-3" /> {failedCount} checks failed
+                        </span>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </>
@@ -204,30 +309,47 @@ export function ReportViewerDialog({ report, customerName, open, onOpenChange }:
     if (!summary) return <p className="text-muted-foreground">No data available</p>;
     
     const runs = data.runs as Record<string, unknown>[] | undefined;
+    const runsWithDrift = summary.runsWithDrift as number ?? 0;
+    const driftRate = summary.driftRate as number ?? 0;
     
     return (
       <div className="space-y-6">
+        {/* Overview explanation */}
+        <Card className="bg-muted/30 border-primary/20">
+          <CardContent className="p-4">
+            <p className="text-sm text-muted-foreground">
+              Configuration drift occurs when tenant settings change from their expected baseline state. 
+              This can happen due to manual changes, policy updates, or unauthorized modifications. 
+              Regular drift detection helps maintain configuration consistency across tenants.
+            </p>
+          </CardContent>
+        </Card>
+
         <div className="grid grid-cols-2 gap-4">
           <MetricCard 
-            label="Total Runs" 
+            label="Drift Scans Completed" 
             value={summary.totalRuns as number ?? 0} 
             icon={<GitCompare className="w-4 h-4" />}
+            description="Number of configuration comparisons performed"
           />
           <MetricCard 
-            label="Runs with Drift" 
-            value={summary.runsWithDrift as number ?? 0} 
+            label="Scans with Changes" 
+            value={runsWithDrift} 
             icon={<AlertTriangle className="w-4 h-4" />}
-            valueClassName={(summary.runsWithDrift as number ?? 0) > 0 ? 'text-yellow-500' : ''}
+            valueClassName={runsWithDrift > 0 ? 'text-yellow-500' : 'text-green-500'}
+            description={runsWithDrift > 0 ? 'Changes detected that need review' : 'No unexpected changes found'}
           />
           <MetricCard 
             label="Drift Rate" 
-            value={`${summary.driftRate ?? 0}%`} 
+            value={`${driftRate}%`} 
             icon={<BarChart3 className="w-4 h-4" />}
+            description="Percentage of scans detecting changes"
           />
           <MetricCard 
             label="Total Differences" 
             value={summary.totalDifferences as number ?? 0} 
             icon={<FileText className="w-4 h-4" />}
+            description="Individual setting changes detected"
           />
         </div>
 
@@ -235,23 +357,29 @@ export function ReportViewerDialog({ report, customerName, open, onOpenChange }:
           <>
             <Separator />
             <div>
-              <h4 className="font-semibold mb-3">Recent Drift Runs</h4>
+              <h4 className="font-semibold mb-3">Recent Drift Detection Runs</h4>
               <div className="space-y-2">
-                {runs.slice(0, 5).map((r, idx) => (
-                  <div key={idx} className="flex items-center justify-between p-2 rounded border bg-muted/20">
-                    <span className="text-sm">
-                      {r.started_at ? format(new Date(r.started_at as string), 'MMM d, yyyy HH:mm') : 'N/A'}
-                    </span>
-                    <div className="flex items-center gap-3">
-                      <Badge variant={r.drift_detected ? 'destructive' : 'outline'}>
-                        {r.drift_detected ? 'Drift Detected' : 'No Drift'}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">
-                        {String(r.total_tenants ?? 0)} tenants
-                      </span>
+                {runs.slice(0, 5).map((r, idx) => {
+                  const hasDrift = r.drift_detected as boolean;
+                  return (
+                    <div key={idx} className={`p-3 rounded-lg border ${hasDrift ? 'border-yellow-500/30 bg-yellow-500/5' : 'bg-muted/20'}`}>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium">
+                          {r.started_at ? format(new Date(r.started_at as string), 'MMM d, yyyy \'at\' HH:mm') : 'N/A'}
+                        </span>
+                        <Badge variant={hasDrift ? 'destructive' : 'outline'} className={!hasDrift ? 'bg-green-500/10 text-green-500 border-green-500/30' : ''}>
+                          {hasDrift ? 'Changes Detected' : 'No Changes'}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Scanned {String(r.total_tenants ?? 0)} tenant(s) • 
+                        {hasDrift 
+                          ? ' Review changes to determine if they were authorized' 
+                          : ' Configuration matches expected baseline'}
+                      </p>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </>
@@ -264,30 +392,46 @@ export function ReportViewerDialog({ report, customerName, open, onOpenChange }:
     if (!summary) return <p className="text-muted-foreground">No data available</p>;
     
     const usage = data.usage as Record<string, unknown>[] | undefined;
+    const totalBillable = Number(summary.totalBillable ?? 0);
     
     return (
       <div className="space-y-6">
+        {/* Overview explanation */}
+        <Card className="bg-muted/30 border-primary/20">
+          <CardContent className="p-4">
+            <p className="text-sm text-muted-foreground">
+              This billing report summarizes resource usage across your managed M365 tenants, 
+              including user counts, device enrollments, and associated costs. 
+              Use this data for customer invoicing and capacity planning.
+            </p>
+          </CardContent>
+        </Card>
+
         <div className="grid grid-cols-2 gap-4">
           <MetricCard 
-            label="Total Resources" 
+            label="Resources Managed" 
             value={summary.totalResources as number ?? 0} 
             icon={<HardDrive className="w-4 h-4" />}
+            description="Total configuration objects across tenants"
           />
           <MetricCard 
-            label="Total Users" 
+            label="Users" 
             value={summary.totalUsers as number ?? 0} 
             icon={<Users className="w-4 h-4" />}
+            description="Licensed users across all tenants"
           />
           <MetricCard 
-            label="Total Devices" 
+            label="Devices" 
             value={summary.totalDevices as number ?? 0} 
             icon={<Monitor className="w-4 h-4" />}
+            description="Enrolled devices (Intune managed)"
           />
           <MetricCard 
             label="Total Billable" 
-            value={`$${Number(summary.totalBillable ?? 0).toFixed(2)}`} 
+            value={`$${totalBillable.toFixed(2)}`} 
             icon={<DollarSign className="w-4 h-4" />}
             valueClassName="text-primary"
+            description="Aggregated billing amount"
           />
         </div>
 
@@ -295,23 +439,27 @@ export function ReportViewerDialog({ report, customerName, open, onOpenChange }:
           <>
             <Separator />
             <div>
-              <h4 className="font-semibold mb-3">Usage by Period</h4>
+              <h4 className="font-semibold mb-3">Usage Breakdown by Period</h4>
               <div className="space-y-2">
                 {usage.slice(0, 5).map((u, idx) => (
-                  <div key={idx} className="flex items-center justify-between p-2 rounded border bg-muted/20">
-                    <div>
-                      <span className="text-sm font-medium">
-                        {u.period_start ? format(new Date(u.period_start as string), 'MMM yyyy') : 'N/A'}
-                      </span>
-                      <span className="text-xs text-muted-foreground ml-2">
-                        ({u.customerName as string ?? 'All'})
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-4 text-sm">
-                      <span>{String(u.total_resources ?? 0)} resources</span>
-                      <span className="font-semibold">
+                  <div key={idx} className="p-3 rounded-lg border bg-muted/20">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-sm font-medium">
+                          {u.period_start ? format(new Date(u.period_start as string), 'MMMM yyyy') : 'N/A'}
+                        </span>
+                        <span className="text-xs text-muted-foreground ml-2">
+                          • {u.customerName as string ?? 'All Customers'}
+                        </span>
+                      </div>
+                      <span className="font-semibold text-primary">
                         ${Number(u.billable_amount ?? 0).toFixed(2)}
                       </span>
+                    </div>
+                    <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+                      <span>{String(u.total_resources ?? 0)} resources</span>
+                      <span>{String(u.total_users ?? 0)} users</span>
+                      <span>{String(u.total_devices ?? 0)} devices</span>
                     </div>
                   </div>
                 ))}
@@ -573,12 +721,14 @@ function MetricCard({
   label, 
   value, 
   icon,
-  valueClassName = ''
+  valueClassName = '',
+  description
 }: { 
   label: string; 
   value: string | number; 
   icon: React.ReactNode;
   valueClassName?: string;
+  description?: string;
 }) {
   return (
     <Card>
@@ -588,6 +738,9 @@ function MetricCard({
           <span className="text-xs">{label}</span>
         </div>
         <p className={`text-xl font-bold ${valueClassName}`}>{value}</p>
+        {description && (
+          <p className="text-xs text-muted-foreground mt-1">{description}</p>
+        )}
       </CardContent>
     </Card>
   );
