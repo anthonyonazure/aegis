@@ -212,8 +212,12 @@ export function LicenseOptimizer() {
 
       if (error) throw error;
 
-      if (data?.licensing?.licensesByProduct) {
-        const fetchedLicenses: LicenseData[] = data.licensing.licensesByProduct.map((lic: { productName: string; total: number; assigned: number }) => ({
+      // Function returns: { success: true, metrics: { licensing: { licensesByProduct: [...] } }, actions: [...] }
+      const metrics = (data as any)?.metrics ?? data;
+      const products = metrics?.licensing?.licensesByProduct;
+
+      if (Array.isArray(products) && products.length > 0) {
+        const fetchedLicenses: LicenseData[] = products.map((lic: { productName: string; total: number; assigned: number }) => ({
           name: lic.productName,
           sku: lic.productName,
           total: lic.total,
@@ -225,6 +229,12 @@ export function LicenseOptimizer() {
         toast({
           title: 'Licenses Loaded',
           description: `Loaded ${fetchedLicenses.length} license types from ${tenantName || 'tenant'}`,
+        });
+      } else {
+        toast({
+          title: 'No License Data Returned',
+          description: 'The tenant metrics call succeeded, but no license SKUs were returned.',
+          variant: 'destructive',
         });
       }
     } catch (error) {
