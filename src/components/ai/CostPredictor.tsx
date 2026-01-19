@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -29,6 +29,7 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { useTenant } from '@/contexts/TenantContext';
 import { toast } from 'sonner';
+import { getLastAnalysis, saveAnalysisResult } from '@/lib/aiApi';
 
 interface CostPredictorProps {
   tenantData?: Record<string, unknown>;
@@ -36,9 +37,27 @@ interface CostPredictorProps {
 
 export function CostPredictor({ tenantData }: CostPredictorProps) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [analysis, setAnalysis] = useState<Record<string, unknown> | null>(null);
   const [expandedOpportunities, setExpandedOpportunities] = useState<Set<string>>(new Set());
   const { tenants, connectionId, tenantName } = useTenant();
+
+  // Load last analysis on mount
+  useEffect(() => {
+    const loadLastAnalysis = async () => {
+      try {
+        const lastAnalysis = await getLastAnalysis('cost-predictor');
+        if (lastAnalysis?.result) {
+          setAnalysis(lastAnalysis.result);
+        }
+      } catch (error) {
+        console.error('Failed to load last analysis:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadLastAnalysis();
+  }, []);
 
   const runAnalysis = async () => {
     setIsAnalyzing(true);
@@ -58,6 +77,14 @@ export function CostPredictor({ tenantData }: CostPredictorProps) {
       
       if (data.success && data.analysis) {
         setAnalysis(data.analysis);
+        
+        // Save to database for persistence
+        await saveAnalysisResult({
+          analysisType: 'cost-predictor',
+          result: data.analysis,
+          tenantConnectionId: connectionId || undefined,
+        });
+
         toast.success('Cost analysis completed');
       } else {
         throw new Error(data.error || 'Analysis failed');

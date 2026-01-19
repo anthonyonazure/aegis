@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   DollarSign, 
   TrendingDown, 
@@ -22,6 +22,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { getLastAnalysis, saveAnalysisResult } from '@/lib/aiApi';
 
 interface LicenseType {
   name: string;
@@ -85,8 +86,26 @@ interface OptimizationResult {
 export function LicenseOptimizer() {
   const { toast } = useToast();
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [result, setResult] = useState<OptimizationResult | null>(null);
   const [expandedRec, setExpandedRec] = useState<string | null>(null);
+
+  // Load last analysis on mount
+  useEffect(() => {
+    const loadLastAnalysis = async () => {
+      try {
+        const lastAnalysis = await getLastAnalysis('license-optimizer');
+        if (lastAnalysis?.result) {
+          setResult(lastAnalysis.result as unknown as OptimizationResult);
+        }
+      } catch (error) {
+        console.error('Failed to load last analysis:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadLastAnalysis();
+  }, []);
 
   const analyzeAndOptimize = async () => {
     setIsAnalyzing(true);
@@ -101,6 +120,14 @@ export function LicenseOptimizer() {
       if (data.error) throw new Error(data.error);
 
       setResult(data);
+      
+      // Save to database for persistence
+      await saveAnalysisResult({
+        analysisType: 'license-optimizer',
+        result: data,
+        score: data.summary?.optimizationScore,
+      });
+
       toast({
         title: 'Analysis Complete',
         description: `Found $${data.summary?.potentialSavings?.toLocaleString() || 0}/month in potential savings`,

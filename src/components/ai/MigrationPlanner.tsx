@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   ArrowRightLeft, 
   Loader2,
@@ -24,6 +24,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { getLastAnalysis, saveAnalysisResult } from '@/lib/aiApi';
 
 interface Phase {
   phaseNumber: number;
@@ -93,9 +94,27 @@ interface MigrationPlan {
 export function MigrationPlanner() {
   const { toast } = useToast();
   const [isPlanning, setIsPlanning] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [plan, setPlan] = useState<MigrationPlan | null>(null);
   const [migrationType, setMigrationType] = useState('tenant-to-tenant');
   const [expandedPhase, setExpandedPhase] = useState<number | null>(null);
+
+  // Load last plan on mount
+  useEffect(() => {
+    const loadLastPlan = async () => {
+      try {
+        const lastAnalysis = await getLastAnalysis('migration-planner');
+        if (lastAnalysis?.result) {
+          setPlan(lastAnalysis.result as unknown as MigrationPlan);
+        }
+      } catch (error) {
+        console.error('Failed to load last plan:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadLastPlan();
+  }, []);
 
   const createPlan = async () => {
     setIsPlanning(true);
@@ -110,6 +129,14 @@ export function MigrationPlanner() {
       if (data.error) throw new Error(data.error);
 
       setPlan(data);
+      
+      // Save to database for persistence
+      await saveAnalysisResult({
+        analysisType: 'migration-planner',
+        result: data,
+        score: data.planOverview?.readinessScore,
+      });
+
       toast({
         title: 'Migration Plan Created',
         description: 'Your comprehensive migration plan is ready',

@@ -425,3 +425,55 @@ export async function getRecentAnalyses(options?: {
     expiresAt: a.expires_at,
   }));
 }
+
+// Get the most recent analysis result for a specific type
+export async function getLastAnalysis(analysisType: string): Promise<AIAnalysisResult | null> {
+  const { data, error } = await supabase
+    .from('ai_analysis_results')
+    .select('*')
+    .eq('analysis_type', analysisType)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !data) {
+    return null;
+  }
+
+  return {
+    id: data.id,
+    analysisType: data.analysis_type,
+    result: data.result as Record<string, unknown>,
+    score: data.score ? Number(data.score) : undefined,
+    recommendations: data.recommendations as unknown[],
+    createdAt: data.created_at,
+    expiresAt: data.expires_at,
+  };
+}
+
+// Save an analysis result
+export async function saveAnalysisResult(options: {
+  analysisType: string;
+  result: Record<string, unknown>;
+  score?: number;
+  recommendations?: unknown[];
+  tenantConnectionId?: string;
+  customerId?: string;
+}): Promise<boolean> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return false;
+
+  const { error } = await supabase
+    .from('ai_analysis_results')
+    .insert({
+      user_id: user.id,
+      analysis_type: options.analysisType,
+      result: options.result as unknown as import('@/integrations/supabase/types').Json,
+      score: options.score,
+      recommendations: options.recommendations as unknown as import('@/integrations/supabase/types').Json,
+      tenant_connection_id: options.tenantConnectionId,
+      customer_id: options.customerId,
+    });
+
+  return !error;
+}

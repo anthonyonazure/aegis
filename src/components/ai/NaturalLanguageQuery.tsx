@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Search, 
@@ -22,6 +22,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenant } from '@/contexts/TenantContext';
 import { cn } from '@/lib/utils';
+import { getLastAnalysis, saveAnalysisResult } from '@/lib/aiApi';
 
 interface QueryResult {
   interpretation: string;
@@ -65,9 +66,27 @@ export function NaturalLanguageQuery() {
 
   const [query, setQuery] = useState('');
   const [isQuerying, setIsQuerying] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [result, setResult] = useState<QueryResult | null>(null);
   const [queryHistory, setQueryHistory] = useState<string[]>([]);
   const [copiedQuery, setCopiedQuery] = useState<number | null>(null);
+
+  // Load last query result on mount
+  useEffect(() => {
+    const loadLastResult = async () => {
+      try {
+        const lastAnalysis = await getLastAnalysis('nl-query');
+        if (lastAnalysis?.result) {
+          setResult(lastAnalysis.result as unknown as QueryResult);
+        }
+      } catch (error) {
+        console.error('Failed to load last result:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadLastResult();
+  }, []);
 
   const runQuery = async (queryText?: string) => {
     const q = queryText || query;
@@ -99,6 +118,13 @@ export function NaturalLanguageQuery() {
       }
 
       setResult(data);
+      
+      // Save to database for persistence
+      await saveAnalysisResult({
+        analysisType: 'nl-query',
+        result: data,
+        tenantConnectionId: selectedTenantId || undefined,
+      });
       
       // Add to history
       setQueryHistory(prev => {
