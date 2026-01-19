@@ -113,3 +113,6 @@ verify_jwt = false
 
 [functions.ai-user-risk-profiler]
 verify_jwt = false
+
+[functions.ai-config-optimizer]
+verify_jwt = false

@@ -46,6 +46,7 @@ import {
   Award,
   AlertOctagon,
   UserCheck,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -92,6 +93,7 @@ const navGroups: NavGroup[] = [
     title: 'Configuration',
     items: [
       { id: 'resources', label: 'Resources', icon: FolderTree },
+      { id: 'config-optimizer', label: 'Config Optimizer', icon: SlidersHorizontal, isAI: true },
       { id: 'migration-planner', label: 'Migration Planner', icon: ArrowRightLeft, isAI: true },
       { id: 'export', label: 'Export', icon: Download },
       { id: 'import', label: 'Import / Restore', icon: Upload },
