@@ -327,13 +327,16 @@ export const RESOURCE_CATEGORIES: ResourceCategory[] = [
     id: 'copilot',
     name: 'Microsoft Copilot',
     icon: 'Sparkles',
-    description: 'Copilot licensing, policies, and usage analytics',
+    description: 'Copilot licensing, agents, policies, and usage analytics',
     subcategories: [
       { id: 'copilot-licenses', name: 'Copilot License Assignments', graphEndpoint: '/users?$filter=assignedLicenses/any(l:l/skuId eq \'639dec6b-bb19-468b-871c-c5c441c4b0cb\')&$select=id,displayName,assignedLicenses', supported: true },
       { id: 'copilot-usage', name: 'Copilot Usage Report', graphEndpoint: '/reports/getMicrosoft365CopilotUsageUserDetail(period=\'D30\')', supported: true },
       { id: 'copilot-readiness', name: 'Copilot Readiness Assessment', graphEndpoint: '/users?$select=id,displayName,assignedLicenses,licenseDetails', supported: true },
-      { id: 'semantic-index', name: 'Semantic Index Status', powershellModule: 'Microsoft.Graph', supported: true },
+      { id: 'copilot-agents', name: 'Copilot Agents', graphEndpoint: '/appCatalogs/teamsApps?$filter=distributionMethod eq \'organization\'', supported: true },
+      { id: 'declarative-agents', name: 'Declarative Agents', graphEndpoint: '/appCatalogs/teamsApps?$expand=appDefinitions', supported: true },
+      { id: 'agent-policies', name: 'Agent Governance Policies', powershellModule: 'MicrosoftTeams', supported: true },
       { id: 'copilot-plugins', name: 'Copilot Plugins & Extensions', graphEndpoint: '/appCatalogs/teamsApps?$filter=distributionMethod eq \'organization\'', supported: true },
+      { id: 'semantic-index', name: 'Semantic Index Status', powershellModule: 'Microsoft.Graph', supported: true },
       { id: 'copilot-data-controls', name: 'Copilot Data & Privacy Controls', powershellModule: 'ExchangeOnlineManagement', supported: true },
     ],
     exportFormats: [

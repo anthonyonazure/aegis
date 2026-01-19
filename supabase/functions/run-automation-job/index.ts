@@ -124,6 +124,26 @@ const POWERSHELL_RESOURCES: Record<string, { module: string; commands: string[] 
       'Get-OrganizationConfig | Select-Object *Copilot* | ConvertTo-Json -Depth 10',
     ],
   },
+  // Copilot Agent Management
+  'copilot/copilot-agents': {
+    module: 'Microsoft.Graph',
+    commands: [
+      'Get-MgAppCatalogTeamApp -Filter "distributionMethod eq \'organization\'" -ExpandProperty appDefinitions | ConvertTo-Json -Depth 10',
+    ],
+  },
+  'copilot/declarative-agents': {
+    module: 'Microsoft.Graph',
+    commands: [
+      'Get-MgAppCatalogTeamApp -ExpandProperty appDefinitions | Where-Object { $_.AppDefinitions.Bot -ne $null } | ConvertTo-Json -Depth 10',
+    ],
+  },
+  'copilot/agent-policies': {
+    module: 'MicrosoftTeams',
+    commands: [
+      'Get-CsTeamsAppPermissionPolicy | ConvertTo-Json -Depth 10',
+      'Get-CsTeamsAppSetupPolicy | ConvertTo-Json -Depth 10',
+    ],
+  },
 
   // Teams
   'teams/messaging-policies': {

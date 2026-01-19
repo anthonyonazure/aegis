@@ -31,6 +31,7 @@ import { PermissionHealthView } from '@/components/views/PermissionHealthView';
 import { PermissionsReferenceView } from '@/components/views/PermissionsReferenceView';
 import { DocumentationView } from '@/components/views/DocumentationView';
 import { GovernanceCenterView, RemediationContext } from '@/components/views/GovernanceCenterView';
+import { CopilotAgentsView } from '@/components/views/CopilotAgentsView';
 import { SettingsView } from '@/components/views/SettingsView';
 import { PreflightCheckDialog } from '@/components/PreflightCheckDialog';
 import { ALL_RESOURCE_CATEGORIES, ExportFormat } from '@/types/tenant';
@@ -307,6 +308,8 @@ const Index = () => {
         return <AuditView />;
       case 'permission-health':
         return <PermissionHealthView />;
+      case 'copilot-agents':
+        return <CopilotAgentsView />;
       case 'permissions-reference':
         return <PermissionsReferenceView />;
       case 'schedules':
