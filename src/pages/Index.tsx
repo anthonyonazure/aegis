@@ -50,6 +50,7 @@ import ChangeImpactView from '@/components/views/ChangeImpactView';
 import IncidentResponderView from '@/components/views/IncidentResponderView';
 import UserRiskProfilerView from '@/components/views/UserRiskProfilerView';
 import ConfigOptimizerView from '@/components/views/ConfigOptimizerView';
+import AIChatView from '@/components/views/AIChatView';
 import { SettingsView } from '@/components/views/SettingsView';
 import { PreflightCheckDialog } from '@/components/PreflightCheckDialog';
 import { ALL_RESOURCE_CATEGORIES, ExportFormat } from '@/types/tenant';
@@ -265,6 +266,8 @@ const Index = () => {
         return <CustomersView />;
       case 'nl-query':
         return <NaturalLanguageQueryView />;
+      case 'ai-chat':
+        return <AIChatView />;
       case 'health-dashboard':
       case 'tenant-health':
         return <TenantHealthDashboardView />;
