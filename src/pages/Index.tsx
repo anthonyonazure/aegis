@@ -38,6 +38,7 @@ import { NaturalLanguageQueryView } from '@/components/views/NaturalLanguageQuer
 import { RemediationScriptsView } from '@/components/views/RemediationScriptsView';
 import { LicenseOptimizerView } from '@/components/views/LicenseOptimizerView';
 import { DriftExplainerView } from '@/components/views/DriftExplainerView';
+import { ExecutiveReportView } from '@/components/views/ExecutiveReportView';
 import { SettingsView } from '@/components/views/SettingsView';
 import { PreflightCheckDialog } from '@/components/PreflightCheckDialog';
 import { ALL_RESOURCE_CATEGORIES, ExportFormat } from '@/types/tenant';
@@ -339,6 +340,8 @@ const Index = () => {
         return <PSAIntegrationsView />;
       case 'reports':
         return <ReportsView />;
+      case 'executive-report':
+        return <ExecutiveReportView />;
       case 'license-optimizer':
         return <LicenseOptimizerView />;
       case 'billing':
