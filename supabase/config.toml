@@ -95,3 +95,6 @@ verify_jwt = false
 
 [functions.ai-tenant-analyzer]
 verify_jwt = false
+
+[functions.ai-compliance-advisor]
+verify_jwt = false
