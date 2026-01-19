@@ -3,9 +3,21 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AzureAutomationManager } from '@/components/AzureAutomationManager';
 import { ServicePrincipalManager } from '@/components/ServicePrincipalManager';
 import { AIProviderSettings } from '@/components/ai/AIProviderSettings';
-import { Settings, Server, Key, Sparkles } from 'lucide-react';
+import { InviteManager } from '@/components/InviteManager';
+import { useIsAdmin } from '@/hooks/useIsAdmin';
+import { Settings, Server, Key, Sparkles, Users, Loader2 } from 'lucide-react';
 
 export function SettingsView() {
+  const { isAdmin, loading } = useIsAdmin();
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
@@ -32,6 +44,12 @@ export function SettingsView() {
             <Key className="h-4 w-4" />
             Service Principals
           </TabsTrigger>
+          {isAdmin && (
+            <TabsTrigger value="user-management" className="gap-2">
+              <Users className="h-4 w-4" />
+              User Management
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="ai-providers" className="space-y-4">
@@ -45,6 +63,12 @@ export function SettingsView() {
         <TabsContent value="service-principals" className="space-y-4">
           <ServicePrincipalManager />
         </TabsContent>
+
+        {isAdmin && (
+          <TabsContent value="user-management" className="space-y-4">
+            <InviteManager />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );

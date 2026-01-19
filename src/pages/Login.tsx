@@ -1,28 +1,37 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { z } from 'zod';
 import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { Lock, Mail, Loader2 } from 'lucide-react';
+import { Lock, Mail, Loader2, Ticket } from 'lucide-react';
 
 const authSchema = z.object({
   email: z.string().trim().email({ message: "Please enter a valid email address" }),
   password: z.string().min(6, { message: "Password must be at least 6 characters" }).max(72, { message: "Password must be less than 72 characters" }),
 });
 
+const inviteSchema = authSchema.extend({
+  inviteCode: z.string().min(1, { message: "Invite code is required" }),
+});
+
 export default function Login() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { signIn, signUp, isAuthenticated, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [inviteCode, setInviteCode] = useState(searchParams.get('invite') || '');
   const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [validatingInvite, setValidatingInvite] = useState(false);
+  const [errors, setErrors] = useState<{ email?: string; password?: string; inviteCode?: string }>({});
+  const [activeTab, setActiveTab] = useState(searchParams.get('invite') ? 'invite' : 'signin');
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -30,7 +39,16 @@ export default function Login() {
     }
   }, [isAuthenticated, navigate]);
 
-  const validateInputs = () => {
+  // Pre-fill invite code from URL
+  useEffect(() => {
+    const urlInvite = searchParams.get('invite');
+    if (urlInvite) {
+      setInviteCode(urlInvite);
+      setActiveTab('invite');
+    }
+  }, [searchParams]);
+
+  const validateSignInInputs = () => {
     try {
       authSchema.parse({ email, password });
       setErrors({});
@@ -48,9 +66,28 @@ export default function Login() {
     }
   };
 
+  const validateInviteInputs = () => {
+    try {
+      inviteSchema.parse({ email, password, inviteCode });
+      setErrors({});
+      return true;
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const fieldErrors: { email?: string; password?: string; inviteCode?: string } = {};
+        error.errors.forEach((err) => {
+          if (err.path[0] === 'email') fieldErrors.email = err.message;
+          if (err.path[0] === 'password') fieldErrors.password = err.message;
+          if (err.path[0] === 'inviteCode') fieldErrors.inviteCode = err.message;
+        });
+        setErrors(fieldErrors);
+      }
+      return false;
+    }
+  };
+
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validateInputs()) return;
+    if (!validateSignInInputs()) return;
     
     setLoading(true);
     const { error } = await signIn(email, password);
@@ -77,33 +114,87 @@ export default function Login() {
     }
   };
 
-  const handleSignUp = async (e: React.FormEvent) => {
+  const handleInviteSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validateInputs()) return;
+    if (!validateInviteInputs()) return;
     
-    setLoading(true);
-    const { error } = await signUp(email, password);
-    setLoading(false);
+    setValidatingInvite(true);
+    
+    // First, validate the invite code
+    try {
+      const { data: isValid, error: checkError } = await supabase
+        .rpc('check_invite_valid', { invite_code: inviteCode.toUpperCase(), user_email: email });
 
-    if (error) {
+      if (checkError) {
+        throw checkError;
+      }
+
+      if (!isValid) {
+        toast({
+          variant: 'destructive',
+          title: 'Invalid invite code',
+          description: 'The invite code is invalid, expired, or already used.',
+        });
+        setValidatingInvite(false);
+        return;
+      }
+    } catch (err) {
+      console.error('Error validating invite:', err);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to validate invite code. Please try again.',
+      });
+      setValidatingInvite(false);
+      return;
+    }
+
+    setValidatingInvite(false);
+    setLoading(true);
+
+    // Create the account
+    const { error: signUpError } = await signUp(email, password);
+
+    if (signUpError) {
+      setLoading(false);
       let errorMessage = 'Failed to create account';
-      if (error.message.includes('User already registered')) {
+      if (signUpError.message.includes('User already registered')) {
         errorMessage = 'An account with this email already exists. Please sign in instead.';
-      } else if (error.message.includes('Password')) {
-        errorMessage = error.message;
+      } else if (signUpError.message.includes('Password')) {
+        errorMessage = signUpError.message;
       }
       toast({
         variant: 'destructive',
         title: 'Sign up failed',
         description: errorMessage,
       });
-    } else {
-      toast({
-        title: 'Account created!',
-        description: 'You can now sign in with your credentials.',
-      });
-      navigate('/');
+      return;
     }
+
+    // Get the newly created user and mark the invite as used
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (user) {
+      const { data: success, error: useError } = await supabase
+        .rpc('validate_and_use_invite', { 
+          invite_code: inviteCode.toUpperCase(), 
+          user_email: email,
+          user_id: user.id
+        });
+
+      if (useError || !success) {
+        console.error('Error using invite:', useError);
+        // Account was created but invite wasn't marked as used
+        // This is okay, the user can still use the app
+      }
+    }
+
+    setLoading(false);
+    toast({
+      title: 'Account created!',
+      description: 'Welcome! You can now use the application.',
+    });
+    navigate('/');
   };
 
   if (authLoading) {
@@ -124,10 +215,10 @@ export default function Login() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="signin" className="w-full">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="signin">Sign In</TabsTrigger>
-              <TabsTrigger value="signup">Sign Up</TabsTrigger>
+              <TabsTrigger value="invite">Accept Invitation</TabsTrigger>
             </TabsList>
             
             <TabsContent value="signin">
@@ -181,14 +272,32 @@ export default function Login() {
               </form>
             </TabsContent>
             
-            <TabsContent value="signup">
-              <form onSubmit={handleSignUp} className="space-y-4 mt-4">
+            <TabsContent value="invite">
+              <form onSubmit={handleInviteSignUp} className="space-y-4 mt-4">
                 <div className="space-y-2">
-                  <Label htmlFor="signup-email">Email</Label>
+                  <Label htmlFor="invite-code">Invite Code</Label>
+                  <div className="relative">
+                    <Ticket className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="invite-code"
+                      type="text"
+                      placeholder="ABCD1234"
+                      value={inviteCode}
+                      onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+                      className="pl-10 font-mono uppercase"
+                      required
+                    />
+                  </div>
+                  {errors.inviteCode && (
+                    <p className="text-sm text-destructive">{errors.inviteCode}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="invite-email">Email</Label>
                   <div className="relative">
                     <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                     <Input
-                      id="signup-email"
+                      id="invite-email"
                       type="email"
                       placeholder="you@example.com"
                       value={email}
@@ -202,11 +311,11 @@ export default function Login() {
                   )}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="signup-password">Password</Label>
+                  <Label htmlFor="invite-password">Password</Label>
                   <div className="relative">
                     <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                     <Input
-                      id="signup-password"
+                      id="invite-password"
                       type="password"
                       placeholder="••••••••"
                       value={password}
@@ -219,8 +328,13 @@ export default function Login() {
                     <p className="text-sm text-destructive">{errors.password}</p>
                   )}
                 </div>
-                <Button type="submit" className="w-full" disabled={loading}>
-                  {loading ? (
+                <Button type="submit" className="w-full" disabled={loading || validatingInvite}>
+                  {validatingInvite ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Validating invite...
+                    </>
+                  ) : loading ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       Creating account...
