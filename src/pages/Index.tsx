@@ -36,6 +36,7 @@ import { PolicyGeneratorView } from '@/components/views/PolicyGeneratorView';
 import { AnomalyDetectionView } from '@/components/views/AnomalyDetectionView';
 import { NaturalLanguageQueryView } from '@/components/views/NaturalLanguageQueryView';
 import { RemediationScriptsView } from '@/components/views/RemediationScriptsView';
+import { LicenseOptimizerView } from '@/components/views/LicenseOptimizerView';
 import { SettingsView } from '@/components/views/SettingsView';
 import { PreflightCheckDialog } from '@/components/PreflightCheckDialog';
 import { ALL_RESOURCE_CATEGORIES, ExportFormat } from '@/types/tenant';
@@ -335,6 +336,8 @@ const Index = () => {
         return <PSAIntegrationsView />;
       case 'reports':
         return <ReportsView />;
+      case 'license-optimizer':
+        return <LicenseOptimizerView />;
       case 'billing':
         return <BillingView />;
       case 'git':

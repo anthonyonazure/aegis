@@ -74,3 +74,6 @@ verify_jwt = false
 
 [functions.ai-remediation]
 verify_jwt = false
+
+[functions.ai-license-optimizer]
+verify_jwt = false
