@@ -56,3 +56,9 @@ verify_jwt = false
 
 [functions.fetch-copilot-data]
 verify_jwt = false
+
+[functions.ai-chat]
+verify_jwt = false
+
+[functions.ai-analyze]
+verify_jwt = false
