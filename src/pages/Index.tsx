@@ -47,6 +47,7 @@ import { ComplianceAdvisorView } from '@/components/views/ComplianceAdvisorView'
 import CostPredictorView from '@/components/views/CostPredictorView';
 import SecurityBenchmarkView from '@/components/views/SecurityBenchmarkView';
 import ChangeImpactView from '@/components/views/ChangeImpactView';
+import IncidentResponderView from '@/components/views/IncidentResponderView';
 import { SettingsView } from '@/components/views/SettingsView';
 import { PreflightCheckDialog } from '@/components/PreflightCheckDialog';
 import { ALL_RESOURCE_CATEGORIES, ExportFormat } from '@/types/tenant';
@@ -329,6 +330,8 @@ const Index = () => {
         return <ValidationView />;
       case 'anomaly-detection':
         return <AnomalyDetectionView />;
+      case 'incident-responder':
+        return <IncidentResponderView />;
       case 'drift':
         return <DriftDetectionView />;
       case 'drift-explainer':
