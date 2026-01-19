@@ -33,6 +33,7 @@ import { DocumentationView } from '@/components/views/DocumentationView';
 import { GovernanceCenterView, RemediationContext } from '@/components/views/GovernanceCenterView';
 import { CopilotAgentsView } from '@/components/views/CopilotAgentsView';
 import { PolicyGeneratorView } from '@/components/views/PolicyGeneratorView';
+import { AnomalyDetectionView } from '@/components/views/AnomalyDetectionView';
 import { SettingsView } from '@/components/views/SettingsView';
 import { PreflightCheckDialog } from '@/components/PreflightCheckDialog';
 import { ALL_RESOURCE_CATEGORIES, ExportFormat } from '@/types/tenant';
@@ -299,6 +300,8 @@ const Index = () => {
         return <ImportView />;
       case 'validation':
         return <ValidationView />;
+      case 'anomaly-detection':
+        return <AnomalyDetectionView />;
       case 'drift':
         return <DriftDetectionView />;
       case 'scheduled-drift':
