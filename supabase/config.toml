@@ -65,3 +65,6 @@ verify_jwt = false
 
 [functions.ai-policy-generator]
 verify_jwt = false
+
+[functions.ai-anomaly-detection]
+verify_jwt = false

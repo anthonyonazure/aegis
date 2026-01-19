@@ -31,6 +31,7 @@ import {
   Book,
   Bot,
   Wand2,
+  Radar,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -87,6 +88,7 @@ const navGroups: NavGroup[] = [
   {
     title: 'Monitoring',
     items: [
+      { id: 'anomaly-detection', label: 'Anomaly Detection', icon: Radar },
       { id: 'drift', label: 'Drift Detection', icon: GitCompare },
       { id: 'scheduled-drift', label: 'Scheduled Drift', icon: CalendarClock },
       { id: 'validation', label: 'Validation', icon: ShieldCheck },
