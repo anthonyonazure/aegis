@@ -202,8 +202,8 @@ export const Sidebar = ({ activeTab, onTabChange, isConnected = false }: Sidebar
               <Shield className="w-5 h-5 text-primary-foreground" />
             </div>
             <div>
-              <h1 className="font-semibold text-sm text-foreground tracking-tight">M365 Export</h1>
-              <p className="text-[11px] text-muted-foreground">MSP Platform</p>
+              <h1 className="font-semibold text-sm text-foreground tracking-tight">PolicyForge</h1>
+              <p className="text-[11px] text-muted-foreground">M365 Governance Platform</p>
             </div>
           </div>
         )}

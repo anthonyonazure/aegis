@@ -123,9 +123,9 @@ async function sendEmailNotification(email: string, subject: string, message: st
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      from: 'M365 Export <notifications@resend.dev>',
+      from: 'PolicyForge <notifications@resend.dev>',
       to: [email],
-      subject: `[M365 Export] ${subject}`,
+      subject: `[PolicyForge] ${subject}`,
       html,
     }),
   });
