@@ -300,6 +300,262 @@ export function TenantAnalyzer() {
     );
   };
 
+  const renderComplianceResult = (result: Record<string, unknown>) => {
+    const overallCompliance = result.overallCompliance as number || 0;
+    const frameworks = result.frameworks as Record<string, { score: number; gaps: string[]; passed: number; failed: number }> || {};
+    const criticalGaps = result.criticalGaps as string[] || [];
+    const recommendations = result.recommendations as Array<{ action: string; priority: string; framework: string }> || [];
+
+    return (
+      <div className="space-y-6">
+        {/* Overall Compliance Score */}
+        <div className="text-center py-6">
+          <div className={cn(
+            "inline-flex items-center justify-center w-32 h-32 rounded-full",
+            getScoreBg(overallCompliance)
+          )}>
+            <span className={cn("text-4xl font-bold", getScoreColor(overallCompliance))}>
+              {overallCompliance}%
+            </span>
+          </div>
+          <p className="mt-2 text-muted-foreground">Overall Compliance Score</p>
+        </div>
+
+        {/* Framework Scores */}
+        <div className="grid gap-4 md:grid-cols-2">
+          {Object.entries(frameworks).map(([framework, data]) => (
+            <Card key={framework} className="glass-panel border-border/50">
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm">{framework}</CardTitle>
+                  <span className={cn("font-bold", getScoreColor(data.score))}>
+                    {data.score}%
+                  </span>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <Progress value={data.score} className="h-2 mb-3" />
+                <div className="flex items-center justify-between text-xs text-muted-foreground mb-3">
+                  <span className="flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3 text-green-500" />
+                    {data.passed} passed
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <AlertTriangle className="w-3 h-3 text-red-500" />
+                    {data.failed} failed
+                  </span>
+                </div>
+                {data.gaps.length > 0 && (
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground mb-1">Compliance Gaps:</p>
+                    {data.gaps.slice(0, 3).map((gap, i) => (
+                      <div key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
+                        <AlertTriangle className="w-3 h-3 mt-0.5 text-yellow-500 flex-shrink-0" />
+                        <span>{gap}</span>
+                      </div>
+                    ))}
+                    {data.gaps.length > 3 && (
+                      <p className="text-xs text-muted-foreground">+{data.gaps.length - 3} more</p>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {/* Critical Gaps */}
+        {criticalGaps.length > 0 && (
+          <Card className="glass-panel border-red-500/30">
+            <CardHeader>
+              <CardTitle className="text-sm flex items-center gap-2 text-red-400">
+                <AlertTriangle className="w-4 h-4" />
+                Critical Compliance Gaps
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ul className="space-y-2">
+                {criticalGaps.map((gap, i) => (
+                  <li key={i} className="text-sm text-foreground flex items-start gap-2">
+                    <span className="w-1 h-1 rounded-full bg-red-500 mt-2 flex-shrink-0" />
+                    {gap}
+                  </li>
+                ))}
+              </ul>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Recommendations */}
+        {recommendations.length > 0 && (
+          <Card className="glass-panel border-border/50">
+            <CardHeader>
+              <CardTitle className="text-sm flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-primary" />
+                Recommendations
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {recommendations.slice(0, 5).map((rec, i) => (
+                  <div key={i} className="flex items-center justify-between gap-4 p-3 bg-muted/30 rounded-lg">
+                    <div className="flex-1">
+                      <p className="text-sm text-foreground">{rec.action}</p>
+                      <p className="text-xs text-muted-foreground mt-1">Framework: {rec.framework}</p>
+                    </div>
+                    <Badge variant="outline" className={cn(
+                      rec.priority === 'high' ? 'border-red-500 text-red-500' :
+                      rec.priority === 'medium' ? 'border-yellow-500 text-yellow-500' :
+                      'border-green-500 text-green-500'
+                    )}>
+                      {rec.priority}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    );
+  };
+
+  const renderCostResult = (result: Record<string, unknown>) => {
+    const totalMonthlyCost = result.totalMonthlyCost as number || 0;
+    const projectedAnnualCost = result.projectedAnnualCost as number || 0;
+    const potentialSavings = result.potentialSavings as number || 0;
+    const utilizationRate = result.utilizationRate as number || 0;
+    const licenseBreakdown = result.licenseBreakdown as Array<{ name: string; assigned: number; used: number; cost: number }> || [];
+    const optimizations = result.optimizations as Array<{ action: string; savings: number; effort: string }> || [];
+    const trends = result.trends as { direction: string; percentage: number } || { direction: 'stable', percentage: 0 };
+
+    const formatCurrency = (amount: number) => {
+      return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+    };
+
+    return (
+      <div className="space-y-6">
+        {/* Cost Overview */}
+        <div className="grid gap-4 md:grid-cols-4">
+          <Card className="glass-panel border-border/50 text-center p-4">
+            <p className="text-xs text-muted-foreground mb-1">Monthly Cost</p>
+            <p className="text-2xl font-bold text-primary">{formatCurrency(totalMonthlyCost)}</p>
+          </Card>
+          <Card className="glass-panel border-border/50 text-center p-4">
+            <p className="text-xs text-muted-foreground mb-1">Annual Projection</p>
+            <p className="text-2xl font-bold text-foreground">{formatCurrency(projectedAnnualCost)}</p>
+          </Card>
+          <Card className="glass-panel border-border/50 text-center p-4">
+            <p className="text-xs text-muted-foreground mb-1">Potential Savings</p>
+            <p className="text-2xl font-bold text-green-500">{formatCurrency(potentialSavings)}</p>
+          </Card>
+          <Card className="glass-panel border-border/50 text-center p-4">
+            <p className="text-xs text-muted-foreground mb-1">Utilization</p>
+            <p className={cn("text-2xl font-bold", getScoreColor(utilizationRate))}>{utilizationRate}%</p>
+          </Card>
+        </div>
+
+        {/* Trend Indicator */}
+        <Card className="glass-panel border-border/50">
+          <CardContent className="pt-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <TrendingUp className={cn(
+                  "w-5 h-5",
+                  trends.direction === 'up' ? 'text-red-500' :
+                  trends.direction === 'down' ? 'text-green-500' :
+                  'text-muted-foreground'
+                )} />
+                <span className="text-sm text-foreground">
+                  Cost trend: <span className="font-medium capitalize">{trends.direction}</span>
+                </span>
+              </div>
+              <Badge variant="outline" className={cn(
+                trends.direction === 'up' ? 'border-red-500 text-red-500' :
+                trends.direction === 'down' ? 'border-green-500 text-green-500' :
+                ''
+              )}>
+                {trends.percentage > 0 ? '+' : ''}{trends.percentage}% vs last month
+              </Badge>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Utilization Bar */}
+        <Card className="glass-panel border-border/50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">License Utilization</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Progress value={utilizationRate} className="h-3 mb-2" />
+            <p className="text-xs text-muted-foreground">
+              {utilizationRate}% of licenses are actively used
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* License Breakdown */}
+        {licenseBreakdown.length > 0 && (
+          <Card className="glass-panel border-border/50">
+            <CardHeader>
+              <CardTitle className="text-sm">License Breakdown</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {licenseBreakdown.map((license, i) => (
+                  <div key={i} className="p-3 bg-muted/30 rounded-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-foreground">{license.name}</span>
+                      <span className="text-sm text-primary">{formatCurrency(license.cost)}/mo</span>
+                    </div>
+                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                      <span>{license.assigned} assigned</span>
+                      <span>{license.used} active</span>
+                      <span className={cn(
+                        license.used / license.assigned < 0.5 ? 'text-red-500' : 
+                        license.used / license.assigned < 0.8 ? 'text-yellow-500' : 
+                        'text-green-500'
+                      )}>
+                        {Math.round((license.used / license.assigned) * 100)}% used
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Optimizations */}
+        {optimizations.length > 0 && (
+          <Card className="glass-panel border-green-500/30">
+            <CardHeader>
+              <CardTitle className="text-sm flex items-center gap-2 text-green-400">
+                <Zap className="w-4 h-4" />
+                Cost Optimization Opportunities
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {optimizations.map((opt, i) => (
+                  <div key={i} className="flex items-center justify-between gap-4 p-3 bg-muted/30 rounded-lg">
+                    <div className="flex-1">
+                      <p className="text-sm text-foreground">{opt.action}</p>
+                      <p className="text-xs text-muted-foreground">{opt.effort} effort</p>
+                    </div>
+                    <Badge className="bg-green-500/20 text-green-400">
+                      Save {formatCurrency(opt.savings)}/mo
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
       <Tabs defaultValue="analyze" className="space-y-4">
@@ -403,11 +659,8 @@ export function TenantAnalyzer() {
                   <ScrollArea className="max-h-[600px]">
                     {analysisType === 'tenant-health' && renderHealthResult(analysisResult)}
                     {analysisType === 'risk-score' && renderRiskResult(analysisResult)}
-                    {(analysisType === 'compliance' || analysisType === 'cost-forecast') && (
-                      <pre className="text-sm text-muted-foreground whitespace-pre-wrap">
-                        {JSON.stringify(analysisResult, null, 2)}
-                      </pre>
-                    )}
+                    {analysisType === 'compliance' && renderComplianceResult(analysisResult)}
+                    {analysisType === 'cost-forecast' && renderCostResult(analysisResult)}
                   </ScrollArea>
                 </CardContent>
               </Card>
