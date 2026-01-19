@@ -137,7 +137,7 @@ export const RESOURCE_CATEGORIES: ResourceCategory[] = [
       { id: 'json', name: 'JSON', extension: '.json', supported: true },
       { id: 'terraform', name: 'Terraform', extension: '.tf', supported: true },
       { id: 'powershell', name: 'PowerShell', extension: '.ps1', supported: true },
-      { id: 'bicep', name: 'Bicep', extension: '.bicep', supported: false },
+      { id: 'bicep', name: 'Bicep', extension: '.bicep', supported: true },
     ],
   },
   {
@@ -155,7 +155,7 @@ export const RESOURCE_CATEGORIES: ResourceCategory[] = [
       { id: 'json', name: 'JSON', extension: '.json', supported: true },
       { id: 'terraform', name: 'Terraform', extension: '.tf', supported: true },
       { id: 'powershell', name: 'PowerShell', extension: '.ps1', supported: true },
-      { id: 'bicep', name: 'Bicep', extension: '.bicep', supported: false },
+      { id: 'bicep', name: 'Bicep', extension: '.bicep', supported: true },
     ],
   },
   {
@@ -194,7 +194,7 @@ export const RESOURCE_CATEGORIES: ResourceCategory[] = [
       { id: 'json', name: 'JSON', extension: '.json', supported: true },
       { id: 'terraform', name: 'Terraform', extension: '.tf', supported: true },
       { id: 'powershell', name: 'PowerShell', extension: '.ps1', supported: true },
-      { id: 'bicep', name: 'Bicep', extension: '.bicep', supported: false },
+      { id: 'bicep', name: 'Bicep', extension: '.bicep', supported: true },
     ],
   },
   {
