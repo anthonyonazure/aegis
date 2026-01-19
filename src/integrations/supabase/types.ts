@@ -64,6 +64,7 @@ export type Database = {
           id: string
           recommendations: Json | null
           result: Json
+          scheduled_job_id: string | null
           score: number | null
           tenant_connection_id: string | null
           user_id: string
@@ -76,6 +77,7 @@ export type Database = {
           id?: string
           recommendations?: Json | null
           result: Json
+          scheduled_job_id?: string | null
           score?: number | null
           tenant_connection_id?: string | null
           user_id: string
@@ -88,6 +90,7 @@ export type Database = {
           id?: string
           recommendations?: Json | null
           result?: Json
+          scheduled_job_id?: string | null
           score?: number | null
           tenant_connection_id?: string | null
           user_id?: string
@@ -98,6 +101,13 @@ export type Database = {
             columns: ["customer_id"]
             isOneToOne: false
             referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_analysis_results_scheduled_job_id_fkey"
+            columns: ["scheduled_job_id"]
+            isOneToOne: false
+            referencedRelation: "ai_scheduled_jobs"
             referencedColumns: ["id"]
           },
           {
@@ -383,6 +393,65 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      ai_scheduled_jobs: {
+        Row: {
+          created_at: string
+          day_of_week: number | null
+          frequency: Database["public"]["Enums"]["schedule_frequency"]
+          id: string
+          is_active: boolean
+          last_run_at: string | null
+          name: string
+          next_run_at: string | null
+          notification_channel_ids: string[] | null
+          service_type: string
+          tenant_connection_id: string | null
+          time_of_day: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          day_of_week?: number | null
+          frequency: Database["public"]["Enums"]["schedule_frequency"]
+          id?: string
+          is_active?: boolean
+          last_run_at?: string | null
+          name: string
+          next_run_at?: string | null
+          notification_channel_ids?: string[] | null
+          service_type: string
+          tenant_connection_id?: string | null
+          time_of_day?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          day_of_week?: number | null
+          frequency?: Database["public"]["Enums"]["schedule_frequency"]
+          id?: string
+          is_active?: boolean
+          last_run_at?: string | null
+          name?: string
+          next_run_at?: string | null
+          notification_channel_ids?: string[] | null
+          service_type?: string
+          tenant_connection_id?: string | null
+          time_of_day?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_scheduled_jobs_tenant_connection_id_fkey"
+            columns: ["tenant_connection_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_connections"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       audit_logs: {
         Row: {
@@ -1691,6 +1760,39 @@ export type Database = {
           id?: string
           used_at?: string | null
           used_by?: string | null
+        }
+        Relationships: []
+      }
+      notification_channels: {
+        Row: {
+          channel_type: Database["public"]["Enums"]["notification_channel_type"]
+          config: Json
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          channel_type: Database["public"]["Enums"]["notification_channel_type"]
+          config?: Json
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          channel_type?: Database["public"]["Enums"]["notification_channel_type"]
+          config?: Json
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -3353,6 +3455,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      calculate_next_run: {
+        Args: {
+          p_day_of_week: number
+          p_frequency: Database["public"]["Enums"]["schedule_frequency"]
+          p_time_of_day: string
+        }
+        Returns: string
+      }
       check_invite_valid: {
         Args: { invite_code: string; user_email: string }
         Returns: boolean
@@ -3429,6 +3539,8 @@ export type Database = {
         | "failed"
         | "cancelled"
         | "rolled_back"
+      notification_channel_type: "slack" | "teams" | "email"
+      schedule_frequency: "daily" | "weekly"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -3579,6 +3691,8 @@ export const Constants = {
         "cancelled",
         "rolled_back",
       ],
+      notification_channel_type: ["slack", "teams", "email"],
+      schedule_frequency: ["daily", "weekly"],
     },
   },
 } as const
