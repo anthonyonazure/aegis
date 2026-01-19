@@ -40,6 +40,7 @@ import { LicenseOptimizerView } from '@/components/views/LicenseOptimizerView';
 import { DriftExplainerView } from '@/components/views/DriftExplainerView';
 import { ExecutiveReportView } from '@/components/views/ExecutiveReportView';
 import { SecurityPredictorView } from '@/components/views/SecurityPredictorView';
+import { MigrationPlannerView } from '@/components/views/MigrationPlannerView';
 import { SettingsView } from '@/components/views/SettingsView';
 import { PreflightCheckDialog } from '@/components/PreflightCheckDialog';
 import { ALL_RESOURCE_CATEGORIES, ExportFormat } from '@/types/tenant';
@@ -294,6 +295,8 @@ const Index = () => {
             onSetResources={setSelectedResources}
           />
         );
+      case 'migration-planner':
+        return <MigrationPlannerView />;
       case 'export':
         return (
           <ExportView 

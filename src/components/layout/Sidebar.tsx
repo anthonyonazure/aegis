@@ -38,6 +38,7 @@ import {
   MessageSquareText,
   ClipboardList,
   Eye,
+  ArrowRightLeft,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -79,6 +80,7 @@ const navGroups: NavGroup[] = [
     title: 'Configuration',
     items: [
       { id: 'resources', label: 'Resources', icon: FolderTree },
+      { id: 'migration-planner', label: 'Migration Planner', icon: ArrowRightLeft },
       { id: 'export', label: 'Export', icon: Download },
       { id: 'import', label: 'Import / Restore', icon: Upload },
       { id: 'jobs', label: 'Export Jobs', icon: History },

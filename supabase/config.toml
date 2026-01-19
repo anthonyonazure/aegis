@@ -86,3 +86,6 @@ verify_jwt = false
 
 [functions.ai-security-predictor]
 verify_jwt = false
+
+[functions.ai-migration-planner]
+verify_jwt = false
