@@ -35,6 +35,7 @@ import {
   Search,
   Wrench,
   Wallet,
+  MessageSquareText,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -95,6 +96,7 @@ const navGroups: NavGroup[] = [
     items: [
       { id: 'anomaly-detection', label: 'Anomaly Detection', icon: Radar },
       { id: 'drift', label: 'Drift Detection', icon: GitCompare },
+      { id: 'drift-explainer', label: 'Drift Explainer', icon: MessageSquareText },
       { id: 'scheduled-drift', label: 'Scheduled Drift', icon: CalendarClock },
       { id: 'validation', label: 'Validation', icon: ShieldCheck },
       { id: 'compliance', label: 'Compliance Checks', icon: AlertTriangle },
