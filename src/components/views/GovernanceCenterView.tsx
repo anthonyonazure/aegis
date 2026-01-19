@@ -22,6 +22,8 @@ import { GovernanceScheduleManager } from '@/components/GovernanceScheduleManage
 import { TenantComparisonView } from '@/components/TenantComparisonView';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
+import { getRemediationGuide, RemediationGuide } from '@/lib/remediationGuides';
+import { RemediationGuideDialog } from '@/components/RemediationGuideDialog';
 import {
   Shield,
   CheckCircle2,
@@ -732,11 +734,17 @@ export function GovernanceCenterView({ onNavigate, onDeployPolicy }: GovernanceC
         description: `Generate report for: ${selectedAction.title}`,
       });
     } else {
-      // Manual action - show guidance
-      toast({
-        title: 'Manual Remediation',
-        description: `Review the documentation and follow manual steps for: ${selectedAction.title}`,
-      });
+      // Manual action - show detailed remediation guide
+      const guide = getRemediationGuide(selectedAction.id);
+      if (guide) {
+        setActiveRemediationGuide(guide);
+        setShowRemediationGuide(true);
+      } else {
+        toast({
+          title: 'Manual Remediation',
+          description: `Review the documentation and follow manual steps for: ${selectedAction.title}`,
+        });
+      }
     }
 
     setShowActionDialog(false);
