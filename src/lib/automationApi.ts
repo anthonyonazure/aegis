@@ -62,8 +62,18 @@ export const POWERSHELL_RESOURCE_TYPES = [
   'exchange/anti-spam',
   'exchange/dlp-policies',
   'exchange/anti-phishing',
+  'exchange/org-config',
   'exchange/owa-policies',
   'exchange/mobile-device-policies',
+  
+  // Purview / Compliance - DLP and Insider Risk
+  'purview/dlp-policies',
+  'purview/insider-risk',
+  
+  // Copilot resources - Semantic Index and Data Controls
+  'copilot/semantic-index',
+  'copilot/copilot-data-controls',
+  
   // Teams resources that require PowerShell
   'teams/messaging-policies',
   'teams/meeting-policies',
@@ -73,17 +83,19 @@ export const POWERSHELL_RESOURCE_TYPES = [
   'teams/external-access',
   'teams/app-setup-policies',
   'teams/channel-policies',
+  
   // SharePoint resources that require PowerShell
   'sharepoint/tenant-settings',
   'sharepoint/sharing-policies',
-  'sharepoint/hub-sites',
   'sharepoint/access-control',
   'sharepoint/storage-quota',
   'sharepoint/onedrive-settings',
+  
   // Defender resources that require PowerShell
   'defender/safe-attachments',
   'defender/safe-links',
   'defender/anti-phishing',
+  
   // License optimization reports that need Reports.Read.All or PowerShell
   'license-optimization/inactive-users',
   'license-optimization/unused-services',
@@ -91,8 +103,6 @@ export const POWERSHELL_RESOURCE_TYPES = [
   'license-optimization/mailbox-usage',
   'license-optimization/onedrive-usage',
   'license-optimization/teams-usage',
-  // Copilot resources that need specific permissions
-  'copilot/copilot-readiness',
 ];
 
 export function isPowerShellResource(resourceType: string): boolean {

@@ -273,8 +273,8 @@ export const RESOURCE_CATEGORIES: ResourceCategory[] = [
     subcategories: [
       { id: 'sensitivity-labels', name: 'Sensitivity Labels', graphEndpoint: '/security/informationProtection/sensitivityLabels', supported: true },
       { id: 'retention-policies', name: 'Retention Policies', graphEndpoint: '/security/labels/retentionLabels', supported: true },
-      { id: 'dlp-policies', name: 'DLP Policies', powershellModule: 'ExchangeOnlineManagement', supported: false, comingSoonReason: 'Requires PowerShell module' },
-      { id: 'insider-risk', name: 'Insider Risk Policies', powershellModule: 'ExchangeOnlineManagement', supported: false, comingSoonReason: 'Requires PowerShell module' },
+      { id: 'dlp-policies', name: 'DLP Policies', powershellModule: 'ExchangeOnlineManagement', supported: true },
+      { id: 'insider-risk', name: 'Insider Risk Policies', powershellModule: 'ExchangeOnlineManagement', supported: true },
     ],
     exportFormats: [
       { id: 'json', name: 'JSON', extension: '.json', supported: true },
@@ -332,9 +332,9 @@ export const RESOURCE_CATEGORIES: ResourceCategory[] = [
       { id: 'copilot-licenses', name: 'Copilot License Assignments', graphEndpoint: '/users?$filter=assignedLicenses/any(l:l/skuId eq \'639dec6b-bb19-468b-871c-c5c441c4b0cb\')&$select=id,displayName,assignedLicenses', supported: true },
       { id: 'copilot-usage', name: 'Copilot Usage Report', graphEndpoint: '/reports/getMicrosoft365CopilotUsageUserDetail(period=\'D30\')', supported: true },
       { id: 'copilot-readiness', name: 'Copilot Readiness Assessment', graphEndpoint: '/users?$select=id,displayName,assignedLicenses,licenseDetails', supported: true },
-      { id: 'semantic-index', name: 'Semantic Index Status', powershellModule: 'Microsoft.Graph', supported: false, comingSoonReason: 'Requires admin consent for advanced APIs' },
+      { id: 'semantic-index', name: 'Semantic Index Status', powershellModule: 'Microsoft.Graph', supported: true },
       { id: 'copilot-plugins', name: 'Copilot Plugins & Extensions', graphEndpoint: '/appCatalogs/teamsApps?$filter=distributionMethod eq \'organization\'', supported: true },
-      { id: 'copilot-data-controls', name: 'Copilot Data & Privacy Controls', powershellModule: 'ExchangeOnlineManagement', supported: false, comingSoonReason: 'Requires PowerShell module' },
+      { id: 'copilot-data-controls', name: 'Copilot Data & Privacy Controls', powershellModule: 'ExchangeOnlineManagement', supported: true },
     ],
     exportFormats: [
       { id: 'json', name: 'JSON', extension: '.json', supported: true },

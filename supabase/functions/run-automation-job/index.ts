@@ -64,6 +64,55 @@ const POWERSHELL_RESOURCES: Record<string, { module: string; commands: string[] 
     module: 'ExchangeOnlineManagement',
     commands: ['Get-DlpPolicy | ConvertTo-Json -Depth 10'],
   },
+  'exchange/anti-phishing': {
+    module: 'ExchangeOnlineManagement',
+    commands: ['Get-AntiPhishPolicy | ConvertTo-Json -Depth 10'],
+  },
+  'exchange/org-config': {
+    module: 'ExchangeOnlineManagement',
+    commands: ['Get-OrganizationConfig | ConvertTo-Json -Depth 10'],
+  },
+  'exchange/owa-policies': {
+    module: 'ExchangeOnlineManagement',
+    commands: ['Get-OwaMailboxPolicy | ConvertTo-Json -Depth 10'],
+  },
+  'exchange/mobile-device-policies': {
+    module: 'ExchangeOnlineManagement',
+    commands: ['Get-MobileDeviceMailboxPolicy | ConvertTo-Json -Depth 10'],
+  },
+
+  // Purview / Compliance - DLP and Insider Risk
+  'purview/dlp-policies': {
+    module: 'ExchangeOnlineManagement',
+    commands: [
+      'Get-DlpCompliancePolicy | ConvertTo-Json -Depth 10',
+      'Get-DlpComplianceRule | ConvertTo-Json -Depth 10',
+    ],
+  },
+  'purview/insider-risk': {
+    module: 'ExchangeOnlineManagement',
+    commands: [
+      'Get-InsiderRiskPolicy | ConvertTo-Json -Depth 10',
+    ],
+  },
+
+  // Copilot - Semantic Index and Data Controls
+  'copilot/semantic-index': {
+    module: 'Microsoft.Graph',
+    commands: [
+      // Semantic Index status via Graph PowerShell
+      'Get-MgSearchAcronym -All | ConvertTo-Json -Depth 10',
+      'Get-MgSearchBookmark -All | ConvertTo-Json -Depth 10',
+    ],
+  },
+  'copilot/copilot-data-controls': {
+    module: 'ExchangeOnlineManagement',
+    commands: [
+      'Get-M365DataAtRestEncryptionPolicy | ConvertTo-Json -Depth 10',
+      'Get-OrganizationConfig | Select-Object *Copilot* | ConvertTo-Json -Depth 10',
+    ],
+  },
+
   // Teams
   'teams/messaging-policies': {
     module: 'MicrosoftTeams',
@@ -81,6 +130,23 @@ const POWERSHELL_RESOURCES: Record<string, { module: string; commands: string[] 
     module: 'MicrosoftTeams',
     commands: ['Get-CsTeamsMeetingBroadcastPolicy | ConvertTo-Json -Depth 10'],
   },
+  'teams/guest-policies': {
+    module: 'MicrosoftTeams',
+    commands: ['Get-CsTeamsGuestMessagingConfiguration | ConvertTo-Json -Depth 10'],
+  },
+  'teams/external-access': {
+    module: 'MicrosoftTeams',
+    commands: ['Get-CsTenantFederationConfiguration | ConvertTo-Json -Depth 10'],
+  },
+  'teams/app-setup-policies': {
+    module: 'MicrosoftTeams',
+    commands: ['Get-CsTeamsAppSetupPolicy | ConvertTo-Json -Depth 10'],
+  },
+  'teams/channel-policies': {
+    module: 'MicrosoftTeams',
+    commands: ['Get-CsTeamsChannelsPolicy | ConvertTo-Json -Depth 10'],
+  },
+
   // SharePoint
   'sharepoint/tenant-settings': {
     module: 'PnP.PowerShell',
@@ -88,8 +154,21 @@ const POWERSHELL_RESOURCES: Record<string, { module: string; commands: string[] 
   },
   'sharepoint/sharing-policies': {
     module: 'PnP.PowerShell',
-    commands: ['Get-PnPTenantSharingSettings | ConvertTo-Json -Depth 10'],
+    commands: ['Get-PnPTenant | Select-Object *Sharing* | ConvertTo-Json -Depth 10'],
   },
+  'sharepoint/access-control': {
+    module: 'PnP.PowerShell',
+    commands: ['Get-PnPTenant | Select-Object *Access*, *Block*, *Allow* | ConvertTo-Json -Depth 10'],
+  },
+  'sharepoint/storage-quota': {
+    module: 'PnP.PowerShell',
+    commands: ['Get-PnPTenant | Select-Object *Storage*, *Quota* | ConvertTo-Json -Depth 10'],
+  },
+  'sharepoint/onedrive-settings': {
+    module: 'PnP.PowerShell',
+    commands: ['Get-PnPTenant | Select-Object *OneDrive* | ConvertTo-Json -Depth 10'],
+  },
+
   // Defender
   'defender/safe-attachments': {
     module: 'ExchangeOnlineManagement',
