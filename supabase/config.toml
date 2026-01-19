@@ -68,3 +68,6 @@ verify_jwt = false
 
 [functions.ai-anomaly-detection]
 verify_jwt = false
+
+[functions.ai-nl-query]
+verify_jwt = false
