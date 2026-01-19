@@ -104,3 +104,6 @@ verify_jwt = false
 
 [functions.ai-security-benchmark]
 verify_jwt = false
+
+[functions.ai-change-impact]
+verify_jwt = false

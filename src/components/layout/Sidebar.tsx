@@ -102,6 +102,7 @@ const navGroups: NavGroup[] = [
       { id: 'policy-templates', label: 'Policy Templates', icon: FileCheck },
       { id: 'policy-generator', label: 'Policy Generator', icon: Wand2, isAI: true },
       { id: 'remediation-scripts', label: 'Remediation Scripts', icon: Wrench, isAI: true },
+      { id: 'change-impact', label: 'Change Impact', icon: GitCompare, isAI: true },
       { id: 'policy-deployment', label: 'Policy Deployment', icon: Rocket },
       { id: 'scheduled-deployments', label: 'Scheduled Deployments', icon: CalendarClock },
     ],
