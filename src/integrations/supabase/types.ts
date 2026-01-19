@@ -14,6 +14,101 @@ export type Database = {
   }
   public: {
     Tables: {
+      adoption_benchmarks: {
+        Row: {
+          benchmark_type: string
+          comparison_data: Json | null
+          created_at: string
+          customer_id: string | null
+          id: string
+          metrics: Json
+          percentile: number | null
+          user_id: string
+        }
+        Insert: {
+          benchmark_type: string
+          comparison_data?: Json | null
+          created_at?: string
+          customer_id?: string | null
+          id?: string
+          metrics?: Json
+          percentile?: number | null
+          user_id: string
+        }
+        Update: {
+          benchmark_type?: string
+          comparison_data?: Json | null
+          created_at?: string
+          customer_id?: string | null
+          id?: string
+          metrics?: Json
+          percentile?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "adoption_benchmarks_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_analysis_results: {
+        Row: {
+          analysis_type: string
+          created_at: string
+          customer_id: string | null
+          expires_at: string | null
+          id: string
+          recommendations: Json | null
+          result: Json
+          score: number | null
+          tenant_connection_id: string | null
+          user_id: string
+        }
+        Insert: {
+          analysis_type: string
+          created_at?: string
+          customer_id?: string | null
+          expires_at?: string | null
+          id?: string
+          recommendations?: Json | null
+          result: Json
+          score?: number | null
+          tenant_connection_id?: string | null
+          user_id: string
+        }
+        Update: {
+          analysis_type?: string
+          created_at?: string
+          customer_id?: string | null
+          expires_at?: string | null
+          id?: string
+          recommendations?: Json | null
+          result?: Json
+          score?: number | null
+          tenant_connection_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_analysis_results_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_analysis_results_tenant_connection_id_fkey"
+            columns: ["tenant_connection_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_builder_models: {
         Row: {
           accuracy_score: number | null
@@ -82,6 +177,60 @@ export type Database = {
           },
           {
             foreignKeyName: "ai_builder_models_tenant_connection_id_fkey"
+            columns: ["tenant_connection_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_conversations: {
+        Row: {
+          created_at: string
+          customer_id: string | null
+          feature_type: string
+          id: string
+          model_id: string | null
+          provider: string
+          tenant_connection_id: string | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          customer_id?: string | null
+          feature_type: string
+          id?: string
+          model_id?: string | null
+          provider?: string
+          tenant_connection_id?: string | null
+          title?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          customer_id?: string | null
+          feature_type?: string
+          id?: string
+          model_id?: string | null
+          provider?: string
+          tenant_connection_id?: string | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_conversations_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_conversations_tenant_connection_id_fkey"
             columns: ["tenant_connection_id"]
             isOneToOne: false
             referencedRelation: "tenant_connections"
@@ -160,6 +309,80 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      ai_messages: {
+        Row: {
+          content: string
+          conversation_id: string
+          created_at: string
+          id: string
+          metadata: Json | null
+          role: string
+        }
+        Insert: {
+          content: string
+          conversation_id: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          role: string
+        }
+        Update: {
+          content?: string
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          role?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "ai_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_provider_settings: {
+        Row: {
+          api_endpoint: string | null
+          created_at: string
+          display_name: string
+          id: string
+          is_active: boolean
+          is_default: boolean
+          model_id: string | null
+          provider: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          api_endpoint?: string | null
+          created_at?: string
+          display_name: string
+          id?: string
+          is_active?: boolean
+          is_default?: boolean
+          model_id?: string | null
+          provider: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          api_endpoint?: string | null
+          created_at?: string
+          display_name?: string
+          id?: string
+          is_active?: boolean
+          is_default?: boolean
+          model_id?: string | null
+          provider?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       audit_logs: {
         Row: {
@@ -1961,6 +2184,57 @@ export type Database = {
         }
         Relationships: []
       }
+      risk_assessments: {
+        Row: {
+          category_scores: Json
+          created_at: string
+          customer_id: string | null
+          id: string
+          overall_score: number
+          recommendations: Json
+          risk_factors: Json
+          tenant_connection_id: string
+          user_id: string
+        }
+        Insert: {
+          category_scores?: Json
+          created_at?: string
+          customer_id?: string | null
+          id?: string
+          overall_score: number
+          recommendations?: Json
+          risk_factors?: Json
+          tenant_connection_id: string
+          user_id: string
+        }
+        Update: {
+          category_scores?: Json
+          created_at?: string
+          customer_id?: string | null
+          id?: string
+          overall_score?: number
+          recommendations?: Json
+          risk_factors?: Json
+          tenant_connection_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "risk_assessments_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "risk_assessments_tenant_connection_id_fkey"
+            columns: ["tenant_connection_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       scheduled_deployment_configs: {
         Row: {
           created_at: string
@@ -2998,6 +3272,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_ai_api_key: { Args: { p_provider: string }; Returns: string }
       get_decrypted_credential: {
         Args: { p_tenant_connection_id: string; p_user_id: string }
         Returns: {
@@ -3015,6 +3290,10 @@ export type Database = {
       }
       owns_customer: { Args: { p_customer_id: string }; Returns: boolean }
       owns_deployment: { Args: { p_deployment_id: string }; Returns: boolean }
+      store_ai_api_key: {
+        Args: { p_api_key: string; p_provider: string }
+        Returns: string
+      }
       store_encrypted_credential: {
         Args: {
           p_client_id: string
