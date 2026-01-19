@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { format } from 'date-fns';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -29,7 +30,8 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { useTenant } from '@/contexts/TenantContext';
 import { toast } from 'sonner';
-import { getLastAnalysis, saveAnalysisResult } from '@/lib/aiApi';
+import { getLastAnalysis, saveAnalysisResult, type AIAnalysisResult } from '@/lib/aiApi';
+import { AIAnalysisHistoryPanel } from './AIAnalysisHistoryPanel';
 
 interface CostPredictorProps {
   tenantData?: Record<string, unknown>;
@@ -40,7 +42,13 @@ export function CostPredictor({ tenantData }: CostPredictorProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [analysis, setAnalysis] = useState<Record<string, unknown> | null>(null);
   const [expandedOpportunities, setExpandedOpportunities] = useState<Set<string>>(new Set());
+  const [lastAnalyzedAt, setLastAnalyzedAt] = useState<string | null>(null);
   const { tenants, connectionId, tenantName } = useTenant();
+
+  const handleLoadHistoricalResult = (historicalResult: AIAnalysisResult) => {
+    setAnalysis(historicalResult.result);
+    setLastAnalyzedAt(historicalResult.createdAt);
+  };
 
   // Load last analysis on mount
   useEffect(() => {
@@ -49,6 +57,7 @@ export function CostPredictor({ tenantData }: CostPredictorProps) {
         const lastAnalysis = await getLastAnalysis('cost-predictor');
         if (lastAnalysis?.result) {
           setAnalysis(lastAnalysis.result);
+          setLastAnalyzedAt(lastAnalysis.createdAt);
         }
       } catch (error) {
         console.error('Failed to load last analysis:', error);
@@ -77,6 +86,7 @@ export function CostPredictor({ tenantData }: CostPredictorProps) {
       
       if (data.success && data.analysis) {
         setAnalysis(data.analysis);
+        setLastAnalyzedAt(new Date().toISOString());
         
         // Save to database for persistence
         await saveAnalysisResult({
@@ -167,7 +177,29 @@ export function CostPredictor({ tenantData }: CostPredictorProps) {
             Predict license costs, identify savings opportunities, and get budget forecasts powered by AI analysis.
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex justify-center">
+        <CardContent className="flex flex-col items-center gap-4">
+          <div className="flex items-center gap-3">
+            {lastAnalyzedAt && (
+              <Badge variant="outline" className="gap-1 text-xs text-muted-foreground">
+                <Clock className="w-3 h-3" />
+                {format(new Date(lastAnalyzedAt), 'MMM d, h:mm a')}
+              </Badge>
+            )}
+            <AIAnalysisHistoryPanel
+              analysisType="cost-predictor"
+              currentResult={analysis}
+              onLoadResult={handleLoadHistoricalResult}
+              scoreExtractor={(r) => {
+                const summary = r.summary as Record<string, unknown> | undefined;
+                return summary?.savingsPercentage as number | undefined;
+              }}
+              titleExtractor={(r) => {
+                const summary = r.summary as Record<string, unknown> | undefined;
+                const savings = summary?.potentialMonthlySavings as number;
+                return savings ? `$${savings.toLocaleString()}/mo savings` : 'Cost Analysis';
+              }}
+            />
+          </div>
           <Button onClick={runAnalysis} disabled={isAnalyzing} size="lg" className="gap-2">
             {isAnalyzing ? (
               <>

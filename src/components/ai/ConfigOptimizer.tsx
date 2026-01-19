@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { format } from 'date-fns';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -27,7 +28,8 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { getLastAnalysis, saveAnalysisResult } from '@/lib/aiApi';
+import { getLastAnalysis, saveAnalysisResult, type AIAnalysisResult } from '@/lib/aiApi';
+import { AIAnalysisHistoryPanel } from './AIAnalysisHistoryPanel';
 
 interface QuickWin {
   title: string;
@@ -124,6 +126,7 @@ export const ConfigOptimizer: React.FC = () => {
   const [analysis, setAnalysis] = useState<OptimizationAnalysis | null>(null);
   const [loading, setLoading] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [lastAnalyzedAt, setLastAnalyzedAt] = useState<string | null>(null);
   const [goals, setGoals] = useState({
     security: true,
     performance: true,
@@ -132,6 +135,11 @@ export const ConfigOptimizer: React.FC = () => {
     usability: false
   });
 
+  const handleLoadHistoricalResult = (historicalResult: AIAnalysisResult) => {
+    setAnalysis(historicalResult.result as unknown as OptimizationAnalysis);
+    setLastAnalyzedAt(historicalResult.createdAt);
+  };
+
   // Load last analysis on mount
   useEffect(() => {
     const loadLastAnalysis = async () => {
@@ -139,6 +147,7 @@ export const ConfigOptimizer: React.FC = () => {
         const lastAnalysis = await getLastAnalysis('config-optimizer');
         if (lastAnalysis?.result) {
           setAnalysis(lastAnalysis.result as unknown as OptimizationAnalysis);
+          setLastAnalyzedAt(lastAnalysis.createdAt);
         }
       } catch (error) {
         console.error('Failed to load last analysis:', error);
@@ -213,6 +222,7 @@ export const ConfigOptimizer: React.FC = () => {
 
       if (error) throw error;
       setAnalysis(data);
+      setLastAnalyzedAt(new Date().toISOString());
       
       // Save to database for persistence
       await saveAnalysisResult({
@@ -264,19 +274,37 @@ export const ConfigOptimizer: React.FC = () => {
                 ))}
               </div>
             </div>
-            <Button onClick={analyzeConfig} disabled={loading}>
-              {loading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Analyzing...
-                </>
-              ) : (
-                <>
-                  <Lightbulb className="mr-2 h-4 w-4" />
-                  Analyze & Optimize
-                </>
+            <div className="flex items-center gap-3">
+              {lastAnalyzedAt && (
+                <Badge variant="outline" className="gap-1 text-xs text-muted-foreground">
+                  <Clock className="w-3 h-3" />
+                  {format(new Date(lastAnalyzedAt), 'MMM d, h:mm a')}
+                </Badge>
               )}
-            </Button>
+              <AIAnalysisHistoryPanel
+                analysisType="config-optimizer"
+                currentResult={analysis}
+                onLoadResult={handleLoadHistoricalResult}
+                scoreExtractor={(r) => (r as unknown as OptimizationAnalysis).summary?.optimizedHealthScore}
+                titleExtractor={(r) => {
+                  const data = r as unknown as OptimizationAnalysis;
+                  return `${data.summary?.totalOptimizations || 0} optimizations`;
+                }}
+              />
+              <Button onClick={analyzeConfig} disabled={loading}>
+                {loading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Analyzing...
+                  </>
+                ) : (
+                  <>
+                    <Lightbulb className="mr-2 h-4 w-4" />
+                    Analyze & Optimize
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

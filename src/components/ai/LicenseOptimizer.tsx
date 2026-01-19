@@ -12,8 +12,10 @@ import {
   Users,
   Sparkles,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Clock
 } from 'lucide-react';
+import { format } from 'date-fns';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -22,7 +24,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { getLastAnalysis, saveAnalysisResult } from '@/lib/aiApi';
+import { getLastAnalysis, saveAnalysisResult, type AIAnalysisResult } from '@/lib/aiApi';
+import { AIAnalysisHistoryPanel } from './AIAnalysisHistoryPanel';
 
 interface LicenseType {
   name: string;
@@ -89,6 +92,12 @@ export function LicenseOptimizer() {
   const [isLoading, setIsLoading] = useState(true);
   const [result, setResult] = useState<OptimizationResult | null>(null);
   const [expandedRec, setExpandedRec] = useState<string | null>(null);
+  const [lastAnalyzedAt, setLastAnalyzedAt] = useState<string | null>(null);
+
+  const handleLoadHistoricalResult = (historicalResult: AIAnalysisResult) => {
+    setResult(historicalResult.result as unknown as OptimizationResult);
+    setLastAnalyzedAt(historicalResult.createdAt);
+  };
 
   // Load last analysis on mount
   useEffect(() => {
@@ -97,6 +106,7 @@ export function LicenseOptimizer() {
         const lastAnalysis = await getLastAnalysis('license-optimizer');
         if (lastAnalysis?.result) {
           setResult(lastAnalysis.result as unknown as OptimizationResult);
+          setLastAnalyzedAt(lastAnalysis.createdAt);
         }
       } catch (error) {
         console.error('Failed to load last analysis:', error);
@@ -120,6 +130,7 @@ export function LicenseOptimizer() {
       if (data.error) throw new Error(data.error);
 
       setResult(data);
+      setLastAnalyzedAt(new Date().toISOString());
       
       // Save to database for persistence
       await saveAnalysisResult({
@@ -182,19 +193,37 @@ export function LicenseOptimizer() {
             <p className="text-muted-foreground">Analyze and optimize M365 license costs</p>
           </div>
         </div>
-        <Button onClick={analyzeAndOptimize} disabled={isAnalyzing}>
-          {isAnalyzing ? (
-            <>
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              Analyzing...
-            </>
-          ) : (
-            <>
-              <Sparkles className="w-4 h-4 mr-2" />
-              Analyze Licenses
-            </>
+        <div className="flex items-center gap-3">
+          {lastAnalyzedAt && (
+            <Badge variant="outline" className="gap-1 text-xs text-muted-foreground">
+              <Clock className="w-3 h-3" />
+              {format(new Date(lastAnalyzedAt), 'MMM d, h:mm a')}
+            </Badge>
           )}
-        </Button>
+          <AIAnalysisHistoryPanel
+            analysisType="license-optimizer"
+            currentResult={result}
+            onLoadResult={handleLoadHistoricalResult}
+            scoreExtractor={(r) => (r as unknown as OptimizationResult).summary?.optimizationScore}
+            titleExtractor={(r) => {
+              const data = r as unknown as OptimizationResult;
+              return `$${data.summary?.potentialSavings?.toLocaleString() || 0} savings`;
+            }}
+          />
+          <Button onClick={analyzeAndOptimize} disabled={isAnalyzing}>
+            {isAnalyzing ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Analyzing...
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4 mr-2" />
+                Analyze Licenses
+              </>
+            )}
+          </Button>
+        </div>
       </div>
 
       {!result && !isAnalyzing && (
