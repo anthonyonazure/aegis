@@ -29,6 +29,7 @@ import {
   FileKey,
   Gauge,
   Book,
+  Bot,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -61,6 +62,7 @@ const navGroups: NavGroup[] = [
       { id: 'health-dashboard', label: 'Health Dashboard', icon: Activity },
       { id: 'secure-score', label: 'Secure Score', icon: Shield },
       { id: 'permission-health', label: 'Permission Health', icon: HeartPulse },
+      { id: 'copilot-agents', label: 'Copilot Agents', icon: Bot },
     ],
   },
   {
