@@ -49,6 +49,7 @@ import SecurityBenchmarkView from '@/components/views/SecurityBenchmarkView';
 import ChangeImpactView from '@/components/views/ChangeImpactView';
 import IncidentResponderView from '@/components/views/IncidentResponderView';
 import UserRiskProfilerView from '@/components/views/UserRiskProfilerView';
+import ConfigOptimizerView from '@/components/views/ConfigOptimizerView';
 import { SettingsView } from '@/components/views/SettingsView';
 import { PreflightCheckDialog } from '@/components/PreflightCheckDialog';
 import { ALL_RESOURCE_CATEGORIES, ExportFormat } from '@/types/tenant';
@@ -335,6 +336,8 @@ const Index = () => {
         return <IncidentResponderView />;
       case 'user-risk-profiler':
         return <UserRiskProfilerView />;
+      case 'config-optimizer':
+        return <ConfigOptimizerView />;
       case 'drift':
         return <DriftDetectionView />;
       case 'drift-explainer':
