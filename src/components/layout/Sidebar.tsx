@@ -32,6 +32,7 @@ import {
   Bot,
   Wand2,
   Radar,
+  Search,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -55,6 +56,7 @@ const navGroups: NavGroup[] = [
     items: [
       { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
       { id: 'governance', label: 'Governance Center', icon: Gauge },
+      { id: 'nl-query', label: 'AI Query', icon: Search },
       { id: 'customers', label: 'Customers', icon: Building2 },
     ],
   },
