@@ -74,6 +74,7 @@ const navGroups: NavGroup[] = [
     title: 'Tenant Health',
     items: [
       { id: 'health-dashboard', label: 'Health Dashboard', icon: Activity },
+      { id: 'tenant-analyzer', label: 'Tenant Analyzer', icon: BarChart3, isAI: true },
       { id: 'secure-score', label: 'Secure Score', icon: Shield },
       { id: 'security-predictor', label: 'Security Predictor', icon: Eye, isAI: true },
       { id: 'permission-health', label: 'Permission Health', icon: HeartPulse },
