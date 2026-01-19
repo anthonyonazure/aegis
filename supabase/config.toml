@@ -89,3 +89,6 @@ verify_jwt = false
 
 [functions.ai-migration-planner]
 verify_jwt = false
+
+[functions.ai-copilot-advisor]
+verify_jwt = false
