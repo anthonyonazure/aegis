@@ -41,6 +41,7 @@ import {
   ArrowRightLeft,
   Brain,
   Sparkles,
+  Scale,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -111,6 +112,7 @@ const navGroups: NavGroup[] = [
       { id: 'scheduled-drift', label: 'Scheduled Drift', icon: CalendarClock },
       { id: 'validation', label: 'Validation', icon: ShieldCheck },
       { id: 'compliance', label: 'Compliance Checks', icon: AlertTriangle },
+      { id: 'compliance-advisor', label: 'Compliance Advisor', icon: Scale, isAI: true },
       { id: 'compliance-dashboard', label: 'Compliance Dashboard', icon: BarChart3 },
     ],
   },
