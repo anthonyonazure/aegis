@@ -71,3 +71,6 @@ verify_jwt = false
 
 [functions.ai-nl-query]
 verify_jwt = false
+
+[functions.ai-remediation]
+verify_jwt = false
