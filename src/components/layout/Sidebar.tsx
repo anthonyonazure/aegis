@@ -42,6 +42,7 @@ import {
   Brain,
   Sparkles,
   Scale,
+  Calculator,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -131,6 +132,7 @@ const navGroups: NavGroup[] = [
       { id: 'reports', label: 'Reports', icon: FileText },
       { id: 'executive-report', label: 'Executive Report', icon: ClipboardList, isAI: true },
       { id: 'license-optimizer', label: 'License Optimizer', icon: Wallet, isAI: true },
+      { id: 'cost-predictor', label: 'Cost Predictor', icon: Calculator, isAI: true },
       { id: 'billing', label: 'Billing & Usage', icon: BarChart3 },
       { id: 'audit', label: 'Audit Trail', icon: FileText },
     ],
