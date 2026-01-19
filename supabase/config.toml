@@ -116,3 +116,6 @@ verify_jwt = false
 
 [functions.ai-config-optimizer]
 verify_jwt = false
+
+[functions.ai-chat-assistant]
+verify_jwt = false
