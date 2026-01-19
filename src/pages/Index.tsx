@@ -52,6 +52,7 @@ import UserRiskProfilerView from '@/components/views/UserRiskProfilerView';
 import ConfigOptimizerView from '@/components/views/ConfigOptimizerView';
 import AIChatView from '@/components/views/AIChatView';
 import CrossTenantInsightsView from '@/components/views/CrossTenantInsightsView';
+import { AISchedulesView } from '@/components/views/AISchedulesView';
 import { SettingsView } from '@/components/views/SettingsView';
 import { PreflightCheckDialog } from '@/components/PreflightCheckDialog';
 import { ALL_RESOURCE_CATEGORIES, ExportFormat } from '@/types/tenant';
@@ -271,6 +272,8 @@ const Index = () => {
         return <AIChatView />;
       case 'cross-tenant-insights':
         return <CrossTenantInsightsView />;
+      case 'ai-schedules':
+        return <AISchedulesView />;
       case 'health-dashboard':
       case 'tenant-health':
         return <TenantHealthDashboardView />;

@@ -122,3 +122,9 @@ verify_jwt = false
 
 [functions.ai-cross-tenant-insights]
 verify_jwt = false
+
+[functions.send-ai-notification]
+verify_jwt = false
+
+[functions.run-scheduled-ai-analysis]
+verify_jwt = false

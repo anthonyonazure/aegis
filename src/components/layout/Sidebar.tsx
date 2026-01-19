@@ -133,6 +133,7 @@ const navGroups: NavGroup[] = [
   {
     title: 'Automation',
     items: [
+      { id: 'ai-schedules', label: 'AI Schedules & Trends', icon: CalendarClock, isAI: true },
       { id: 'schedules', label: 'Scheduled Exports', icon: Calendar },
       { id: 'automated-backups', label: 'Automated Backups', icon: HardDrive },
       { id: 'webhooks', label: 'Webhooks', icon: Webhook },
