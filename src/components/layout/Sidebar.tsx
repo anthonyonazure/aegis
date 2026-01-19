@@ -40,16 +40,19 @@ import {
   Eye,
   ArrowRightLeft,
   Brain,
+  Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
 import { TenantSelector } from '@/components/TenantSelector';
 import { Separator } from '@/components/ui/separator';
+import { Badge } from '@/components/ui/badge';
 
 interface NavItem {
   id: string;
   label: string;
   icon: React.ElementType;
+  isAI?: boolean;
 }
 
 interface NavGroup {
@@ -63,7 +66,7 @@ const navGroups: NavGroup[] = [
     items: [
       { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
       { id: 'governance', label: 'Governance Center', icon: Gauge },
-      { id: 'nl-query', label: 'AI Query', icon: Search },
+      { id: 'nl-query', label: 'AI Query', icon: Search, isAI: true },
       { id: 'customers', label: 'Customers', icon: Building2 },
     ],
   },
@@ -72,17 +75,17 @@ const navGroups: NavGroup[] = [
     items: [
       { id: 'health-dashboard', label: 'Health Dashboard', icon: Activity },
       { id: 'secure-score', label: 'Secure Score', icon: Shield },
-      { id: 'security-predictor', label: 'Security Predictor', icon: Eye },
+      { id: 'security-predictor', label: 'Security Predictor', icon: Eye, isAI: true },
       { id: 'permission-health', label: 'Permission Health', icon: HeartPulse },
       { id: 'copilot-agents', label: 'Copilot Agents', icon: Bot },
-      { id: 'copilot-advisor', label: 'Copilot Advisor', icon: Brain },
+      { id: 'copilot-advisor', label: 'Copilot Advisor', icon: Brain, isAI: true },
     ],
   },
   {
     title: 'Configuration',
     items: [
       { id: 'resources', label: 'Resources', icon: FolderTree },
-      { id: 'migration-planner', label: 'Migration Planner', icon: ArrowRightLeft },
+      { id: 'migration-planner', label: 'Migration Planner', icon: ArrowRightLeft, isAI: true },
       { id: 'export', label: 'Export', icon: Download },
       { id: 'import', label: 'Import / Restore', icon: Upload },
       { id: 'jobs', label: 'Export Jobs', icon: History },
@@ -92,8 +95,8 @@ const navGroups: NavGroup[] = [
     title: 'Policy Management',
     items: [
       { id: 'policy-templates', label: 'Policy Templates', icon: FileCheck },
-      { id: 'policy-generator', label: 'AI Policy Generator', icon: Wand2 },
-      { id: 'remediation-scripts', label: 'Remediation Scripts', icon: Wrench },
+      { id: 'policy-generator', label: 'Policy Generator', icon: Wand2, isAI: true },
+      { id: 'remediation-scripts', label: 'Remediation Scripts', icon: Wrench, isAI: true },
       { id: 'policy-deployment', label: 'Policy Deployment', icon: Rocket },
       { id: 'scheduled-deployments', label: 'Scheduled Deployments', icon: CalendarClock },
     ],
@@ -101,9 +104,9 @@ const navGroups: NavGroup[] = [
   {
     title: 'Monitoring',
     items: [
-      { id: 'anomaly-detection', label: 'Anomaly Detection', icon: Radar },
+      { id: 'anomaly-detection', label: 'Anomaly Detection', icon: Radar, isAI: true },
       { id: 'drift', label: 'Drift Detection', icon: GitCompare },
-      { id: 'drift-explainer', label: 'Drift Explainer', icon: MessageSquareText },
+      { id: 'drift-explainer', label: 'Drift Explainer', icon: MessageSquareText, isAI: true },
       { id: 'scheduled-drift', label: 'Scheduled Drift', icon: CalendarClock },
       { id: 'validation', label: 'Validation', icon: ShieldCheck },
       { id: 'compliance', label: 'Compliance Checks', icon: AlertTriangle },
@@ -123,8 +126,8 @@ const navGroups: NavGroup[] = [
     title: 'Reporting',
     items: [
       { id: 'reports', label: 'Reports', icon: FileText },
-      { id: 'executive-report', label: 'Executive Report', icon: ClipboardList },
-      { id: 'license-optimizer', label: 'License Optimizer', icon: Wallet },
+      { id: 'executive-report', label: 'Executive Report', icon: ClipboardList, isAI: true },
+      { id: 'license-optimizer', label: 'License Optimizer', icon: Wallet, isAI: true },
       { id: 'billing', label: 'Billing & Usage', icon: BarChart3 },
       { id: 'audit', label: 'Audit Trail', icon: FileText },
     ],
@@ -224,19 +227,39 @@ export const Sidebar = ({ activeTab, onTabChange, isConnected = false }: Sidebar
                     onClick={() => onTabChange(item.id)}
                     className={cn(
                       "w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200",
-                      "hover:bg-sidebar-accent group",
+                      "hover:bg-sidebar-accent group relative",
                       isActive 
                         ? "bg-primary/10 text-primary border-l-2 border-primary ml-0.5" 
                         : "text-muted-foreground hover:text-foreground"
                     )}
                     title={collapsed ? item.label : undefined}
                   >
-                    <Icon className={cn(
-                      "w-4 h-4 flex-shrink-0 transition-colors",
-                      isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
-                    )} />
+                    <div className="relative">
+                      <Icon className={cn(
+                        "w-4 h-4 flex-shrink-0 transition-colors",
+                        isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
+                      )} />
+                      {item.isAI && collapsed && (
+                        <Sparkles className="w-2.5 h-2.5 text-violet-400 absolute -top-1 -right-1" />
+                      )}
+                    </div>
                     {!collapsed && (
-                      <span className="text-sm font-medium truncate">{item.label}</span>
+                      <>
+                        <span className="text-sm font-medium truncate flex-1 text-left">{item.label}</span>
+                        {item.isAI && (
+                          <Badge 
+                            variant="outline" 
+                            className={cn(
+                              "ml-auto px-1.5 py-0 text-[10px] font-medium border-0",
+                              "bg-gradient-to-r from-violet-500/20 to-purple-500/20",
+                              "text-violet-400"
+                            )}
+                          >
+                            <Sparkles className="w-2.5 h-2.5 mr-0.5" />
+                            AI
+                          </Badge>
+                        )}
+                      </>
                     )}
                   </button>
                 );
