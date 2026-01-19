@@ -110,3 +110,6 @@ verify_jwt = false
 
 [functions.ai-incident-responder]
 verify_jwt = false
+
+[functions.ai-user-risk-profiler]
+verify_jwt = false

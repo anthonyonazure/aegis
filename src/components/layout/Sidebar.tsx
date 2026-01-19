@@ -45,6 +45,7 @@ import {
   Calculator,
   Award,
   AlertOctagon,
+  UserCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -113,6 +114,7 @@ const navGroups: NavGroup[] = [
     items: [
       { id: 'anomaly-detection', label: 'Anomaly Detection', icon: Radar, isAI: true },
       { id: 'incident-responder', label: 'Incident Responder', icon: AlertOctagon, isAI: true },
+      { id: 'user-risk-profiler', label: 'User Risk Profiler', icon: UserCheck, isAI: true },
       { id: 'drift', label: 'Drift Detection', icon: GitCompare },
       { id: 'drift-explainer', label: 'Drift Explainer', icon: MessageSquareText, isAI: true },
       { id: 'scheduled-drift', label: 'Scheduled Drift', icon: CalendarClock },
