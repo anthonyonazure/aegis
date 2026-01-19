@@ -33,6 +33,7 @@ import {
   Wand2,
   Radar,
   Search,
+  Wrench,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -83,6 +84,7 @@ const navGroups: NavGroup[] = [
     items: [
       { id: 'policy-templates', label: 'Policy Templates', icon: FileCheck },
       { id: 'policy-generator', label: 'AI Policy Generator', icon: Wand2 },
+      { id: 'remediation-scripts', label: 'Remediation Scripts', icon: Wrench },
       { id: 'policy-deployment', label: 'Policy Deployment', icon: Rocket },
       { id: 'scheduled-deployments', label: 'Scheduled Deployments', icon: CalendarClock },
     ],

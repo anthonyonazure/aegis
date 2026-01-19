@@ -35,6 +35,7 @@ import { CopilotAgentsView } from '@/components/views/CopilotAgentsView';
 import { PolicyGeneratorView } from '@/components/views/PolicyGeneratorView';
 import { AnomalyDetectionView } from '@/components/views/AnomalyDetectionView';
 import { NaturalLanguageQueryView } from '@/components/views/NaturalLanguageQueryView';
+import { RemediationScriptsView } from '@/components/views/RemediationScriptsView';
 import { SettingsView } from '@/components/views/SettingsView';
 import { PreflightCheckDialog } from '@/components/PreflightCheckDialog';
 import { ALL_RESOURCE_CATEGORIES, ExportFormat } from '@/types/tenant';
@@ -260,6 +261,8 @@ const Index = () => {
         return <PolicyTemplatesView />;
       case 'policy-generator':
         return <PolicyGeneratorView />;
+      case 'remediation-scripts':
+        return <RemediationScriptsView />;
       case 'policy-deployment':
         return (
           <PolicyDeploymentView 
