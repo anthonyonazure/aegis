@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState, type WheelEventHandler } from 'react';
 import { motion } from 'framer-motion';
 import { 
   Brain, 
@@ -34,6 +34,21 @@ export function TenantAnalyzer() {
   const [analysisResult, setAnalysisResult] = useState<Record<string, unknown> | null>(null);
   const [recentAnalyses, setRecentAnalyses] = useState<AIAnalysisResult[]>([]);
 
+  const riskFactorsScrollRef = useRef<HTMLDivElement | null>(null);
+
+  const stopNestedWheelPropagation: WheelEventHandler<HTMLDivElement> = (e) => {
+    const el = e.currentTarget;
+    if (el.scrollHeight <= el.clientHeight + 1) return;
+
+    const delta = e.deltaY;
+    const atTop = el.scrollTop <= 0;
+    const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
+
+    // If this element can still scroll in the wheel direction, keep the event here.
+    if ((delta < 0 && !atTop) || (delta > 0 && !atBottom)) {
+      e.stopPropagation();
+    }
+  };
   const analysisTypes = [
     { id: 'tenant-health', name: 'Tenant Health', icon: BarChart3, description: 'Overall health assessment' },
     { id: 'compliance', name: 'Compliance Check', icon: FileCheck, description: 'Framework compliance' },
@@ -251,7 +266,14 @@ export function TenantAnalyzer() {
             </CardHeader>
             <CardContent>
               {/* Avoid nested Radix ScrollArea inside the parent results ScrollArea */}
-              <div className="max-h-[300px] overflow-y-auto pr-4 overscroll-contain">
+              <div
+                ref={riskFactorsScrollRef}
+                tabIndex={0}
+                className="h-[300px] overflow-y-auto pr-4 overscroll-contain"
+                style={{ WebkitOverflowScrolling: 'touch' }}
+                onWheelCapture={stopNestedWheelPropagation}
+                aria-label="Risk factors list"
+              >
                 <div className="space-y-3">
                   {riskFactors.map((factor, i) => (
                     <div key={i} className="flex items-start justify-between gap-4 p-3 bg-muted/30 rounded-lg">
