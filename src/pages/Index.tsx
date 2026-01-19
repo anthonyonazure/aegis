@@ -44,6 +44,7 @@ import { MigrationPlannerView } from '@/components/views/MigrationPlannerView';
 import { CopilotReadinessAdvisorView } from '@/components/views/CopilotReadinessAdvisorView';
 import { TenantAnalyzerView } from '@/components/views/TenantAnalyzerView';
 import { ComplianceAdvisorView } from '@/components/views/ComplianceAdvisorView';
+import CostPredictorView from '@/components/views/CostPredictorView';
 import { SettingsView } from '@/components/views/SettingsView';
 import { PreflightCheckDialog } from '@/components/PreflightCheckDialog';
 import { ALL_RESOURCE_CATEGORIES, ExportFormat } from '@/types/tenant';
@@ -359,6 +360,8 @@ const Index = () => {
         return <ExecutiveReportView />;
       case 'license-optimizer':
         return <LicenseOptimizerView />;
+      case 'cost-predictor':
+        return <CostPredictorView />;
       case 'billing':
         return <BillingView />;
       case 'git':

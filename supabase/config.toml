@@ -98,3 +98,6 @@ verify_jwt = false
 
 [functions.ai-compliance-advisor]
 verify_jwt = false
+
+[functions.ai-cost-predictor]
+verify_jwt = false
