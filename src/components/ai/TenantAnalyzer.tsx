@@ -17,7 +17,6 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { useTenant } from '@/contexts/TenantContext';
 import { runAIAnalysis, getRecentAnalyses, AIAnalysisResult } from '@/lib/aiApi';
@@ -686,12 +685,13 @@ export function TenantAnalyzer() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <ScrollArea className="max-h-[600px]">
+                  {/* Use a simple overflow container (more reliable than nested custom ScrollAreas) */}
+                  <div className="h-[70vh] max-h-[600px] overflow-y-auto pr-2 overscroll-contain">
                     {analysisType === 'tenant-health' && renderHealthResult(analysisResult)}
                     {analysisType === 'risk-score' && renderRiskResult(analysisResult)}
                     {analysisType === 'compliance' && renderComplianceResult(analysisResult)}
                     {analysisType === 'cost-forecast' && renderCostResult(analysisResult)}
-                  </ScrollArea>
+                  </div>
                 </CardContent>
               </Card>
             </motion.div>
