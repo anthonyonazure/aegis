@@ -39,6 +39,7 @@ import { RemediationScriptsView } from '@/components/views/RemediationScriptsVie
 import { LicenseOptimizerView } from '@/components/views/LicenseOptimizerView';
 import { DriftExplainerView } from '@/components/views/DriftExplainerView';
 import { ExecutiveReportView } from '@/components/views/ExecutiveReportView';
+import { SecurityPredictorView } from '@/components/views/SecurityPredictorView';
 import { SettingsView } from '@/components/views/SettingsView';
 import { PreflightCheckDialog } from '@/components/PreflightCheckDialog';
 import { ALL_RESOURCE_CATEGORIES, ExportFormat } from '@/types/tenant';
@@ -259,6 +260,8 @@ const Index = () => {
         return <TenantHealthDashboardView />;
       case 'secure-score':
         return <SecureScoreDashboardView />;
+      case 'security-predictor':
+        return <SecurityPredictorView />;
       case 'policies':
       case 'policy-templates':
         return <PolicyTemplatesView />;

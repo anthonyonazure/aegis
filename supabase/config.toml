@@ -83,3 +83,6 @@ verify_jwt = false
 
 [functions.ai-executive-report]
 verify_jwt = false
+
+[functions.ai-security-predictor]
+verify_jwt = false
