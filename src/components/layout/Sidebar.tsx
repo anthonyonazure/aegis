@@ -30,6 +30,7 @@ import {
   Gauge,
   Book,
   Bot,
+  Wand2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -78,6 +79,7 @@ const navGroups: NavGroup[] = [
     title: 'Policy Management',
     items: [
       { id: 'policy-templates', label: 'Policy Templates', icon: FileCheck },
+      { id: 'policy-generator', label: 'AI Policy Generator', icon: Wand2 },
       { id: 'policy-deployment', label: 'Policy Deployment', icon: Rocket },
       { id: 'scheduled-deployments', label: 'Scheduled Deployments', icon: CalendarClock },
     ],
