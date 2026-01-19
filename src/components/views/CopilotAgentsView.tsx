@@ -145,12 +145,36 @@ export const CopilotAgentsView = () => {
 
     setIsLoading(true);
     try {
+      // Create an export job first so the edge function can verify ownership
+      const { data: jobData, error: jobError } = await supabase
+        .from('export_jobs')
+        .insert({
+          name: `Copilot Agents Fetch ${new Date().toISOString()}`,
+          user_id: (await supabase.auth.getUser()).data.user?.id,
+          tenant_connection_id: connectionId,
+          categories: ['copilot'],
+          formats: ['json'],
+          status: 'pending',
+          progress: 0,
+        })
+        .select()
+        .single();
+
+      if (jobError) {
+        console.error('Failed to create export job:', jobError);
+        setAgents(getMockAgents());
+        setPolicies(getMockPolicies());
+        loadTenantStatuses();
+        setIsLoading(false);
+        return;
+      }
+
       const { data, error } = await supabase.functions.invoke('graph-api', {
         body: {
           action: 'export',
           accessToken: token,
           resources: ['copilot/copilot-agents'],
-          exportJobId: crypto.randomUUID(),
+          exportJobId: jobData.id,
         },
       });
 
