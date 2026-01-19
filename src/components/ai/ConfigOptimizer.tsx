@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { getLastAnalysis, saveAnalysisResult } from '@/lib/aiApi';
 
 interface QuickWin {
   title: string;
@@ -122,6 +123,7 @@ interface OptimizationAnalysis {
 export const ConfigOptimizer: React.FC = () => {
   const [analysis, setAnalysis] = useState<OptimizationAnalysis | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [goals, setGoals] = useState({
     security: true,
     performance: true,
@@ -129,6 +131,23 @@ export const ConfigOptimizer: React.FC = () => {
     compliance: true,
     usability: false
   });
+
+  // Load last analysis on mount
+  useEffect(() => {
+    const loadLastAnalysis = async () => {
+      try {
+        const lastAnalysis = await getLastAnalysis('config-optimizer');
+        if (lastAnalysis?.result) {
+          setAnalysis(lastAnalysis.result as unknown as OptimizationAnalysis);
+        }
+      } catch (error) {
+        console.error('Failed to load last analysis:', error);
+      } finally {
+        setIsInitialLoading(false);
+      }
+    };
+    loadLastAnalysis();
+  }, []);
 
   const getPriorityColor = (priority: string) => {
     switch (priority?.toLowerCase()) {
@@ -194,6 +213,14 @@ export const ConfigOptimizer: React.FC = () => {
 
       if (error) throw error;
       setAnalysis(data);
+      
+      // Save to database for persistence
+      await saveAnalysisResult({
+        analysisType: 'config-optimizer',
+        result: data,
+        score: data.summary?.optimizedHealthScore,
+      });
+
       toast.success('Configuration analysis complete');
     } catch (error) {
       console.error('Error analyzing config:', error);

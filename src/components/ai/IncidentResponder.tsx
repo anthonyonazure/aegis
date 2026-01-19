@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -32,6 +32,7 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { useTenant } from '@/contexts/TenantContext';
 import { toast } from 'sonner';
+import { getLastAnalysis, saveAnalysisResult } from '@/lib/aiApi';
 
 const INCIDENT_TYPES = [
   { value: 'phishing', label: 'Phishing Attack' },
@@ -48,11 +49,29 @@ const INCIDENT_TYPES = [
 
 export function IncidentResponder() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [analysis, setAnalysis] = useState<Record<string, unknown> | null>(null);
   const [incidentDescription, setIncidentDescription] = useState('');
   const [incidentType, setIncidentType] = useState('');
   const [affectedUsers, setAffectedUsers] = useState('');
   const { connectionId, tenantName } = useTenant();
+
+  // Load last analysis on mount
+  useEffect(() => {
+    const loadLastAnalysis = async () => {
+      try {
+        const lastAnalysis = await getLastAnalysis('incident-responder');
+        if (lastAnalysis?.result) {
+          setAnalysis(lastAnalysis.result);
+        }
+      } catch (error) {
+        console.error('Failed to load last analysis:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadLastAnalysis();
+  }, []);
 
   const runAnalysis = async () => {
     if (!incidentDescription.trim()) {
@@ -78,6 +97,14 @@ export function IncidentResponder() {
       
       if (data.success && data.analysis) {
         setAnalysis(data.analysis);
+        
+        // Save to database for persistence
+        await saveAnalysisResult({
+          analysisType: 'incident-responder',
+          result: data.analysis,
+          tenantConnectionId: connectionId || undefined,
+        });
+
         toast.success('Incident response plan generated');
       } else {
         throw new Error(data.error || 'Analysis failed');

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   TrendingUp, 
   TrendingDown,
@@ -21,6 +21,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { getLastAnalysis, saveAnalysisResult } from '@/lib/aiApi';
 
 interface Prediction {
   id: string;
@@ -90,7 +91,25 @@ interface SecurityPrediction {
 export function SecurityPosturePredictor() {
   const { toast } = useToast();
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [result, setResult] = useState<SecurityPrediction | null>(null);
+
+  // Load last analysis on mount
+  useEffect(() => {
+    const loadLastAnalysis = async () => {
+      try {
+        const lastAnalysis = await getLastAnalysis('security-predictor');
+        if (lastAnalysis?.result) {
+          setResult(lastAnalysis.result as unknown as SecurityPrediction);
+        }
+      } catch (error) {
+        console.error('Failed to load last analysis:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadLastAnalysis();
+  }, []);
 
   const analyzeAndPredict = async () => {
     setIsAnalyzing(true);
@@ -105,6 +124,14 @@ export function SecurityPosturePredictor() {
       if (data.error) throw new Error(data.error);
 
       setResult(data);
+      
+      // Save to database for persistence
+      await saveAnalysisResult({
+        analysisType: 'security-predictor',
+        result: data,
+        score: data.currentPosture?.overallScore,
+      });
+
       toast({
         title: 'Prediction Complete',
         description: 'Security posture forecast is ready',
