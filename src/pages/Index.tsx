@@ -45,6 +45,7 @@ import { CopilotReadinessAdvisorView } from '@/components/views/CopilotReadiness
 import { TenantAnalyzerView } from '@/components/views/TenantAnalyzerView';
 import { ComplianceAdvisorView } from '@/components/views/ComplianceAdvisorView';
 import CostPredictorView from '@/components/views/CostPredictorView';
+import SecurityBenchmarkView from '@/components/views/SecurityBenchmarkView';
 import { SettingsView } from '@/components/views/SettingsView';
 import { PreflightCheckDialog } from '@/components/PreflightCheckDialog';
 import { ALL_RESOURCE_CATEGORIES, ExportFormat } from '@/types/tenant';
@@ -269,6 +270,8 @@ const Index = () => {
         return <SecureScoreDashboardView />;
       case 'security-predictor':
         return <SecurityPredictorView />;
+      case 'security-benchmark':
+        return <SecurityBenchmarkView />;
       case 'policies':
       case 'policy-templates':
         return <PolicyTemplatesView />;

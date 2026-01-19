@@ -101,3 +101,6 @@ verify_jwt = false
 
 [functions.ai-cost-predictor]
 verify_jwt = false
+
+[functions.ai-security-benchmark]
+verify_jwt = false
