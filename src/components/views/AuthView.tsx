@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { 
   Key, 
@@ -15,6 +15,8 @@ import {
   Server,
   Save,
   Cog,
+  LogIn,
+  LogOut,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -29,6 +31,8 @@ import { AzureSubscription } from '@/types/tenant';
 import { useToast } from '@/hooks/use-toast';
 import { ServicePrincipalManager, ServicePrincipalConfig } from '@/components/ServicePrincipalManager';
 import { AzureAutomationManager } from '@/components/AzureAutomationManager';
+import { loginWithPopup, acquireToken, logout, getCurrentAccount, GRAPH_SCOPES } from '@/lib/msalAuth';
+import type { AccountInfo } from '@azure/msal-browser';
 
 // Graph API permissions - organized by read-only vs read-write
 const graphPermissions = {
@@ -109,6 +113,13 @@ export const AuthView = () => {
   const [subscriptions, setSubscriptions] = useState<AzureSubscription[]>([]);
   const [selectedSubscriptions, setSelectedSubscriptions] = useState<string[]>([]);
   
+  // Delegated auth state
+  const [delegatedClientId, setDelegatedClientId] = useState('');
+  const [delegatedTenantId, setDelegatedTenantId] = useState('');
+  const [delegatedAccount, setDelegatedAccount] = useState<AccountInfo | null>(null);
+  const [delegatedConnecting, setDelegatedConnecting] = useState(false);
+  const [delegatedToken, setDelegatedToken] = useState<string | null>(null);
+  
   const { toast } = useToast();
 
   const { 
@@ -125,6 +136,90 @@ export const AuthView = () => {
     setCopied(id);
     setTimeout(() => setCopied(null), 2000);
   };
+
+  // Delegated authentication handlers
+  const handleDelegatedSignIn = useCallback(async () => {
+    if (!delegatedClientId) {
+      toast({
+        title: 'Client ID Required',
+        description: 'Please enter your App Registration Client ID for delegated auth.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setDelegatedConnecting(true);
+    try {
+      const scopes = permissionMode === 'readWrite' ? GRAPH_SCOPES.readWrite : GRAPH_SCOPES.readOnly;
+      const result = await loginWithPopup(
+        delegatedClientId,
+        delegatedTenantId || 'common',
+        scopes
+      );
+
+      if (result.success && result.account) {
+        setDelegatedAccount(result.account);
+        setDelegatedToken(result.accessToken || null);
+        toast({
+          title: 'Signed In Successfully',
+          description: `Connected as ${result.account.username}`,
+        });
+      } else {
+        toast({
+          title: 'Sign In Failed',
+          description: result.error || 'Could not complete sign in',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      toast({
+        title: 'Sign In Error',
+        description: error instanceof Error ? error.message : 'An error occurred',
+        variant: 'destructive',
+      });
+    } finally {
+      setDelegatedConnecting(false);
+    }
+  }, [delegatedClientId, delegatedTenantId, permissionMode, toast]);
+
+  const handleDelegatedRefreshToken = useCallback(async () => {
+    if (!delegatedClientId || !delegatedAccount) return;
+
+    try {
+      const scopes = permissionMode === 'readWrite' ? GRAPH_SCOPES.readWrite : GRAPH_SCOPES.readOnly;
+      const result = await acquireToken(delegatedClientId, delegatedTenantId || 'common', scopes);
+      
+      if (result.success && result.accessToken) {
+        setDelegatedToken(result.accessToken);
+        toast({
+          title: 'Token Refreshed',
+          description: 'Access token has been refreshed.',
+        });
+      }
+    } catch (error) {
+      toast({
+        title: 'Token Refresh Failed',
+        description: error instanceof Error ? error.message : 'Could not refresh token',
+        variant: 'destructive',
+      });
+    }
+  }, [delegatedClientId, delegatedTenantId, delegatedAccount, permissionMode, toast]);
+
+  const handleDelegatedSignOut = useCallback(async () => {
+    if (!delegatedClientId) return;
+
+    try {
+      await logout(delegatedClientId, delegatedTenantId || 'common');
+      setDelegatedAccount(null);
+      setDelegatedToken(null);
+      toast({
+        title: 'Signed Out',
+        description: 'You have been signed out.',
+      });
+    } catch (error) {
+      console.error('Sign out error:', error);
+    }
+  }, [delegatedClientId, delegatedTenantId, toast]);
 
   const handleConnect = async () => {
     if (!tenantId || !clientId || !clientSecret) {
@@ -750,15 +845,148 @@ export const AuthView = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="flex items-center gap-4 p-4 rounded-lg bg-info/10 border border-info/20">
-                  <AlertCircle className="w-5 h-5 text-info" />
-                  <div>
-                    <p className="font-medium text-foreground">Coming Soon</p>
-                    <p className="text-sm text-muted-foreground">
-                      Delegated authentication with interactive sign-in is planned for a future release.
-                      Use App Registration for now.
-                    </p>
+                {/* App Registration for Delegated Auth */}
+                <div className="space-y-4">
+                  <div className="flex items-center gap-4 p-4 rounded-lg bg-muted/50 border border-border">
+                    <AlertCircle className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                    <div className="text-sm text-muted-foreground">
+                      <p className="font-medium text-foreground mb-1">App Registration Required</p>
+                      <p>
+                        Create an App Registration in Azure AD with <strong>delegated permissions</strong> (not application permissions).
+                        Enable "Allow public client flows" in Authentication settings.
+                      </p>
+                    </div>
                   </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="delegatedClientId">Application (Client) ID</Label>
+                      <Input
+                        id="delegatedClientId"
+                        placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                        value={delegatedClientId}
+                        onChange={(e) => setDelegatedClientId(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="delegatedTenantId">Tenant ID (optional)</Label>
+                      <Input
+                        id="delegatedTenantId"
+                        placeholder="common (for multi-tenant) or specific tenant ID"
+                        value={delegatedTenantId}
+                        onChange={(e) => setDelegatedTenantId(e.target.value)}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Leave as "common" for multi-tenant apps, or enter a specific tenant ID
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Permission Mode for Delegated */}
+                  <div className="space-y-2">
+                    <Label>Permission Level</Label>
+                    <div className="flex gap-4">
+                      <Button
+                        variant={permissionMode === 'readOnly' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setPermissionMode('readOnly')}
+                      >
+                        Read Only (Export)
+                      </Button>
+                      <Button
+                        variant={permissionMode === 'readWrite' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setPermissionMode('readWrite')}
+                      >
+                        Read + Write (Export & Import)
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sign In Status */}
+                {delegatedAccount ? (
+                  <div className="p-4 rounded-lg bg-success/10 border border-success/20 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <CheckCircle2 className="w-5 h-5 text-success" />
+                        <div>
+                          <p className="font-medium text-foreground">Signed In</p>
+                          <p className="text-sm text-muted-foreground">{delegatedAccount.username}</p>
+                          <p className="text-xs text-muted-foreground">Tenant: {delegatedAccount.tenantId}</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleDelegatedRefreshToken}
+                        >
+                          Refresh Token
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleDelegatedSignOut}
+                        >
+                          <LogOut className="w-4 h-4 mr-1" />
+                          Sign Out
+                        </Button>
+                      </div>
+                    </div>
+
+                    {delegatedToken && (
+                      <div className="space-y-2">
+                        <Label>Access Token (for testing)</Label>
+                        <div className="flex gap-2">
+                          <Input
+                            value={delegatedToken.substring(0, 50) + '...'}
+                            readOnly
+                            className="font-mono text-xs"
+                          />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => copyToClipboard(delegatedToken, 'delegated-token')}
+                          >
+                            {copied === 'delegated-token' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <Button
+                    className="w-full"
+                    onClick={handleDelegatedSignIn}
+                    disabled={!delegatedClientId || delegatedConnecting}
+                  >
+                    {delegatedConnecting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Signing In...
+                      </>
+                    ) : (
+                      <>
+                        <LogIn className="w-4 h-4 mr-2" />
+                        Sign In with Microsoft
+                      </>
+                    )}
+                  </Button>
+                )}
+
+                {/* Setup Instructions */}
+                <div className="space-y-3 pt-4 border-t">
+                  <p className="text-sm font-medium text-foreground">Setup Instructions</p>
+                  <ol className="list-decimal list-inside space-y-2 text-sm text-muted-foreground">
+                    <li>Go to <a href="https://portal.azure.com/#view/Microsoft_AAD_IAM/ActiveDirectoryMenuBlade/~/RegisteredApps" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Azure App Registrations</a></li>
+                    <li>Create a new registration (or use existing)</li>
+                    <li>Set redirect URI to: <code className="bg-muted px-1 rounded">{window.location.origin}</code></li>
+                    <li>Enable "Allow public client flows" in Authentication</li>
+                    <li>Add <strong>Delegated</strong> permissions under API Permissions</li>
+                    <li>Grant admin consent for the permissions</li>
+                    <li>Copy the Application (Client) ID above and sign in</li>
+                  </ol>
                 </div>
               </CardContent>
             </Card>
