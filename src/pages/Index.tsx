@@ -41,6 +41,7 @@ import { DriftExplainerView } from '@/components/views/DriftExplainerView';
 import { ExecutiveReportView } from '@/components/views/ExecutiveReportView';
 import { SecurityPredictorView } from '@/components/views/SecurityPredictorView';
 import { MigrationPlannerView } from '@/components/views/MigrationPlannerView';
+import { CopilotReadinessAdvisorView } from '@/components/views/CopilotReadinessAdvisorView';
 import { SettingsView } from '@/components/views/SettingsView';
 import { PreflightCheckDialog } from '@/components/PreflightCheckDialog';
 import { ALL_RESOURCE_CATEGORIES, ExportFormat } from '@/types/tenant';
@@ -333,6 +334,8 @@ const Index = () => {
         return <PermissionHealthView />;
       case 'copilot-agents':
         return <CopilotAgentsView />;
+      case 'copilot-advisor':
+        return <CopilotReadinessAdvisorView />;
       case 'permissions-reference':
         return <PermissionsReferenceView />;
       case 'schedules':
