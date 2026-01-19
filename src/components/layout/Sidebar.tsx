@@ -36,6 +36,7 @@ import {
   Wrench,
   Wallet,
   MessageSquareText,
+  ClipboardList,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -116,6 +117,7 @@ const navGroups: NavGroup[] = [
     title: 'Reporting',
     items: [
       { id: 'reports', label: 'Reports', icon: FileText },
+      { id: 'executive-report', label: 'Executive Report', icon: ClipboardList },
       { id: 'license-optimizer', label: 'License Optimizer', icon: Wallet },
       { id: 'billing', label: 'Billing & Usage', icon: BarChart3 },
       { id: 'audit', label: 'Audit Trail', icon: FileText },

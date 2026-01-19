@@ -80,3 +80,6 @@ verify_jwt = false
 
 [functions.ai-drift-explainer]
 verify_jwt = false
+
+[functions.ai-executive-report]
+verify_jwt = false
