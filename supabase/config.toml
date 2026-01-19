@@ -92,3 +92,6 @@ verify_jwt = false
 
 [functions.ai-copilot-advisor]
 verify_jwt = false
+
+[functions.ai-tenant-analyzer]
+verify_jwt = false

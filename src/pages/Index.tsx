@@ -42,6 +42,7 @@ import { ExecutiveReportView } from '@/components/views/ExecutiveReportView';
 import { SecurityPredictorView } from '@/components/views/SecurityPredictorView';
 import { MigrationPlannerView } from '@/components/views/MigrationPlannerView';
 import { CopilotReadinessAdvisorView } from '@/components/views/CopilotReadinessAdvisorView';
+import { TenantAnalyzerView } from '@/components/views/TenantAnalyzerView';
 import { SettingsView } from '@/components/views/SettingsView';
 import { PreflightCheckDialog } from '@/components/PreflightCheckDialog';
 import { ALL_RESOURCE_CATEGORIES, ExportFormat } from '@/types/tenant';
@@ -260,6 +261,8 @@ const Index = () => {
       case 'health-dashboard':
       case 'tenant-health':
         return <TenantHealthDashboardView />;
+      case 'tenant-analyzer':
+        return <TenantAnalyzerView />;
       case 'secure-score':
         return <SecureScoreDashboardView />;
       case 'security-predictor':
