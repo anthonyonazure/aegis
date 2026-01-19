@@ -48,6 +48,7 @@ import {
   UserCheck,
   SlidersHorizontal,
   MessageCircle,
+  GitPullRequestDraft,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -75,6 +76,7 @@ const navGroups: NavGroup[] = [
       { id: 'governance', label: 'Governance Center', icon: Gauge },
       { id: 'nl-query', label: 'AI Query', icon: Search, isAI: true },
       { id: 'ai-chat', label: 'AI Chat', icon: MessageCircle, isAI: true },
+      { id: 'cross-tenant-insights', label: 'Cross-Tenant Insights', icon: GitPullRequestDraft, isAI: true },
       { id: 'customers', label: 'Customers', icon: Building2 },
     ],
   },
