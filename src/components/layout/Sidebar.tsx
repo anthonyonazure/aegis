@@ -174,15 +174,18 @@ export const Sidebar = ({ activeTab, onTabChange, isConnected = false }: Sidebar
   return (
     <motion.aside 
       className={cn(
-        "h-screen bg-sidebar border-r border-sidebar-border flex flex-col transition-all duration-300",
+        "h-screen bg-sidebar border-r border-sidebar-border flex flex-col transition-all duration-300 relative",
         collapsed ? "w-16" : "w-64"
       )}
       initial={{ x: -100, opacity: 0 }}
       animate={{ x: 0, opacity: 1 }}
-      transition={{ duration: 0.3 }}
+      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
     >
+      {/* Gradient overlay */}
+      <div className="absolute inset-0 bg-gradient-to-b from-primary/5 via-transparent to-transparent pointer-events-none" />
+      
       {/* Tenant Selector */}
-      <div className="p-3 border-b border-sidebar-border">
+      <div className="p-3 border-b border-sidebar-border relative z-10">
         <TenantSelector 
           collapsed={collapsed}
           onNavigateToAuth={() => onTabChange('auth')}
@@ -191,21 +194,21 @@ export const Sidebar = ({ activeTab, onTabChange, isConnected = false }: Sidebar
       </div>
 
       {/* Logo */}
-      <div className="p-4 border-b border-sidebar-border flex items-center justify-between">
+      <div className="p-4 border-b border-sidebar-border flex items-center justify-between relative z-10">
         {!collapsed && (
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
-              <Shield className="w-5 h-5 text-primary" />
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-glow">
+              <Shield className="w-5 h-5 text-primary-foreground" />
             </div>
             <div>
-              <h1 className="font-semibold text-sm text-foreground">M365 Export</h1>
-              <p className="text-xs text-muted-foreground">MSP Platform</p>
+              <h1 className="font-semibold text-sm text-foreground tracking-tight">M365 Export</h1>
+              <p className="text-[11px] text-muted-foreground">MSP Platform</p>
             </div>
           </div>
         )}
         <button 
           onClick={() => setCollapsed(!collapsed)}
-          className="p-1.5 rounded-md hover:bg-sidebar-accent transition-colors"
+          className="p-2 rounded-lg hover:bg-sidebar-accent transition-all duration-200 hover:scale-105"
         >
           {collapsed ? (
             <ChevronRight className="w-4 h-4 text-muted-foreground" />
@@ -216,13 +219,13 @@ export const Sidebar = ({ activeTab, onTabChange, isConnected = false }: Sidebar
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto py-2">
+      <nav className="flex-1 overflow-y-auto py-3 relative z-10">
         {navGroups.map((group, groupIndex) => (
           <div key={group.title}>
             {/* Group Header */}
             {!collapsed && (
-              <div className="px-4 py-2 mt-2 first:mt-0">
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+              <div className="px-4 py-2.5 mt-3 first:mt-0">
+                <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
                   {group.title}
                 </span>
               </div>
@@ -230,7 +233,7 @@ export const Sidebar = ({ activeTab, onTabChange, isConnected = false }: Sidebar
             
             {/* Separator for collapsed state */}
             {collapsed && groupIndex > 0 && (
-              <Separator className="my-2 mx-2 bg-sidebar-border" />
+              <Separator className="my-2 mx-2 bg-sidebar-border/50" />
             )}
             
             {/* Group Items */}
@@ -240,46 +243,50 @@ export const Sidebar = ({ activeTab, onTabChange, isConnected = false }: Sidebar
                 const isActive = activeTab === item.id;
                 
                 return (
-                  <button
+                  <motion.button
                     key={item.id}
                     onClick={() => onTabChange(item.id)}
+                    whileHover={{ x: 2 }}
+                    whileTap={{ scale: 0.98 }}
                     className={cn(
-                      "w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200",
-                      "hover:bg-sidebar-accent group relative",
+                      "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200",
+                      "hover:bg-sidebar-accent/80 group relative overflow-hidden",
                       isActive 
-                        ? "bg-primary/10 text-primary border-l-2 border-primary ml-0.5" 
+                        ? "bg-gradient-to-r from-primary/20 to-accent/10 text-primary" 
                         : "text-muted-foreground hover:text-foreground"
                     )}
                     title={collapsed ? item.label : undefined}
                   >
-                    <div className="relative">
+                    {/* Active indicator */}
+                    {isActive && (
+                      <motion.div 
+                        layoutId="activeIndicator"
+                        className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-gradient-to-b from-primary to-accent rounded-r-full"
+                        transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                      />
+                    )}
+                    
+                    <div className="relative flex-shrink-0">
                       <Icon className={cn(
-                        "w-4 h-4 flex-shrink-0 transition-colors",
+                        "w-4 h-4 transition-all duration-200",
                         isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
                       )} />
                       {item.isAI && collapsed && (
-                        <Sparkles className="w-2.5 h-2.5 text-violet-400 absolute -top-1 -right-1" />
+                        <Sparkles className="w-2.5 h-2.5 text-accent absolute -top-1 -right-1" />
                       )}
                     </div>
                     {!collapsed && (
                       <>
                         <span className="text-sm font-medium truncate flex-1 text-left">{item.label}</span>
                         {item.isAI && (
-                          <Badge 
-                            variant="outline" 
-                            className={cn(
-                              "ml-auto px-1.5 py-0 text-[10px] font-medium border-0",
-                              "bg-gradient-to-r from-violet-500/20 to-purple-500/20",
-                              "text-violet-400"
-                            )}
-                          >
-                            <Sparkles className="w-2.5 h-2.5 mr-0.5" />
+                          <span className="ai-badge flex items-center gap-0.5">
+                            <Sparkles className="w-2.5 h-2.5" />
                             AI
-                          </Badge>
+                          </span>
                         )}
                       </>
                     )}
-                  </button>
+                  </motion.button>
                 );
               })}
             </div>
@@ -289,18 +296,18 @@ export const Sidebar = ({ activeTab, onTabChange, isConnected = false }: Sidebar
 
       {/* Connection Status */}
       {!collapsed && (
-        <div className="p-4 border-t border-sidebar-border">
-          <div className="glass-panel p-3">
-            <div className="flex items-center gap-2 mb-2">
+        <div className="p-4 border-t border-sidebar-border relative z-10">
+          <div className="glass-panel p-4 rounded-xl">
+            <div className="flex items-center gap-2.5 mb-2">
               <div className={cn(
                 "status-dot",
                 isConnected ? "status-dot-success" : "status-dot-warning"
               )} />
-              <span className="text-xs font-medium text-foreground">
+              <span className="text-xs font-semibold text-foreground">
                 {isConnected ? 'Connected' : 'Not Connected'}
               </span>
             </div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
               {isConnected 
                 ? 'Ready to export tenant configuration'
                 : 'Connect to a tenant to begin exporting'
