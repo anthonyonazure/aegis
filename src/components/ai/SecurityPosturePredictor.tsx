@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { format } from 'date-fns';
 import { 
   TrendingUp, 
   TrendingDown,
@@ -21,7 +22,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { getLastAnalysis, saveAnalysisResult } from '@/lib/aiApi';
+import { getLastAnalysis, saveAnalysisResult, type AIAnalysisResult } from '@/lib/aiApi';
+import { AIAnalysisHistoryPanel } from './AIAnalysisHistoryPanel';
 
 interface Prediction {
   id: string;
@@ -93,6 +95,12 @@ export function SecurityPosturePredictor() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [result, setResult] = useState<SecurityPrediction | null>(null);
+  const [lastAnalyzedAt, setLastAnalyzedAt] = useState<string | null>(null);
+
+  const handleLoadHistoricalResult = (historicalResult: AIAnalysisResult) => {
+    setResult(historicalResult.result as unknown as SecurityPrediction);
+    setLastAnalyzedAt(historicalResult.createdAt);
+  };
 
   // Load last analysis on mount
   useEffect(() => {
@@ -101,6 +109,7 @@ export function SecurityPosturePredictor() {
         const lastAnalysis = await getLastAnalysis('security-predictor');
         if (lastAnalysis?.result) {
           setResult(lastAnalysis.result as unknown as SecurityPrediction);
+          setLastAnalyzedAt(lastAnalysis.createdAt);
         }
       } catch (error) {
         console.error('Failed to load last analysis:', error);
@@ -124,6 +133,7 @@ export function SecurityPosturePredictor() {
       if (data.error) throw new Error(data.error);
 
       setResult(data);
+      setLastAnalyzedAt(new Date().toISOString());
       
       // Save to database for persistence
       await saveAnalysisResult({
@@ -185,19 +195,37 @@ export function SecurityPosturePredictor() {
             <p className="text-muted-foreground">AI-powered security risk forecasting</p>
           </div>
         </div>
-        <Button onClick={analyzeAndPredict} disabled={isAnalyzing}>
-          {isAnalyzing ? (
-            <>
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              Analyzing...
-            </>
-          ) : (
-            <>
-              <Sparkles className="w-4 h-4 mr-2" />
-              Predict Risks
-            </>
+        <div className="flex items-center gap-3">
+          {lastAnalyzedAt && (
+            <Badge variant="outline" className="gap-1 text-xs text-muted-foreground">
+              <Clock className="w-3 h-3" />
+              {format(new Date(lastAnalyzedAt), 'MMM d, h:mm a')}
+            </Badge>
           )}
-        </Button>
+          <AIAnalysisHistoryPanel
+            analysisType="security-predictor"
+            currentResult={result}
+            onLoadResult={handleLoadHistoricalResult}
+            scoreExtractor={(r) => (r as unknown as SecurityPrediction).currentPosture?.overallScore}
+            titleExtractor={(r) => {
+              const data = r as unknown as SecurityPrediction;
+              return `Score: ${data.currentPosture?.overallScore || 0} - ${data.currentPosture?.riskLevel || 'N/A'}`;
+            }}
+          />
+          <Button onClick={analyzeAndPredict} disabled={isAnalyzing}>
+            {isAnalyzing ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Analyzing...
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4 mr-2" />
+                Predict Risks
+              </>
+            )}
+          </Button>
+        </div>
       </div>
 
       {!result && !isAnalyzing && (
