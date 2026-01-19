@@ -22,7 +22,9 @@ import {
   BarChart3,
   CreditCard,
   MessageSquareText,
-  Plug
+  Plug,
+  Brain,
+  FileCheck
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -59,12 +61,18 @@ import { useToast } from '@/hooks/use-toast';
 import { useTenant } from '@/contexts/TenantContext';
 import { cn } from '@/lib/utils';
 
-// Import new components
+// Import Copilot components
 import { CopilotReadinessCard } from '@/components/copilot/CopilotReadinessCard';
 import { CopilotUsageChart } from '@/components/copilot/CopilotUsageChart';
 import { CopilotLicensingTable } from '@/components/copilot/CopilotLicensingTable';
 import { PromptLibraryManager } from '@/components/copilot/PromptLibraryManager';
 import { AIGovernancePolicies } from '@/components/copilot/AIGovernancePolicies';
+
+// Import AI components
+import { TenantAnalyzer } from '@/components/ai/TenantAnalyzer';
+import { ComplianceAdvisor } from '@/components/ai/ComplianceAdvisor';
+import { RiskScoreCard } from '@/components/ai/RiskScoreCard';
+import { CrossTenantBenchmark } from '@/components/ai/CrossTenantBenchmark';
 
 interface CopilotAgent {
   id: string;
@@ -425,10 +433,18 @@ export const CopilotAgentsView = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid grid-cols-4 md:grid-cols-8 gap-1">
+        <TabsList className="grid grid-cols-5 md:grid-cols-10 gap-1">
           <TabsTrigger value="agents" className="flex items-center gap-1">
             <Bot className="w-4 h-4" />
             <span className="hidden md:inline">Agents</span>
+          </TabsTrigger>
+          <TabsTrigger value="ai-analyzer" className="flex items-center gap-1">
+            <Brain className="w-4 h-4" />
+            <span className="hidden md:inline">AI Analyzer</span>
+          </TabsTrigger>
+          <TabsTrigger value="compliance" className="flex items-center gap-1">
+            <FileCheck className="w-4 h-4" />
+            <span className="hidden md:inline">Compliance</span>
           </TabsTrigger>
           <TabsTrigger value="readiness" className="flex items-center gap-1">
             <ClipboardCheck className="w-4 h-4" />
@@ -456,9 +472,19 @@ export const CopilotAgentsView = () => {
           </TabsTrigger>
           <TabsTrigger value="cross-tenant" className="flex items-center gap-1">
             <Building2 className="w-4 h-4" />
-            <span className="hidden md:inline">Cross-Tenant</span>
+            <span className="hidden md:inline">Benchmark</span>
           </TabsTrigger>
         </TabsList>
+
+        {/* AI Analyzer Tab */}
+        <TabsContent value="ai-analyzer" className="space-y-4">
+          <TenantAnalyzer />
+        </TabsContent>
+
+        {/* Compliance Advisor Tab */}
+        <TabsContent value="compliance" className="space-y-4">
+          <ComplianceAdvisor />
+        </TabsContent>
 
         {/* Agents List Tab */}
         <TabsContent value="agents" className="space-y-4">
