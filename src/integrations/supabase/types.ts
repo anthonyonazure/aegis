@@ -14,6 +14,153 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_builder_models: {
+        Row: {
+          accuracy_score: number | null
+          created_at: string
+          created_by: string | null
+          customer_id: string | null
+          display_name: string
+          environment_id: string | null
+          environment_name: string | null
+          id: string
+          last_trained: string | null
+          metadata: Json | null
+          model_id: string
+          model_type: string
+          status: string | null
+          tenant_connection_id: string | null
+          updated_at: string
+          usage_count: number | null
+          user_id: string
+        }
+        Insert: {
+          accuracy_score?: number | null
+          created_at?: string
+          created_by?: string | null
+          customer_id?: string | null
+          display_name: string
+          environment_id?: string | null
+          environment_name?: string | null
+          id?: string
+          last_trained?: string | null
+          metadata?: Json | null
+          model_id: string
+          model_type: string
+          status?: string | null
+          tenant_connection_id?: string | null
+          updated_at?: string
+          usage_count?: number | null
+          user_id: string
+        }
+        Update: {
+          accuracy_score?: number | null
+          created_at?: string
+          created_by?: string | null
+          customer_id?: string | null
+          display_name?: string
+          environment_id?: string | null
+          environment_name?: string | null
+          id?: string
+          last_trained?: string | null
+          metadata?: Json | null
+          model_id?: string
+          model_type?: string
+          status?: string | null
+          tenant_connection_id?: string | null
+          updated_at?: string
+          usage_count?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_builder_models_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_builder_models_tenant_connection_id_fkey"
+            columns: ["tenant_connection_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_governance_policies: {
+        Row: {
+          created_at: string
+          customer_id: string | null
+          description: string | null
+          enforcement_level: string | null
+          id: string
+          is_active: boolean | null
+          last_enforced_at: string | null
+          name: string
+          policy_type: string
+          settings: Json | null
+          target_group_id: string | null
+          target_tenant_ids: string[] | null
+          target_type: string
+          updated_at: string
+          user_id: string
+          violations_count: number | null
+        }
+        Insert: {
+          created_at?: string
+          customer_id?: string | null
+          description?: string | null
+          enforcement_level?: string | null
+          id?: string
+          is_active?: boolean | null
+          last_enforced_at?: string | null
+          name: string
+          policy_type: string
+          settings?: Json | null
+          target_group_id?: string | null
+          target_tenant_ids?: string[] | null
+          target_type?: string
+          updated_at?: string
+          user_id: string
+          violations_count?: number | null
+        }
+        Update: {
+          created_at?: string
+          customer_id?: string | null
+          description?: string | null
+          enforcement_level?: string | null
+          id?: string
+          is_active?: boolean | null
+          last_enforced_at?: string | null
+          name?: string
+          policy_type?: string
+          settings?: Json | null
+          target_group_id?: string | null
+          target_tenant_ids?: string[] | null
+          target_type?: string
+          updated_at?: string
+          user_id?: string
+          violations_count?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_governance_policies_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_governance_policies_target_group_id_fkey"
+            columns: ["target_group_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_logs: {
         Row: {
           action: string
@@ -426,6 +573,381 @@ export type Database = {
             columns: ["export_job_id"]
             isOneToOne: false
             referencedRelation: "export_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      copilot_feedback: {
+        Row: {
+          common_issues: Json | null
+          created_at: string
+          customer_id: string | null
+          feedback_by_app: Json | null
+          id: string
+          period_end: string
+          period_start: string
+          recorded_at: string
+          satisfaction_score: number | null
+          tenant_connection_id: string | null
+          thumbs_down: number | null
+          thumbs_up: number | null
+          total_responses: number | null
+          user_id: string
+        }
+        Insert: {
+          common_issues?: Json | null
+          created_at?: string
+          customer_id?: string | null
+          feedback_by_app?: Json | null
+          id?: string
+          period_end: string
+          period_start: string
+          recorded_at?: string
+          satisfaction_score?: number | null
+          tenant_connection_id?: string | null
+          thumbs_down?: number | null
+          thumbs_up?: number | null
+          total_responses?: number | null
+          user_id: string
+        }
+        Update: {
+          common_issues?: Json | null
+          created_at?: string
+          customer_id?: string | null
+          feedback_by_app?: Json | null
+          id?: string
+          period_end?: string
+          period_start?: string
+          recorded_at?: string
+          satisfaction_score?: number | null
+          tenant_connection_id?: string | null
+          thumbs_down?: number | null
+          thumbs_up?: number | null
+          total_responses?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "copilot_feedback_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "copilot_feedback_tenant_connection_id_fkey"
+            columns: ["tenant_connection_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      copilot_plugins: {
+        Row: {
+          approval_date: string | null
+          approved_by: string | null
+          created_at: string
+          customer_id: string | null
+          description: string | null
+          display_name: string
+          id: string
+          is_approved: boolean | null
+          metadata: Json | null
+          permissions: Json | null
+          plugin_id: string
+          plugin_type: string
+          publisher: string | null
+          status: string | null
+          tenant_connection_id: string | null
+          updated_at: string
+          usage_count: number | null
+          user_id: string
+        }
+        Insert: {
+          approval_date?: string | null
+          approved_by?: string | null
+          created_at?: string
+          customer_id?: string | null
+          description?: string | null
+          display_name: string
+          id?: string
+          is_approved?: boolean | null
+          metadata?: Json | null
+          permissions?: Json | null
+          plugin_id: string
+          plugin_type: string
+          publisher?: string | null
+          status?: string | null
+          tenant_connection_id?: string | null
+          updated_at?: string
+          usage_count?: number | null
+          user_id: string
+        }
+        Update: {
+          approval_date?: string | null
+          approved_by?: string | null
+          created_at?: string
+          customer_id?: string | null
+          description?: string | null
+          display_name?: string
+          id?: string
+          is_approved?: boolean | null
+          metadata?: Json | null
+          permissions?: Json | null
+          plugin_id?: string
+          plugin_type?: string
+          publisher?: string | null
+          status?: string | null
+          tenant_connection_id?: string | null
+          updated_at?: string
+          usage_count?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "copilot_plugins_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "copilot_plugins_tenant_connection_id_fkey"
+            columns: ["tenant_connection_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      copilot_readiness_assessments: {
+        Row: {
+          assessment_date: string
+          created_at: string
+          customer_id: string | null
+          data_governance_details: Json | null
+          data_governance_ready: boolean | null
+          id: string
+          licensing_details: Json | null
+          licensing_ready: boolean | null
+          network_details: Json | null
+          network_ready: boolean | null
+          overall_score: number | null
+          permissions_details: Json | null
+          permissions_ready: boolean | null
+          recommendations: Json | null
+          semantic_index_details: Json | null
+          semantic_index_ready: boolean | null
+          tenant_connection_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          assessment_date?: string
+          created_at?: string
+          customer_id?: string | null
+          data_governance_details?: Json | null
+          data_governance_ready?: boolean | null
+          id?: string
+          licensing_details?: Json | null
+          licensing_ready?: boolean | null
+          network_details?: Json | null
+          network_ready?: boolean | null
+          overall_score?: number | null
+          permissions_details?: Json | null
+          permissions_ready?: boolean | null
+          recommendations?: Json | null
+          semantic_index_details?: Json | null
+          semantic_index_ready?: boolean | null
+          tenant_connection_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          assessment_date?: string
+          created_at?: string
+          customer_id?: string | null
+          data_governance_details?: Json | null
+          data_governance_ready?: boolean | null
+          id?: string
+          licensing_details?: Json | null
+          licensing_ready?: boolean | null
+          network_details?: Json | null
+          network_ready?: boolean | null
+          overall_score?: number | null
+          permissions_details?: Json | null
+          permissions_ready?: boolean | null
+          recommendations?: Json | null
+          semantic_index_details?: Json | null
+          semantic_index_ready?: boolean | null
+          tenant_connection_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "copilot_readiness_assessments_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "copilot_readiness_assessments_tenant_connection_id_fkey"
+            columns: ["tenant_connection_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      copilot_studio_bots: {
+        Row: {
+          actions_count: number | null
+          bot_id: string
+          created_at: string
+          created_by: string | null
+          customer_id: string | null
+          description: string | null
+          display_name: string
+          environment_id: string | null
+          environment_name: string | null
+          id: string
+          is_published: boolean | null
+          last_modified: string | null
+          metadata: Json | null
+          status: string | null
+          tenant_connection_id: string | null
+          topics_count: number | null
+          triggers_count: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          actions_count?: number | null
+          bot_id: string
+          created_at?: string
+          created_by?: string | null
+          customer_id?: string | null
+          description?: string | null
+          display_name: string
+          environment_id?: string | null
+          environment_name?: string | null
+          id?: string
+          is_published?: boolean | null
+          last_modified?: string | null
+          metadata?: Json | null
+          status?: string | null
+          tenant_connection_id?: string | null
+          topics_count?: number | null
+          triggers_count?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          actions_count?: number | null
+          bot_id?: string
+          created_at?: string
+          created_by?: string | null
+          customer_id?: string | null
+          description?: string | null
+          display_name?: string
+          environment_id?: string | null
+          environment_name?: string | null
+          id?: string
+          is_published?: boolean | null
+          last_modified?: string | null
+          metadata?: Json | null
+          status?: string | null
+          tenant_connection_id?: string | null
+          topics_count?: number | null
+          triggers_count?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "copilot_studio_bots_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "copilot_studio_bots_tenant_connection_id_fkey"
+            columns: ["tenant_connection_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      copilot_usage_metrics: {
+        Row: {
+          active_users: number | null
+          adoption_rate: number | null
+          avg_queries_per_user: number | null
+          created_at: string
+          customer_id: string | null
+          id: string
+          period_end: string
+          period_start: string
+          recorded_at: string
+          tenant_connection_id: string | null
+          top_features: Json | null
+          total_queries: number | null
+          total_users: number | null
+          usage_by_app: Json | null
+          user_id: string
+        }
+        Insert: {
+          active_users?: number | null
+          adoption_rate?: number | null
+          avg_queries_per_user?: number | null
+          created_at?: string
+          customer_id?: string | null
+          id?: string
+          period_end: string
+          period_start: string
+          recorded_at?: string
+          tenant_connection_id?: string | null
+          top_features?: Json | null
+          total_queries?: number | null
+          total_users?: number | null
+          usage_by_app?: Json | null
+          user_id: string
+        }
+        Update: {
+          active_users?: number | null
+          adoption_rate?: number | null
+          avg_queries_per_user?: number | null
+          created_at?: string
+          customer_id?: string | null
+          id?: string
+          period_end?: string
+          period_start?: string
+          recorded_at?: string
+          tenant_connection_id?: string | null
+          top_features?: Json | null
+          total_queries?: number | null
+          total_users?: number | null
+          usage_by_app?: Json | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "copilot_usage_metrics_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "copilot_usage_metrics_tenant_connection_id_fkey"
+            columns: ["tenant_connection_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_connections"
             referencedColumns: ["id"]
           },
         ]
@@ -1173,6 +1695,65 @@ export type Database = {
           version?: number
         }
         Relationships: []
+      }
+      prompt_library: {
+        Row: {
+          avg_rating: number | null
+          category: string
+          created_at: string
+          customer_id: string | null
+          description: string | null
+          id: string
+          is_public: boolean | null
+          name: string
+          prompt_text: string
+          tags: string[] | null
+          target_apps: string[] | null
+          updated_at: string
+          usage_count: number | null
+          user_id: string
+        }
+        Insert: {
+          avg_rating?: number | null
+          category?: string
+          created_at?: string
+          customer_id?: string | null
+          description?: string | null
+          id?: string
+          is_public?: boolean | null
+          name: string
+          prompt_text: string
+          tags?: string[] | null
+          target_apps?: string[] | null
+          updated_at?: string
+          usage_count?: number | null
+          user_id: string
+        }
+        Update: {
+          avg_rating?: number | null
+          category?: string
+          created_at?: string
+          customer_id?: string | null
+          description?: string | null
+          id?: string
+          is_public?: boolean | null
+          name?: string
+          prompt_text?: string
+          tags?: string[] | null
+          target_apps?: string[] | null
+          updated_at?: string
+          usage_count?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prompt_library_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       psa_integrations: {
         Row: {

@@ -53,3 +53,6 @@ verify_jwt = false
 
 [functions.run-scheduled-governance]
 verify_jwt = false
+
+[functions.fetch-copilot-data]
+verify_jwt = false
