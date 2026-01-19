@@ -17,7 +17,12 @@ import {
   Settings2,
   Users,
   Activity,
-  Sparkles
+  Sparkles,
+  ClipboardCheck,
+  BarChart3,
+  CreditCard,
+  MessageSquareText,
+  Plug
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -53,6 +58,13 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useTenant } from '@/contexts/TenantContext';
 import { cn } from '@/lib/utils';
+
+// Import new components
+import { CopilotReadinessCard } from '@/components/copilot/CopilotReadinessCard';
+import { CopilotUsageChart } from '@/components/copilot/CopilotUsageChart';
+import { CopilotLicensingTable } from '@/components/copilot/CopilotLicensingTable';
+import { PromptLibraryManager } from '@/components/copilot/PromptLibraryManager';
+import { AIGovernancePolicies } from '@/components/copilot/AIGovernancePolicies';
 
 interface CopilotAgent {
   id: string;
@@ -104,6 +116,7 @@ export const CopilotAgentsView = () => {
   const [selectedAgent, setSelectedAgent] = useState<CopilotAgent | null>(null);
   const [showAgentDetails, setShowAgentDetails] = useState(false);
   const [deploymentFilter, setDeploymentFilter] = useState<'all' | 'organization' | 'sideloaded'>('all');
+  const [activeTab, setActiveTab] = useState('agents');
 
   const selectedTenant = tenants.find(t => t.id === selectedTenantId);
   const tenantDisplayName = selectedTenant?.displayName || selectedTenant?.tenantName || 'All Tenants';
@@ -132,7 +145,6 @@ export const CopilotAgentsView = () => {
 
     setIsLoading(true);
     try {
-      // Fetch agents via Graph API
       const { data, error } = await supabase.functions.invoke('graph-api', {
         body: {
           action: 'export',
@@ -144,7 +156,6 @@ export const CopilotAgentsView = () => {
 
       if (error) {
         console.error('Failed to fetch agents:', error);
-        // Use mock data for demo
         setAgents(getMockAgents());
       } else if (data?.resources?.['copilot/copilot-agents']) {
         setAgents(data.resources['copilot/copilot-agents']);
@@ -152,10 +163,7 @@ export const CopilotAgentsView = () => {
         setAgents(getMockAgents());
       }
 
-      // Load policies (mock for now since this requires PowerShell)
       setPolicies(getMockPolicies());
-      
-      // Load cross-tenant status
       loadTenantStatuses();
 
     } catch (error) {
@@ -168,7 +176,6 @@ export const CopilotAgentsView = () => {
   };
 
   const loadTenantStatuses = async () => {
-    // Load agent status for all connected tenants in customer
     const { data: connections } = await supabase
       .from('tenant_connections')
       .select('id, tenant_id, tenant_name, display_name, customer_id')
@@ -180,7 +187,7 @@ export const CopilotAgentsView = () => {
         .map(c => ({
           tenantId: c.tenant_id,
           tenantName: c.display_name || c.tenant_name || c.tenant_id,
-          agentCount: Math.floor(Math.random() * 10) + 1, // Mock data
+          agentCount: Math.floor(Math.random() * 10) + 1,
           blockedCount: Math.floor(Math.random() * 3),
           pendingCount: Math.floor(Math.random() * 2),
           policyName: 'Default Policy',
@@ -304,11 +311,11 @@ export const CopilotAgentsView = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-            <Bot className="w-7 h-7 text-primary" />
-            Copilot Agent Management
+            <Sparkles className="w-7 h-7 text-primary" />
+            Copilot Management Hub
           </h1>
           <p className="text-muted-foreground mt-1">
-            Manage Copilot agents, declarative agents, and governance policies
+            Manage Copilot agents, licensing, usage analytics, and AI governance
           </p>
         </div>
         <Button variant="outline" onClick={loadAgents} disabled={isLoading || !isConnected}>
@@ -317,12 +324,11 @@ export const CopilotAgentsView = () => {
         </Button>
       </div>
 
-      {/* Customer/tenant filter indicator */}
       {selectedCustomerId && (
         <Alert className="border-primary/50 bg-primary/5">
           <Filter className="h-4 w-4" />
           <AlertDescription>
-            Showing agents for <strong>{selectedCustomerName}</strong>
+            Showing data for <strong>{selectedCustomerName}</strong>
             {selectedTenantId && ` (${tenantDisplayName})`}
           </AlertDescription>
         </Alert>
@@ -339,7 +345,7 @@ export const CopilotAgentsView = () => {
             <div>
               <p className="font-medium text-foreground">Not Connected</p>
               <p className="text-sm text-muted-foreground">
-                Connect to a tenant to manage Copilot agents
+                Connect to a tenant to manage Copilot features
               </p>
             </div>
           </div>
@@ -394,23 +400,39 @@ export const CopilotAgentsView = () => {
         </Card>
       </div>
 
-      <Tabs defaultValue="agents" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="agents">
-            <Bot className="w-4 h-4 mr-2" />
-            Agents List
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <TabsList className="grid grid-cols-4 md:grid-cols-8 gap-1">
+          <TabsTrigger value="agents" className="flex items-center gap-1">
+            <Bot className="w-4 h-4" />
+            <span className="hidden md:inline">Agents</span>
           </TabsTrigger>
-          <TabsTrigger value="policies">
-            <Shield className="w-4 h-4 mr-2" />
-            Governance Policies
+          <TabsTrigger value="readiness" className="flex items-center gap-1">
+            <ClipboardCheck className="w-4 h-4" />
+            <span className="hidden md:inline">Readiness</span>
           </TabsTrigger>
-          <TabsTrigger value="deployment">
-            <Rocket className="w-4 h-4 mr-2" />
-            Deployment Status
+          <TabsTrigger value="analytics" className="flex items-center gap-1">
+            <BarChart3 className="w-4 h-4" />
+            <span className="hidden md:inline">Analytics</span>
           </TabsTrigger>
-          <TabsTrigger value="cross-tenant">
-            <Building2 className="w-4 h-4 mr-2" />
-            Cross-Tenant View
+          <TabsTrigger value="licensing" className="flex items-center gap-1">
+            <CreditCard className="w-4 h-4" />
+            <span className="hidden md:inline">Licensing</span>
+          </TabsTrigger>
+          <TabsTrigger value="prompts" className="flex items-center gap-1">
+            <MessageSquareText className="w-4 h-4" />
+            <span className="hidden md:inline">Prompts</span>
+          </TabsTrigger>
+          <TabsTrigger value="governance" className="flex items-center gap-1">
+            <Shield className="w-4 h-4" />
+            <span className="hidden md:inline">Governance</span>
+          </TabsTrigger>
+          <TabsTrigger value="policies" className="flex items-center gap-1">
+            <Settings2 className="w-4 h-4" />
+            <span className="hidden md:inline">Policies</span>
+          </TabsTrigger>
+          <TabsTrigger value="cross-tenant" className="flex items-center gap-1">
+            <Building2 className="w-4 h-4" />
+            <span className="hidden md:inline">Cross-Tenant</span>
           </TabsTrigger>
         </TabsList>
 
@@ -500,7 +522,69 @@ export const CopilotAgentsView = () => {
           </Card>
         </TabsContent>
 
-        {/* Governance Policies Tab */}
+        {/* Readiness Assessment Tab */}
+        <TabsContent value="readiness" className="space-y-4">
+          {connectionId ? (
+            <CopilotReadinessCard 
+              tenantConnectionId={connectionId}
+              customerId={selectedCustomerId || undefined}
+              tenantName={tenantDisplayName}
+            />
+          ) : (
+            <Card className="glass-panel border-border/50">
+              <CardContent className="py-12 text-center text-muted-foreground">
+                <ClipboardCheck className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                <p>Connect to a tenant to run readiness assessment</p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* Usage Analytics Tab */}
+        <TabsContent value="analytics" className="space-y-4">
+          {connectionId ? (
+            <CopilotUsageChart 
+              tenantConnectionId={connectionId}
+              tenantName={tenantDisplayName}
+            />
+          ) : (
+            <Card className="glass-panel border-border/50">
+              <CardContent className="py-12 text-center text-muted-foreground">
+                <BarChart3 className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                <p>Connect to a tenant to view usage analytics</p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* Licensing Tab */}
+        <TabsContent value="licensing" className="space-y-4">
+          {connectionId ? (
+            <CopilotLicensingTable 
+              tenantConnectionId={connectionId}
+              tenantName={tenantDisplayName}
+            />
+          ) : (
+            <Card className="glass-panel border-border/50">
+              <CardContent className="py-12 text-center text-muted-foreground">
+                <CreditCard className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                <p>Connect to a tenant to view licensing status</p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* Prompt Library Tab */}
+        <TabsContent value="prompts" className="space-y-4">
+          <PromptLibraryManager customerId={selectedCustomerId || undefined} />
+        </TabsContent>
+
+        {/* AI Governance Tab */}
+        <TabsContent value="governance" className="space-y-4">
+          <AIGovernancePolicies customerId={selectedCustomerId || undefined} />
+        </TabsContent>
+
+        {/* Agent Policies Tab */}
         <TabsContent value="policies" className="space-y-4">
           <Card className="glass-panel border-border/50">
             <CardHeader>
@@ -556,46 +640,12 @@ export const CopilotAgentsView = () => {
           </Card>
         </TabsContent>
 
-        {/* Deployment Status Tab */}
-        <TabsContent value="deployment" className="space-y-4">
-          <Card className="glass-panel border-border/50">
-            <CardHeader>
-              <CardTitle>Agent Deployment Status</CardTitle>
-              <CardDescription>Track deployment progress and approval status</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {agents.map(agent => (
-                  <div key={agent.id} className="p-4 rounded-lg bg-muted/30 border border-border/50">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-3">
-                        <Bot className="w-5 h-5 text-primary" />
-                        <span className="font-medium text-foreground">{agent.displayName}</span>
-                      </div>
-                      {getStatusBadge(agent.publishingState, agent.isBlocked)}
-                    </div>
-                    <Progress 
-                      value={agent.publishingState === 'published' ? 100 : agent.publishingState === 'submitted' ? 50 : 0} 
-                      className="h-2"
-                    />
-                    <div className="flex justify-between mt-2 text-xs text-muted-foreground">
-                      <span>Submitted</span>
-                      <span>In Review</span>
-                      <span>Published</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
         {/* Cross-Tenant View Tab */}
         <TabsContent value="cross-tenant" className="space-y-4">
           <Card className="glass-panel border-border/50">
             <CardHeader>
-              <CardTitle>Cross-Tenant Agent Governance</CardTitle>
-              <CardDescription>Compare agent deployment and policies across customer tenants</CardDescription>
+              <CardTitle>Cross-Tenant Copilot Governance</CardTitle>
+              <CardDescription>Compare Copilot deployment and policies across customer tenants</CardDescription>
             </CardHeader>
             <CardContent>
               {tenantStatuses.length === 0 ? (
