@@ -311,6 +311,8 @@ export function GovernanceCenterView({ onNavigate, onDeployPolicy }: GovernanceC
   const [selectedAction, setSelectedAction] = useState<ActionItem | null>(null);
   const [showActionDialog, setShowActionDialog] = useState(false);
   const [actionWorkflow, setActionWorkflow] = useState<'deploy' | 'report' | 'manual'>('deploy');
+  const [showRemediationGuide, setShowRemediationGuide] = useState(false);
+  const [activeRemediationGuide, setActiveRemediationGuide] = useState<RemediationGuide | null>(null);
 
   useEffect(() => {
     loadGovernanceData();
@@ -1977,6 +1979,13 @@ export function GovernanceCenterView({ onNavigate, onDeployPolicy }: GovernanceC
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Remediation Guide Dialog */}
+      <RemediationGuideDialog
+        guide={activeRemediationGuide}
+        open={showRemediationGuide}
+        onOpenChange={setShowRemediationGuide}
+      />
     </div>
   );
 }
