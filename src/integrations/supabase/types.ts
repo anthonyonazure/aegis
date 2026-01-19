@@ -1661,6 +1661,39 @@ export type Database = {
           },
         ]
       }
+      invitations: {
+        Row: {
+          code: string
+          created_at: string
+          created_by: string | null
+          email: string | null
+          expires_at: string
+          id: string
+          used_at: string | null
+          used_by: string | null
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          created_by?: string | null
+          email?: string | null
+          expires_at: string
+          id?: string
+          used_at?: string | null
+          used_by?: string | null
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          created_by?: string | null
+          email?: string | null
+          expires_at?: string
+          id?: string
+          used_at?: string | null
+          used_by?: string | null
+        }
+        Relationships: []
+      }
       permission_changes: {
         Row: {
           change_type: string
@@ -3139,6 +3172,27 @@ export type Database = {
         }
         Relationships: []
       }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
       validation_results: {
         Row: {
           completed_at: string | null
@@ -3299,6 +3353,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      check_invite_valid: {
+        Args: { invite_code: string; user_email: string }
+        Returns: boolean
+      }
       get_ai_api_key: { Args: { p_provider: string }; Returns: string }
       get_decrypted_credential: {
         Args: { p_tenant_connection_id: string; p_user_id: string }
@@ -3314,6 +3372,13 @@ export type Database = {
           api_key: string
           api_secret: string
         }[]
+      }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
       }
       owns_customer: { Args: { p_customer_id: string }; Returns: boolean }
       owns_deployment: { Args: { p_deployment_id: string }; Returns: boolean }
@@ -3337,8 +3402,13 @@ export type Database = {
         }
         Returns: string
       }
+      validate_and_use_invite: {
+        Args: { invite_code: string; user_email: string; user_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
+      app_role: "admin" | "user"
       baseline_type:
         | "cis"
         | "nist"
@@ -3486,6 +3556,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      app_role: ["admin", "user"],
       baseline_type: [
         "cis",
         "nist",
