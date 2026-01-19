@@ -247,26 +247,28 @@ export function TenantAnalyzer() {
         {riskFactors.length > 0 && (
           <Card className="glass-panel border-border/50">
             <CardHeader>
-              <CardTitle className="text-sm">Risk Factors</CardTitle>
+              <CardTitle className="text-sm">Risk Factors ({riskFactors.length})</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {riskFactors.map((factor, i) => (
-                  <div key={i} className="flex items-start justify-between gap-4 p-3 bg-muted/30 rounded-lg">
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-foreground">{factor.factor}</p>
-                      <p className="text-xs text-muted-foreground mt-1">{factor.impact}</p>
+              <ScrollArea className="max-h-[300px]">
+                <div className="space-y-3 pr-4">
+                  {riskFactors.map((factor, i) => (
+                    <div key={i} className="flex items-start justify-between gap-4 p-3 bg-muted/30 rounded-lg">
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-foreground">{factor.factor}</p>
+                        <p className="text-xs text-muted-foreground mt-1">{factor.impact}</p>
+                      </div>
+                      <Badge variant="outline" className={cn(
+                        factor.severity === 'high' ? 'border-red-500 text-red-500' :
+                        factor.severity === 'medium' ? 'border-yellow-500 text-yellow-500' :
+                        'border-green-500 text-green-500'
+                      )}>
+                        {factor.severity}
+                      </Badge>
                     </div>
-                    <Badge variant="outline" className={cn(
-                      factor.severity === 'high' ? 'border-red-500 text-red-500' :
-                      factor.severity === 'medium' ? 'border-yellow-500 text-yellow-500' :
-                      'border-green-500 text-green-500'
-                    )}>
-                      {factor.severity}
-                    </Badge>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              </ScrollArea>
             </CardContent>
           </Card>
         )}
