@@ -32,6 +32,7 @@ import { PermissionsReferenceView } from '@/components/views/PermissionsReferenc
 import { DocumentationView } from '@/components/views/DocumentationView';
 import { GovernanceCenterView, RemediationContext } from '@/components/views/GovernanceCenterView';
 import { CopilotAgentsView } from '@/components/views/CopilotAgentsView';
+import { PolicyGeneratorView } from '@/components/views/PolicyGeneratorView';
 import { SettingsView } from '@/components/views/SettingsView';
 import { PreflightCheckDialog } from '@/components/PreflightCheckDialog';
 import { ALL_RESOURCE_CATEGORIES, ExportFormat } from '@/types/tenant';
@@ -253,6 +254,8 @@ const Index = () => {
       case 'policies':
       case 'policy-templates':
         return <PolicyTemplatesView />;
+      case 'policy-generator':
+        return <PolicyGeneratorView />;
       case 'policy-deployment':
         return (
           <PolicyDeploymentView 
