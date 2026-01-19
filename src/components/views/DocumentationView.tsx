@@ -35,7 +35,10 @@ import {
   FileCheck,
   CreditCard,
   Webhook,
-  Calendar
+  Calendar,
+  Brain,
+  Sparkles,
+  Bot
 } from 'lucide-react';
 
 const DOCUMENTATION_CONTENT = {
@@ -59,6 +62,8 @@ A comprehensive Microsoft 365 governance and management platform designed for Ma
 - **Webhook Notifications**: Get alerts via webhooks for governance events
 - **Customer Management**: Organize tenants by customer with grouping capabilities
 - **Audit Logging**: Complete audit trail of all actions performed
+- **AI-Powered Intelligence**: Built-in AI analysis for tenant health, compliance, risk scoring, and recommendations
+- **BYOK AI Support**: Bring your own API keys for OpenAI, Google, Anthropic, Azure, and more
 
 ## Architecture
 
@@ -66,6 +71,7 @@ The platform is built on:
 - **Frontend**: React with TypeScript, Tailwind CSS, and shadcn/ui components
 - **Backend**: Supabase (PostgreSQL database, Edge Functions, Auth)
 - **APIs**: Microsoft Graph API for M365 integration
+- **AI Gateway**: Multi-provider AI with automatic fallback and streaming support
 `
   },
   setup: {
@@ -900,6 +906,7 @@ Run the built-in health check:
 - Stored in Supabase Vault (enterprise-grade encryption)
 - Never exposed in logs or UI
 - Automatic rotation reminders
+- AI API keys encrypted with same standards
 
 ### Data Encryption
 
@@ -938,6 +945,7 @@ All actions are logged:
 - When (timestamp)
 - Where (IP address, user agent)
 - Result (success/failure)
+- AI analysis requests and results
 
 View audit logs in **Audit** section.
 
@@ -949,6 +957,7 @@ View audit logs in **Audit** section.
 - User metadata (not passwords)
 - Group information
 - Device configurations (not personal data)
+- AI conversation history (optional)
 
 ### Data Not Collected
 
@@ -962,6 +971,7 @@ View audit logs in **Audit** section.
 - Exports retained based on configuration
 - Audit logs retained for 90 days (configurable)
 - Deleted data purged within 30 days
+- AI conversations expire after 30 days
 
 ## Compliance
 
@@ -980,6 +990,462 @@ The platform is designed to support:
 4. **Enable MFA**: For all platform users
 5. **Separate accounts**: Use dedicated app registrations
 6. **Test in dev**: Use dry-run before production deployment
+7. **Secure AI keys**: Use BYOK with secure storage
+`
+  },
+  aiIntelligence: {
+    title: 'AI Intelligence',
+    icon: Brain,
+    content: `
+# AI Intelligence
+
+M365 Governance Manager includes powerful AI-powered analysis capabilities to help you understand your tenant health, identify risks, and get actionable recommendations.
+
+## AI Features Overview
+
+### Tenant Health Analysis
+
+AI-powered analysis of your tenant's overall health:
+
+- **Health Score**: Overall score (0-100) based on multiple factors
+- **Category Breakdown**: Security, Identity, Compliance, Performance, Cost
+- **Issue Detection**: Automatic identification of problems
+- **Quick Wins**: Prioritized recommendations for immediate impact
+
+### Compliance Advisor
+
+Get AI-powered compliance guidance:
+
+- Natural language questions about compliance
+- Real-time analysis of tenant configuration
+- Recommendations based on industry standards
+- Remediation suggestions with step-by-step guidance
+
+### Risk Score Analysis
+
+Comprehensive risk assessment:
+
+- **Risk Score**: Overall risk level (0-100)
+- **Risk Categories**: Security, Compliance, Operational, Financial
+- **Risk Factors**: Specific issues contributing to risk
+- **Mitigations**: Recommended actions to reduce risk
+
+### Cross-Tenant Benchmarking
+
+Compare tenants against each other:
+
+- Performance comparison across your tenant portfolio
+- Industry benchmark comparisons
+- Identify outliers and best practices
+- Adoption rate analysis
+
+## Accessing AI Features
+
+### Tenant Analyzer
+
+1. Navigate to **Tenant Health** → **Copilot Agents**
+2. Select the **AI Analyzer** tab
+3. Choose an analysis type:
+   - Tenant Health
+   - Compliance
+   - Risk Score
+   - Cost Forecast
+4. Click **Run Analysis**
+5. View detailed results with recommendations
+
+### AI Chat
+
+Interactive chat for tenant questions:
+
+1. Open AI Chat from any analysis view
+2. Ask questions in natural language:
+   - "What are the top security risks in this tenant?"
+   - "How can I improve MFA coverage?"
+   - "What compliance gaps exist for ISO 27001?"
+3. Get contextual answers based on your tenant data
+
+### Compliance Advisor
+
+1. Navigate to **Copilot Agents** → **Compliance** tab
+2. Select a compliance framework (CIS, NIST, ISO, etc.)
+3. Use the chat to ask compliance questions
+4. Get specific recommendations for your tenant
+
+## AI Analysis Types
+
+| Analysis | Purpose | Output |
+|----------|---------|--------|
+| \`tenant-health\` | Overall health assessment | Score, categories, issues, quick wins |
+| \`compliance\` | Compliance gap analysis | Gaps, recommendations, priority actions |
+| \`risk-score\` | Risk assessment | Score, factors, mitigations |
+| \`cost-forecast\` | License cost analysis | Current spend, projections, savings |
+| \`adoption-benchmark\` | Usage comparison | Metrics, benchmarks, recommendations |
+
+## AI Models
+
+The platform supports multiple AI providers:
+
+### Default Provider (Lovable AI)
+
+- No configuration required
+- Automatic model selection
+- Supports both Gemini and GPT models
+- Best for most use cases
+
+### Available Models
+
+**Google Gemini:**
+- \`gemini-3-flash-preview\` - Fast, balanced (default)
+- \`gemini-2.5-pro\` - Best for complex reasoning
+- \`gemini-2.5-flash\` - Cost-effective option
+
+**OpenAI:**
+- \`gpt-5\` - Most capable
+- \`gpt-5-mini\` - Balanced performance
+- \`gpt-5-nano\` - Fastest, most economical
+
+## Tips for Best Results
+
+1. **Be Specific**: Ask targeted questions for better answers
+2. **Provide Context**: Mention specific tenants or scenarios
+3. **Iterate**: Follow up on recommendations for more detail
+4. **Compare**: Use benchmarking to identify outliers
+5. **Regular Analysis**: Run health checks periodically
+`
+  },
+  byokConfiguration: {
+    title: 'BYOK AI Setup',
+    icon: Sparkles,
+    content: `
+# Bring Your Own Key (BYOK) AI Setup
+
+M365 Governance Manager supports using your own AI provider API keys for maximum flexibility and control.
+
+## Supported Providers
+
+| Provider | API Key Required | Models Available |
+|----------|------------------|------------------|
+| Lovable AI | None (built-in) | Gemini, GPT (default) |
+| OpenAI | Yes | GPT-4o, GPT-4o-mini, o1, o1-mini |
+| Google AI | Yes | Gemini Pro, Gemini Flash |
+| Anthropic | Yes | Claude 3.5 Sonnet, Claude 3.5 Haiku |
+| Azure OpenAI | Yes | GPT-4o, GPT-4o-mini (your deployment) |
+| Perplexity | Yes | Sonar, Sonar Pro |
+| Groq | Yes | Llama 3.3, Mixtral |
+| Mistral | Yes | Mistral Large, Mistral Small |
+
+## Configuring API Keys
+
+### Step 1: Navigate to Settings
+
+1. Go to **Settings** in the sidebar
+2. Select the **AI Providers** tab
+
+### Step 2: Add API Key
+
+1. Find the provider you want to configure
+2. Click **Configure API Key**
+3. Enter your API key
+4. Click **Save**
+
+### Step 3: Set as Default (Optional)
+
+1. After saving, the provider appears in "Configured Providers"
+2. Toggle **Active** to enable the provider
+3. To make it default, select it from the "Default Provider" dropdown
+4. Choose a default model for the provider
+
+## Getting API Keys
+
+### OpenAI
+
+1. Visit [platform.openai.com](https://platform.openai.com)
+2. Navigate to API Keys
+3. Create a new API key
+4. Copy and save securely
+
+### Google AI (Gemini)
+
+1. Visit [aistudio.google.com](https://aistudio.google.com)
+2. Go to API Keys section
+3. Create an API key
+4. Copy and save securely
+
+### Anthropic (Claude)
+
+1. Visit [console.anthropic.com](https://console.anthropic.com)
+2. Navigate to API Keys
+3. Generate a new key
+4. Copy and save securely
+
+### Azure OpenAI
+
+1. Create an Azure OpenAI resource in Azure Portal
+2. Deploy a model (GPT-4o recommended)
+3. Copy the endpoint and API key
+4. Note: Azure requires additional endpoint configuration
+
+### Perplexity
+
+1. Visit [perplexity.ai](https://www.perplexity.ai)
+2. Go to Settings → API
+3. Generate an API key
+4. Copy and save securely
+
+### Groq
+
+1. Visit [console.groq.com](https://console.groq.com)
+2. Navigate to API Keys
+3. Create a new key
+4. Copy and save securely
+
+### Mistral
+
+1. Visit [console.mistral.ai](https://console.mistral.ai)
+2. Go to API Keys
+3. Generate a new key
+4. Copy and save securely
+
+## Provider Selection
+
+### Per-Chat Selection
+
+Each AI chat allows selecting the provider and model:
+
+1. Click the settings icon in the chat header
+2. Select provider from dropdown
+3. Choose specific model
+4. Settings persist for the session
+
+### Automatic Fallback
+
+If a configured provider fails:
+
+1. System automatically falls back to Lovable AI
+2. You're notified of the fallback
+3. Request is completed seamlessly
+
+## Security Considerations
+
+### API Key Storage
+
+- Keys are encrypted before storage
+- Stored in Supabase Vault
+- Never exposed in UI after saving
+- Never logged or transmitted in plain text
+
+### Best Practices
+
+1. **Use dedicated keys**: Create keys specifically for this application
+2. **Monitor usage**: Check provider dashboards for unusual activity
+3. **Set limits**: Configure spending limits in provider settings
+4. **Rotate regularly**: Update keys periodically
+5. **Revoke if compromised**: Immediately revoke and replace if exposed
+
+## Troubleshooting
+
+### Invalid API Key
+
+- Verify key is copied correctly (no extra spaces)
+- Check key hasn't expired
+- Confirm key has required permissions
+- Try regenerating the key
+
+### Rate Limits
+
+- Provider may have usage limits
+- Wait and retry, or upgrade your plan
+- Consider using a different provider temporarily
+
+### Model Not Available
+
+- Some models require specific access
+- Check provider documentation
+- Try a different model from the same provider
+`
+  },
+  copilotManagement: {
+    title: 'Copilot Management',
+    icon: Bot,
+    content: `
+# Microsoft 365 Copilot Management
+
+M365 Governance Manager includes comprehensive tools for managing Microsoft 365 Copilot across your tenants.
+
+## Copilot Readiness Assessment
+
+Evaluate tenant readiness for Copilot deployment:
+
+### Running an Assessment
+
+1. Navigate to **Tenant Health** → **Copilot Agents**
+2. Select a tenant from the dropdown
+3. Click **Run Readiness Assessment**
+4. Review the results
+
+### Assessment Criteria
+
+| Criterion | Description |
+|-----------|-------------|
+| Licensing | Copilot licenses available and assigned |
+| Permissions | Required API permissions configured |
+| Semantic Index | Content indexed for Copilot |
+| Data Governance | Sensitivity labels and DLP policies |
+| Network | Required endpoints accessible |
+
+### Readiness Score
+
+- **80-100%**: Ready for deployment
+- **60-79%**: Minor issues to address
+- **40-59%**: Significant preparation needed
+- **0-39%**: Major blockers present
+
+## Copilot Usage Analytics
+
+Track Copilot adoption and usage:
+
+### Available Metrics
+
+- **Active Users**: Users actively using Copilot
+- **Total Queries**: Number of Copilot interactions
+- **Adoption Rate**: Percentage of licensed users active
+- **Top Features**: Most used Copilot capabilities
+
+### Usage by Application
+
+- Microsoft Teams
+- Word
+- Excel
+- PowerPoint
+- Outlook
+- Microsoft 365 Chat
+
+### Time Periods
+
+- Last 7 days
+- Last 30 days
+- Last 90 days
+
+## Copilot Licensing
+
+Manage Copilot license allocation:
+
+### License Overview
+
+- Total Copilot licenses
+- Assigned licenses
+- Available licenses
+- Utilization rate
+
+### SKU Breakdown
+
+View licenses by type:
+- Microsoft 365 Copilot
+- Copilot Studio
+- Copilot for Sales
+- Copilot for Service
+
+### Licensed Users
+
+- User list with Copilot assignment
+- Last active date
+- Activity status (Active/Inactive)
+
+### Optimization
+
+- Identify inactive users (30+ days)
+- Reclaim unused licenses
+- Optimize allocation
+
+## AI Governance Policies
+
+Create policies to govern AI usage:
+
+### Policy Types
+
+| Type | Description |
+|------|-------------|
+| Usage Restrictions | Limit AI feature access |
+| Data Access | Control what data AI can access |
+| Content Filtering | Filter sensitive content |
+| Audit Requirements | Logging and compliance |
+| Prompt Guidelines | Approved prompt templates |
+| Model Selection | Allowed AI models |
+
+### Enforcement Levels
+
+- **Strict**: Hard enforcement, blocks violations
+- **Moderate**: Warns users, allows override
+- **Flexible**: Advisory only, no blocking
+
+### Creating a Policy
+
+1. Navigate to **Copilot Agents** → **Governance Policies**
+2. Click **Create Policy**
+3. Configure:
+   - Name and description
+   - Policy type
+   - Enforcement level
+   - Target applications
+   - Policy rules
+4. Save and enable
+
+## Prompt Library
+
+Manage approved prompts for your organization:
+
+### Creating Prompts
+
+1. Go to **Prompt Library**
+2. Click **Add Prompt**
+3. Enter:
+   - Prompt name
+   - Category
+   - Prompt text
+   - Target applications
+   - Tags
+4. Set visibility (Public/Private)
+5. Save
+
+### Prompt Categories
+
+- Sales
+- Marketing
+- Support
+- Analysis
+- Documentation
+- Development
+- HR
+- Finance
+
+### Prompt Sharing
+
+- Public prompts visible to all users
+- Private prompts for personal use
+- Share across customer tenants
+
+## Best Practices
+
+### Deployment
+
+1. Start with pilot group
+2. Train users on effective prompting
+3. Monitor usage and feedback
+4. Expand gradually
+
+### Governance
+
+1. Establish usage policies early
+2. Regular compliance reviews
+3. Monitor for sensitive data exposure
+4. Educate on responsible AI use
+
+### Optimization
+
+1. Track adoption metrics
+2. Identify power users for training
+3. Reclaim unused licenses
+4. Collect user feedback
 `
   }
 };
@@ -1423,9 +1889,17 @@ export function DocumentationView() {
               <Key className="w-5 h-5" />
               <span>Security</span>
             </Button>
-            <Button variant="outline" className="h-auto py-4 flex-col gap-2" onClick={() => setActiveSection('policyDeployment')}>
-              <Rocket className="w-5 h-5" />
-              <span>Deployments</span>
+            <Button variant="outline" className="h-auto py-4 flex-col gap-2" onClick={() => setActiveSection('aiIntelligence')}>
+              <Brain className="w-5 h-5" />
+              <span>AI Intelligence</span>
+            </Button>
+            <Button variant="outline" className="h-auto py-4 flex-col gap-2" onClick={() => setActiveSection('byokConfiguration')}>
+              <Sparkles className="w-5 h-5" />
+              <span>BYOK Setup</span>
+            </Button>
+            <Button variant="outline" className="h-auto py-4 flex-col gap-2" onClick={() => setActiveSection('copilotManagement')}>
+              <Bot className="w-5 h-5" />
+              <span>Copilot</span>
             </Button>
           </div>
         </CardContent>
