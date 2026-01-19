@@ -43,6 +43,7 @@ import {
   Sparkles,
   Scale,
   Calculator,
+  Award,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -79,6 +80,7 @@ const navGroups: NavGroup[] = [
       { id: 'tenant-analyzer', label: 'Tenant Analyzer', icon: BarChart3, isAI: true },
       { id: 'secure-score', label: 'Secure Score', icon: Shield },
       { id: 'security-predictor', label: 'Security Predictor', icon: Eye, isAI: true },
+      { id: 'security-benchmark', label: 'Security Benchmark', icon: Award, isAI: true },
       { id: 'permission-health', label: 'Permission Health', icon: HeartPulse },
       { id: 'copilot-agents', label: 'Copilot Agents', icon: Bot },
       { id: 'copilot-advisor', label: 'Copilot Advisor', icon: Brain, isAI: true },
