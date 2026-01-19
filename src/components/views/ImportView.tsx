@@ -53,34 +53,50 @@ import { useTenant } from '@/contexts/TenantContext';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { RESOURCE_CATEGORIES } from '@/types/tenant';
+import { 
+  isPowerShellImportResource, 
+  POWERSHELL_IMPORT_RESOURCE_TYPES,
+  startAutomationImportJob,
+  getJobStatus,
+  getAutomationConfigs,
+} from '@/lib/automationApi';
 
 // Map category/subcategory to resource type key
 function getResourceTypeKey(category: string, resourceType: string): string {
   return `${category}/${resourceType}`;
 }
 
-// Get supported import resource types
+// Graph API importable types
+const GRAPH_IMPORT_TYPES = new Set([
+  'intune/device-configurations',
+  'intune/compliance-policies',
+  'intune/autopilot',
+  'intune/scripts',
+  'conditional-access/ca-policies',
+  'conditional-access/named-locations',
+  'entra-id/groups',
+  'entra-id/app-registrations',
+  'entra-id/admin-units',
+]);
+
+// Get all supported import resource types (Graph API + PowerShell)
 function getSupportedImportTypes(): Set<string> {
   const supported = new Set<string>();
-  // These match the supportsImport: true endpoints in the edge function
-  const importable = [
-    'intune/device-configurations',
-    'intune/compliance-policies',
-    'intune/autopilot',
-    'intune/scripts',
-    'conditional-access/ca-policies',
-    'conditional-access/named-locations',
-    'entra-id/groups',
-    'entra-id/app-registrations',
-    'entra-id/admin-units',
-  ];
-  importable.forEach(t => supported.add(t));
+  // Graph API supported imports
+  GRAPH_IMPORT_TYPES.forEach(t => supported.add(t));
+  // PowerShell supported imports (Exchange/SharePoint/Teams)
+  POWERSHELL_IMPORT_RESOURCE_TYPES.forEach(t => supported.add(t));
   return supported;
 }
 
 // Check if a resource type supports import
 function supportsImport(resourceType: string): boolean {
   return getSupportedImportTypes().has(resourceType);
+}
+
+// Check if a resource requires PowerShell import
+function requiresPowerShellImport(resourceType: string): boolean {
+  return isPowerShellImportResource(resourceType);
 }
 
 interface ImportJobMetadata {
@@ -360,14 +376,17 @@ export const ImportView = () => {
       return;
     }
 
-    // Check for unsupported resources
+    // Categorize resources
     const unsupportedResources = parsedResources.filter(r => !supportsImport(r.resourceType));
-    const supportedResources = parsedResources.filter(r => supportsImport(r.resourceType));
+    const graphResources = parsedResources.filter(r => supportsImport(r.resourceType) && !requiresPowerShellImport(r.resourceType));
+    const powerShellResources = parsedResources.filter(r => requiresPowerShellImport(r.resourceType));
+
+    const supportedResources = [...graphResources, ...powerShellResources];
 
     if (supportedResources.length === 0) {
       toast({
         title: 'No Importable Resources',
-        description: 'None of the selected resources support Graph API import. Only Intune, Conditional Access, and Entra ID resources can be imported.',
+        description: 'None of the selected resources support import.',
         variant: 'destructive',
       });
       return;
@@ -376,7 +395,7 @@ export const ImportView = () => {
     if (unsupportedResources.length > 0) {
       toast({
         title: 'Warning',
-        description: `${unsupportedResources.length} resource(s) will be skipped as they don't support Graph API import.`,
+        description: `${unsupportedResources.length} resource(s) will be skipped as they don't support import.`,
       });
     }
 
@@ -405,56 +424,142 @@ export const ImportView = () => {
 
       if (jobError) throw jobError;
 
-      // Prepare resources for import
-      const resourcesToImport = supportedResources.map(r => ({
-        resourceType: r.resourceType,
-        resourceName: r.resourceName,
-        data: r.data,
-      }));
+      let graphImported = 0;
+      let graphFailed = 0;
+      let psImported = 0;
+      let psFailed = 0;
 
-      // Call the import edge function
-      const { data: importResult, error: importError } = await supabase.functions.invoke('graph-api', {
-        body: {
-          action: 'import',
-          accessToken: token,
-          importJobId: job.id,
-          resources: resourcesToImport,
-        },
-      });
+      // Import Graph API resources
+      if (graphResources.length > 0) {
+        setImportProgress(10);
+        const resourcesToImport = graphResources.map(r => ({
+          resourceType: r.resourceType,
+          resourceName: r.resourceName,
+          data: r.data,
+        }));
 
-      if (importError) {
-        console.error('Import edge function error:', importError);
-        throw new Error('Import failed. Please try again.');
+        const { data: importResult, error: importError } = await supabase.functions.invoke('graph-api', {
+          body: {
+            action: 'import',
+            accessToken: token,
+            importJobId: job.id,
+            resources: resourcesToImport,
+          },
+        });
+
+        if (!importError && importResult) {
+          const result = importResult as { imported: number; failed: number };
+          graphImported = result.imported || 0;
+          graphFailed = result.failed || 0;
+        } else {
+          graphFailed = graphResources.length;
+        }
+        setImportProgress(50);
       }
 
-      const result = importResult as {
-        success: boolean;
-        imported: number;
-        failed: number;
-        total: number;
-        status: string;
-        results?: Array<{ resource: string; resourceName: string; success: boolean; error?: string }>;
-      };
+      // Import PowerShell resources (Exchange/SharePoint) via Azure Automation
+      if (powerShellResources.length > 0) {
+        // Check for Azure Automation config
+        const configs = await getAutomationConfigs();
+        const activeConfig = configs.find(c => c.is_active && c.connection_status === 'connected');
+
+        if (!activeConfig) {
+          toast({
+            title: 'Azure Automation Required',
+            description: `${powerShellResources.length} Exchange/SharePoint resources require Azure Automation. Please configure Azure Automation first.`,
+            variant: 'destructive',
+          });
+          // Update totals with Graph results only
+          psFailed = powerShellResources.length;
+        } else {
+          setImportProgress(60);
+          
+          const psResourcesToImport = powerShellResources.map(r => ({
+            resourceType: r.resourceType,
+            resourceName: r.resourceName,
+            data: r.data,
+          }));
+
+          const psResult = await startAutomationImportJob(
+            activeConfig.id,
+            connectionId!,
+            job.id,
+            psResourcesToImport
+          );
+
+          if (psResult.success && psResult.jobRunId) {
+            // Poll for job completion
+            let attempts = 0;
+            const maxAttempts = 60;
+            
+            while (attempts < maxAttempts) {
+              const status = await getJobStatus(psResult.jobRunId);
+              
+              if (status.status === 'completed') {
+                const output = status.output as { imported?: number; failed?: number } | undefined;
+                psImported = output?.imported || powerShellResources.length;
+                psFailed = output?.failed || 0;
+                break;
+              } else if (status.status === 'failed') {
+                psFailed = powerShellResources.length;
+                break;
+              }
+              
+              setImportProgress(60 + Math.min(30, attempts));
+              await new Promise(resolve => setTimeout(resolve, 3000));
+              attempts++;
+            }
+            
+            if (attempts >= maxAttempts) {
+              toast({
+                title: 'PowerShell Import Timeout',
+                description: 'The Azure Automation job is still running. Check the Jobs page for status.',
+              });
+            }
+          } else {
+            psFailed = powerShellResources.length;
+            toast({
+              title: 'PowerShell Import Failed',
+              description: psResult.error || 'Failed to start Azure Automation job',
+              variant: 'destructive',
+            });
+          }
+        }
+      }
 
       // Update progress to 100%
       setImportProgress(100);
 
+      const totalImported = graphImported + psImported;
+      const totalFailed = graphFailed + psFailed;
+
+      // Update import job with final results
+      await supabase
+        .from('import_jobs')
+        .update({
+          status: totalFailed === 0 ? 'completed' : (totalImported > 0 ? 'partial' : 'failed'),
+          resources_imported: totalImported,
+          resources_failed: totalFailed,
+          completed_at: new Date().toISOString(),
+        })
+        .eq('id', job.id);
+
       // Show toast with results
-      if (result.status === 'completed') {
+      if (totalFailed === 0) {
         toast({
           title: 'Import Successful',
-          description: `Successfully imported ${result.imported} resource(s) to your tenant.`,
+          description: `Successfully imported ${totalImported} resource(s) to your tenant.`,
         });
-      } else if (result.status === 'partial') {
+      } else if (totalImported > 0) {
         toast({
           title: 'Import Partially Completed',
-          description: `Imported ${result.imported}/${result.total} resources. ${result.failed} failed.`,
+          description: `Imported ${totalImported}/${supportedResources.length} resources. ${totalFailed} failed.`,
           variant: 'destructive',
         });
       } else {
         toast({
           title: 'Import Failed',
-          description: `Failed to import resources. ${result.failed} error(s).`,
+          description: `Failed to import resources. ${totalFailed} error(s).`,
           variant: 'destructive',
         });
       }

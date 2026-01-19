@@ -15,6 +15,18 @@ const StartJobSchema = z.object({
   resourceTypes: z.array(z.string()).min(1),
 });
 
+const StartImportJobSchema = z.object({
+  action: z.literal('start-import-job'),
+  automationConfigId: z.string().uuid(),
+  tenantConnectionId: z.string().uuid(),
+  importJobId: z.string().uuid(),
+  resources: z.array(z.object({
+    resourceType: z.string().min(1),
+    resourceName: z.string().optional(),
+    data: z.record(z.any()),
+  })).min(1).max(50),
+});
+
 const GetJobStatusSchema = z.object({
   action: z.literal('get-job-status'),
   jobRunId: z.string().uuid(),
@@ -168,6 +180,14 @@ const POWERSHELL_RESOURCES: Record<string, { module: string; commands: string[] 
     module: 'PnP.PowerShell',
     commands: ['Get-PnPTenant | Select-Object *OneDrive* | ConvertTo-Json -Depth 10'],
   },
+  'sharepoint/site-scripts': {
+    module: 'PnP.PowerShell',
+    commands: ['Get-PnPSiteScript | ConvertTo-Json -Depth 10'],
+  },
+  'sharepoint/site-designs': {
+    module: 'PnP.PowerShell',
+    commands: ['Get-PnPSiteDesign | ConvertTo-Json -Depth 10'],
+  },
 
   // Defender
   'defender/safe-attachments': {
@@ -181,6 +201,98 @@ const POWERSHELL_RESOURCES: Record<string, { module: string; commands: string[] 
   'defender/anti-phishing': {
     module: 'ExchangeOnlineManagement',
     commands: ['Get-AntiPhishPolicy | ConvertTo-Json -Depth 10'],
+  },
+};
+
+// PowerShell import commands for Exchange/SharePoint restoration
+const POWERSHELL_IMPORT_COMMANDS: Record<string, { module: string; createCommand: (data: Record<string, any>) => string }> = {
+  // Exchange Online - Transport Rules
+  'exchange/transport-rules': {
+    module: 'ExchangeOnlineManagement',
+    createCommand: (data) => {
+      const name = data.Name || data.displayName || 'ImportedRule';
+      const priority = data.Priority || 0;
+      const conditions = data.Conditions ? `-Conditions (${JSON.stringify(data.Conditions)})` : '';
+      const actions = data.Actions ? `-Actions (${JSON.stringify(data.Actions)})` : '';
+      return `New-TransportRule -Name "${name}" -Priority ${priority} ${conditions} ${actions}`;
+    },
+  },
+  'exchange/connectors': {
+    module: 'ExchangeOnlineManagement',
+    createCommand: (data) => {
+      const type = data.ConnectorType || 'Inbound';
+      const name = data.Name || data.displayName || 'ImportedConnector';
+      if (type === 'Inbound') {
+        const senderDomains = data.SenderDomains ? `-SenderDomains ${JSON.stringify(data.SenderDomains)}` : '';
+        return `New-InboundConnector -Name "${name}" ${senderDomains}`;
+      } else {
+        const recipientDomains = data.RecipientDomains ? `-RecipientDomains ${JSON.stringify(data.RecipientDomains)}` : '';
+        return `New-OutboundConnector -Name "${name}" ${recipientDomains}`;
+      }
+    },
+  },
+  'exchange/mailbox-policies': {
+    module: 'ExchangeOnlineManagement',
+    createCommand: (data) => {
+      const name = data.Name || data.displayName || 'ImportedPolicy';
+      return `New-OwaMailboxPolicy -Name "${name}"`;
+    },
+  },
+  'exchange/anti-spam': {
+    module: 'ExchangeOnlineManagement',
+    createCommand: (data) => {
+      const name = data.Name || data.displayName || 'ImportedSpamFilter';
+      const action = data.HighConfidenceSpamAction || 'MoveToJmf';
+      return `New-HostedContentFilterPolicy -Name "${name}" -HighConfidenceSpamAction ${action}`;
+    },
+  },
+  'exchange/anti-phishing': {
+    module: 'ExchangeOnlineManagement',
+    createCommand: (data) => {
+      const name = data.Name || data.displayName || 'ImportedAntiPhish';
+      const enabled = data.Enabled !== false ? '$true' : '$false';
+      return `New-AntiPhishPolicy -Name "${name}" -Enabled ${enabled}`;
+    },
+  },
+  // SharePoint - Site Scripts
+  'sharepoint/site-scripts': {
+    module: 'PnP.PowerShell',
+    createCommand: (data) => {
+      const title = data.Title || data.displayName || 'ImportedScript';
+      const content = JSON.stringify(data.Content || data);
+      return `Add-PnPSiteScript -Title "${title}" -Content '${content}'`;
+    },
+  },
+  'sharepoint/site-designs': {
+    module: 'PnP.PowerShell',
+    createCommand: (data) => {
+      const title = data.Title || data.displayName || 'ImportedDesign';
+      const webTemplate = data.WebTemplate || '64';
+      const siteScripts = data.SiteScriptIds ? `-SiteScripts ${JSON.stringify(data.SiteScriptIds)}` : '';
+      return `Add-PnPSiteDesign -Title "${title}" -WebTemplate ${webTemplate} ${siteScripts}`;
+    },
+  },
+  // Teams
+  'teams/messaging-policies': {
+    module: 'MicrosoftTeams',
+    createCommand: (data) => {
+      const identity = data.Identity || data.displayName || 'ImportedMessagingPolicy';
+      return `New-CsTeamsMessagingPolicy -Identity "${identity}"`;
+    },
+  },
+  'teams/meeting-policies': {
+    module: 'MicrosoftTeams',
+    createCommand: (data) => {
+      const identity = data.Identity || data.displayName || 'ImportedMeetingPolicy';
+      return `New-CsTeamsMeetingPolicy -Identity "${identity}"`;
+    },
+  },
+  'teams/app-setup-policies': {
+    module: 'MicrosoftTeams',
+    createCommand: (data) => {
+      const identity = data.Identity || data.displayName || 'ImportedAppSetupPolicy';
+      return `New-CsTeamsAppSetupPolicy -Identity "${identity}"`;
+    },
   },
 };
 
@@ -339,6 +451,119 @@ $output | ConvertTo-Json -Depth 20 -Compress
 `;
 }
 
+// Generate PowerShell import script for restoring Exchange/SharePoint resources
+function generateImportScript(resources: Array<{ resourceType: string; resourceName?: string; data: Record<string, any> }>): string {
+  const modules = new Set<string>();
+  const importCommands: string[] = [];
+  
+  for (const resource of resources) {
+    const config = POWERSHELL_IMPORT_COMMANDS[resource.resourceType];
+    if (config) {
+      modules.add(config.module);
+      const cmd = config.createCommand(resource.data);
+      const safeName = (resource.resourceName || resource.resourceType).replace(/"/g, '\\"');
+      importCommands.push(`
+      # Import ${safeName}
+      try {
+        $result = ${cmd}
+        $importResults += @{
+          resourceType = "${resource.resourceType}"
+          resourceName = "${safeName}"
+          success = $true
+          resourceId = $result.Identity ?? $result.Id ?? $result.Name ?? "unknown"
+        }
+      } catch {
+        $importResults += @{
+          resourceType = "${resource.resourceType}"
+          resourceName = "${safeName}"
+          success = $false
+          error = $_.Exception.Message
+        }
+      }
+      `);
+    }
+  }
+
+  return `
+param(
+  [Parameter(Mandatory=$true)]
+  [string]$TenantId,
+  
+  [Parameter(Mandatory=$true)]
+  [string]$ClientId,
+  
+  [Parameter(Mandatory=$true)]
+  [string]$ClientSecret,
+  
+  [Parameter(Mandatory=$true)]
+  [string]$ResourcesJson
+)
+
+$ErrorActionPreference = "Continue"
+$importResults = @()
+$generalErrors = @()
+
+# Parse resources
+try {
+  $resources = $ResourcesJson | ConvertFrom-Json
+} catch {
+  $output = @{
+    success = $false
+    action = "import"
+    imported = 0
+    failed = 0
+    results = @()
+    errors = @("Failed to parse resources JSON: " + $_.Exception.Message)
+  }
+  $output | ConvertTo-Json -Depth 20 -Compress
+  return
+}
+
+try {
+  # Connect to Exchange Online if needed
+  ${Array.from(modules).includes('ExchangeOnlineManagement') ? `
+  Import-Module ExchangeOnlineManagement -ErrorAction Stop
+  Connect-ExchangeOnline -AppId $ClientId -Organization "$TenantId" -ShowBanner:$false
+  ` : ''}
+  
+  # Connect to Teams if needed
+  ${Array.from(modules).includes('MicrosoftTeams') ? `
+  Import-Module MicrosoftTeams -ErrorAction Stop
+  Connect-MicrosoftTeams -TenantId $TenantId -ApplicationId $ClientId
+  ` : ''}
+  
+  # Connect to PnP if needed
+  ${Array.from(modules).includes('PnP.PowerShell') ? `
+  Import-Module PnP.PowerShell -ErrorAction Stop
+  Connect-PnPOnline -Url "https://$($TenantId.Split('.')[0])-admin.sharepoint.com" -ClientId $ClientId -ClientSecret $ClientSecret
+  ` : ''}
+  
+  # Execute import commands
+  ${importCommands.join('\n')}
+  
+} catch {
+  $generalErrors += $_.Exception.Message
+}
+
+# Calculate totals
+$imported = ($importResults | Where-Object { $_.success -eq $true }).Count
+$failed = ($importResults | Where-Object { $_.success -eq $false }).Count
+
+# Output as JSON
+$output = @{
+  success = $generalErrors.Count -eq 0 -and $failed -eq 0
+  action = "import"
+  imported = $imported
+  failed = $failed
+  total = $importResults.Count
+  results = $importResults
+  errors = $generalErrors
+  timestamp = (Get-Date).ToUniversalTime().ToString("o")
+}
+
+$output | ConvertTo-Json -Depth 20 -Compress
+`;
+}
 async function startAutomationJob(
   accessToken: string,
   subscriptionId: string,
@@ -686,6 +911,170 @@ serve(async (req) => {
           success: true, 
           jobRunId: jobRun.id,
           azureJobId: jobResult.jobId,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Handle start-import-job action for Exchange/SharePoint imports via PowerShell
+    if (rawBody.action === 'start-import-job') {
+      const parseResult = StartImportJobSchema.safeParse(rawBody);
+      if (!parseResult.success) {
+        return new Response(
+          JSON.stringify({ error: 'Invalid request parameters', details: parseResult.error.issues }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const { automationConfigId, tenantConnectionId, importJobId, resources } = parseResult.data;
+
+      // Validate that all resources support PowerShell import
+      const supportedResources = resources.filter(r => POWERSHELL_IMPORT_COMMANDS[r.resourceType]);
+      const unsupportedResources = resources.filter(r => !POWERSHELL_IMPORT_COMMANDS[r.resourceType]);
+
+      if (supportedResources.length === 0) {
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            error: 'None of the provided resources support PowerShell import. Supported types: ' + 
+              Object.keys(POWERSHELL_IMPORT_COMMANDS).join(', ')
+          }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Get automation config
+      const { data: config, error: configError } = await supabase
+        .from('azure_automation_configs')
+        .select('*')
+        .eq('id', automationConfigId)
+        .eq('user_id', userId)
+        .single();
+
+      if (configError || !config) {
+        return new Response(
+          JSON.stringify({ error: 'Automation config not found' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Get credentials
+      const { data: credentials, error: credError } = await supabase
+        .rpc('get_decrypted_credential', {
+          p_tenant_connection_id: tenantConnectionId,
+          p_user_id: userId,
+        });
+
+      if (credError || !credentials || credentials.length === 0) {
+        return new Response(
+          JSON.stringify({ error: 'Could not retrieve credentials' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const { client_id, client_secret, tenant_id } = credentials[0];
+
+      // Get Azure token
+      const tokenResult = await getAzureManagementToken(tenant_id, client_id, client_secret);
+      if ('error' in tokenResult) {
+        return new Response(
+          JSON.stringify({ success: false, error: tokenResult.error }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Generate the import script
+      const importScript = generateImportScript(supportedResources);
+      console.log('Generated import script for', supportedResources.length, 'resources');
+
+      // Create automation job run record
+      const { data: jobRun, error: jobRunError } = await supabase
+        .from('automation_job_runs')
+        .insert({
+          user_id: userId,
+          automation_config_id: automationConfigId,
+          tenant_connection_id: tenantConnectionId,
+          resource_types: supportedResources.map(r => r.resourceType),
+          status: 'starting',
+          started_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
+
+      if (jobRunError || !jobRun) {
+        return new Response(
+          JSON.stringify({ error: 'Failed to create job run record' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Start the Azure Automation job with import parameters
+      const jobResult = await startAutomationJob(
+        tokenResult.token,
+        config.subscription_id,
+        config.resource_group,
+        config.automation_account_name,
+        'Import-M365Config', // Use a dedicated import runbook
+        {
+          TenantId: tenant_id,
+          ClientId: client_id,
+          ClientSecret: client_secret,
+          ResourcesJson: JSON.stringify(supportedResources),
+        }
+      );
+
+      if ('error' in jobResult) {
+        // Update job run as failed
+        await supabase
+          .from('automation_job_runs')
+          .update({ status: 'failed', error_message: jobResult.error })
+          .eq('id', jobRun.id);
+
+        // Also update import job
+        await supabase
+          .from('import_jobs')
+          .update({ 
+            status: 'failed', 
+            errors: [{ resource: 'automation', error: jobResult.error }],
+            completed_at: new Date().toISOString(),
+          })
+          .eq('id', importJobId);
+
+        return new Response(
+          JSON.stringify({ success: false, error: jobResult.error }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Update with Azure job ID
+      await supabase
+        .from('automation_job_runs')
+        .update({ azure_job_id: jobResult.jobId, status: 'running' })
+        .eq('id', jobRun.id);
+
+      // Update import job with automation job reference
+      await supabase
+        .from('import_jobs')
+        .update({ 
+          status: 'running',
+          metadata: { 
+            automationJobRunId: jobRun.id,
+            azureJobId: jobResult.jobId,
+            unsupportedResources: unsupportedResources.map(r => r.resourceType),
+          },
+        })
+        .eq('id', importJobId);
+
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          jobRunId: jobRun.id,
+          azureJobId: jobResult.jobId,
+          supportedCount: supportedResources.length,
+          unsupportedCount: unsupportedResources.length,
+          message: unsupportedResources.length > 0 
+            ? `Started import for ${supportedResources.length} resources. ${unsupportedResources.length} resource(s) not supported for PowerShell import.`
+            : `Started import for ${supportedResources.length} resources.`,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );

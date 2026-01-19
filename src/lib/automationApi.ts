@@ -53,7 +53,17 @@ export interface JobStatusResult {
   error?: string;
 }
 
-// PowerShell resource types that require Azure Automation
+export interface StartImportJobResult {
+  success: boolean;
+  jobRunId?: string;
+  azureJobId?: string;
+  supportedCount?: number;
+  unsupportedCount?: number;
+  message?: string;
+  error?: string;
+}
+
+// PowerShell resource types that require Azure Automation for EXPORT
 export const POWERSHELL_RESOURCE_TYPES = [
   // Exchange resources that require PowerShell
   'exchange/transport-rules',
@@ -90,6 +100,8 @@ export const POWERSHELL_RESOURCE_TYPES = [
   'sharepoint/access-control',
   'sharepoint/storage-quota',
   'sharepoint/onedrive-settings',
+  'sharepoint/site-scripts',
+  'sharepoint/site-designs',
   
   // Defender resources that require PowerShell
   'defender/safe-attachments',
@@ -105,8 +117,31 @@ export const POWERSHELL_RESOURCE_TYPES = [
   'license-optimization/teams-usage',
 ];
 
+// PowerShell resource types that support IMPORT via Azure Automation
+export const POWERSHELL_IMPORT_RESOURCE_TYPES = [
+  // Exchange Online
+  'exchange/transport-rules',
+  'exchange/connectors',
+  'exchange/mailbox-policies',
+  'exchange/anti-spam',
+  'exchange/anti-phishing',
+  
+  // SharePoint
+  'sharepoint/site-scripts',
+  'sharepoint/site-designs',
+  
+  // Teams
+  'teams/messaging-policies',
+  'teams/meeting-policies',
+  'teams/app-setup-policies',
+];
+
 export function isPowerShellResource(resourceType: string): boolean {
   return POWERSHELL_RESOURCE_TYPES.includes(resourceType);
+}
+
+export function isPowerShellImportResource(resourceType: string): boolean {
+  return POWERSHELL_IMPORT_RESOURCE_TYPES.includes(resourceType);
 }
 
 export async function getAutomationConfigs(): Promise<AutomationConfig[]> {
@@ -237,6 +272,37 @@ export async function startAutomationJob(
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to start job',
+    };
+  }
+}
+
+// Start an import job via Azure Automation for Exchange/SharePoint resources
+export async function startAutomationImportJob(
+  automationConfigId: string,
+  tenantConnectionId: string,
+  importJobId: string,
+  resources: Array<{ resourceType: string; resourceName?: string; data: Record<string, unknown> }>
+): Promise<StartImportJobResult> {
+  try {
+    const { data, error } = await supabase.functions.invoke('run-automation-job', {
+      body: {
+        action: 'start-import-job',
+        automationConfigId,
+        tenantConnectionId,
+        importJobId,
+        resources,
+      },
+    });
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    return data;
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to start import job',
     };
   }
 }
