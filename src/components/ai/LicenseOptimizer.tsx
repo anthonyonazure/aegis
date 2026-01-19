@@ -186,6 +186,13 @@ export function LicenseOptimizer() {
     loadLastAnalysis();
   }, []);
 
+  // Auto-fetch licenses when tenant is connected
+  useEffect(() => {
+    if (connectionId && licenses.length === 0) {
+      fetchTenantLicenses();
+    }
+  }, [connectionId]);
+
   // Fetch licenses from tenant
   const fetchTenantLicenses = async () => {
     if (!connectionId) {
