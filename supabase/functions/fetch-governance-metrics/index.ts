@@ -413,13 +413,17 @@ serve(async (req) => {
       });
     }
 
-    const token = authHeader.replace('Bearer ', '');
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     
     const supabase = createClient(supabaseUrl, supabaseKey, {
       global: { headers: { Authorization: authHeader } },
     });
+
+    // Admin client (bypasses RLS) used ONLY for safe lookups + calling SECURITY DEFINER RPCs.
+    // We still enforce per-user ownership in queries.
+    const adminSupabase = createClient(supabaseUrl, serviceRoleKey);
 
     const { data: authData, error: authError } = await supabase.auth.getUser();
     if (authError || !authData.user) {
@@ -439,13 +443,68 @@ serve(async (req) => {
     }
 
     // Get credentials from database
-    const { data: credentials, error: credError } = await supabase.rpc('get_decrypted_credential', {
+    let credentials: any[] | null = null;
+    let credentialConnectionId = tenantConnectionId;
+
+    const { data: directCreds, error: directCredError } = await supabase.rpc('get_decrypted_credential', {
       p_tenant_connection_id: tenantConnectionId,
       p_user_id: authData.user.id,
     });
+    if (!directCredError && directCreds?.[0]) {
+      credentials = directCreds;
+    }
 
-    if (credError || !credentials?.[0]) {
-      console.error('Failed to get credentials:', credError);
+    // Fallback: if the UI passed a tenant connection ID with no stored credentials
+    // (common when users have duplicate tenant_connections for the same tenant_id),
+    // locate another connection for the SAME tenant_id that DOES have credentials.
+    if (!credentials?.[0]) {
+      console.warn('No credentials found for tenantConnectionId, attempting fallback lookup:', tenantConnectionId);
+
+      const { data: currentConn, error: currentConnError } = await adminSupabase
+        .from('tenant_connections')
+        .select('tenant_id')
+        .eq('id', tenantConnectionId)
+        .eq('user_id', authData.user.id)
+        .maybeSingle();
+
+      if (!currentConnError && currentConn?.tenant_id) {
+        const { data: siblingConnections, error: siblingError } = await adminSupabase
+          .from('tenant_connections')
+          .select('id')
+          .eq('user_id', authData.user.id)
+          .eq('tenant_id', currentConn.tenant_id);
+
+        const siblingIds = (siblingConnections || []).map((c: any) => c.id);
+
+        if (!siblingError && siblingIds.length > 0) {
+          const { data: credentialCandidates, error: candidateError } = await adminSupabase
+            .from('tenant_credentials')
+            .select('tenant_connection_id, created_at')
+            .eq('user_id', authData.user.id)
+            .in('tenant_connection_id', siblingIds)
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+          const fallbackConnectionId = credentialCandidates?.[0]?.tenant_connection_id;
+
+          if (!candidateError && fallbackConnectionId) {
+            console.log('Using fallback credential connection id:', fallbackConnectionId);
+            const { data: fallbackCreds, error: fallbackCredError } = await adminSupabase.rpc('get_decrypted_credential', {
+              p_tenant_connection_id: fallbackConnectionId,
+              p_user_id: authData.user.id,
+            });
+
+            if (!fallbackCredError && fallbackCreds?.[0]) {
+              credentials = fallbackCreds;
+              credentialConnectionId = fallbackConnectionId;
+            }
+          }
+        }
+      }
+    }
+
+    if (!credentials?.[0]) {
+      console.error('Failed to get credentials:', directCredError ?? null);
       return new Response(JSON.stringify({ error: 'Failed to get tenant credentials' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -455,7 +514,7 @@ serve(async (req) => {
     const { client_id, client_secret, tenant_id } = credentials[0];
 
     // Get Graph access token
-    console.log('Getting access token for tenant:', tenant_id);
+    console.log('Getting access token for tenant:', tenant_id, 'using credentialConnectionId:', credentialConnectionId);
     const accessToken = await getGraphAccessToken(client_id, client_secret, tenant_id);
 
     // Fetch all metrics in parallel

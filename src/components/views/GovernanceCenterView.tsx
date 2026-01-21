@@ -280,7 +280,7 @@ const CHART_COLORS = ['#22c55e', '#f59e0b', '#ef4444', '#6b7280'];
 
 export function GovernanceCenterView({ onNavigate, onDeployPolicy }: GovernanceCenterViewProps) {
   const { toast } = useToast();
-  const { selectedCustomerId, selectedTenantId, customers, tenants, hasStoredCredentials } = useTenant();
+  const { selectedCustomerId, selectedTenantId, customers, tenants } = useTenant();
   const [loading, setLoading] = useState(true);
   const [fetchingLiveData, setFetchingLiveData] = useState(false);
   const [dynamicActions, setDynamicActions] = useState<ActionItem[]>([]);
@@ -414,15 +414,14 @@ export function GovernanceCenterView({ onNavigate, onDeployPolicy }: GovernanceC
         licensesByProduct: defaultLicenses,
       });
 
-      // If we have a selected tenant with credentials, fetch live data
-      // Check if the selected tenant has credentials using context tenants list
-      const selectedTenantInfo = selectedTenantId 
-        ? tenants.find(t => t.id === selectedTenantId)
-        : null;
-      
-      // Only fetch if we have a tenant with credentials
-      if (selectedTenantId && (hasStoredCredentials || selectedTenantInfo?.hasCredentials)) {
-        await fetchLiveGovernanceMetrics(selectedTenantId);
+      // Fetch live data ONLY for a tenant connection that has stored credentials.
+      // (Users can have connected tenants without credentials configured.)
+      const tenantToFetch = selectedTenantId
+        ? tenants.find(t => t.id === selectedTenantId && t.hasCredentials)
+        : tenants.find(t => t.status === 'connected' && t.hasCredentials);
+
+      if (tenantToFetch?.id) {
+        await fetchLiveGovernanceMetrics(tenantToFetch.id);
       } else {
         // Use static actions if no tenant with credentials
         setDynamicActions([]);
