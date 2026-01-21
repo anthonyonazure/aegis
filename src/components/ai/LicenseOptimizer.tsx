@@ -136,7 +136,7 @@ interface OptimizationResult {
 
 export function LicenseOptimizer() {
   const { toast } = useToast();
-  const { connectionId, tenantName } = useTenant();
+  const { connectionId, tenantName, hasStoredCredentials } = useTenant();
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isFetchingLicenses, setIsFetchingLicenses] = useState(false);
@@ -186,19 +186,19 @@ export function LicenseOptimizer() {
     loadLastAnalysis();
   }, []);
 
-  // Auto-fetch licenses when tenant is connected
+  // Auto-fetch licenses when tenant is connected and has stored credentials
   useEffect(() => {
-    if (connectionId && licenses.length === 0) {
+    if (connectionId && hasStoredCredentials && licenses.length === 0) {
       fetchTenantLicenses();
     }
-  }, [connectionId]);
+  }, [connectionId, hasStoredCredentials]);
 
   // Fetch licenses from tenant
   const fetchTenantLicenses = async () => {
-    if (!connectionId) {
+    if (!connectionId || !hasStoredCredentials) {
       toast({
-        title: 'No Tenant Connected',
-        description: 'Please connect a tenant first to fetch real license data',
+        title: 'No Tenant Credentials',
+        description: 'Please configure App Registration credentials for this tenant in Tenant Config',
         variant: 'destructive',
       });
       return;
