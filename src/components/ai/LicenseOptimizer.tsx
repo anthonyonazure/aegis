@@ -186,11 +186,20 @@ export function LicenseOptimizer() {
     loadLastAnalysis();
   }, []);
 
-  // Auto-fetch licenses when tenant is connected and has stored credentials
+  // Auto-fetch licenses when tenant changes or is connected with credentials
   useEffect(() => {
-    if (connectionId && hasStoredCredentials && licenses.length === 0) {
+    if (connectionId && hasStoredCredentials) {
+      // Reset licenses and fetch new data when tenant changes
+      setLicenses([]);
+      setResult(null);
+      setDataSource('sample');
       fetchTenantLicenses();
+    } else {
+      // Clear data when tenant is disconnected
+      setLicenses([]);
+      setDataSource('sample');
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connectionId, hasStoredCredentials]);
 
   // Fetch licenses from tenant
