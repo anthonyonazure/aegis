@@ -107,6 +107,37 @@ async function fetchGraphData(accessToken: string, endpoint: string, useBeta = f
   return await response.json();
 }
 
+// Fetch full paginated collections from Microsoft Graph.
+// Many list endpoints return partial results with @odata.nextLink.
+async function fetchGraphCollection(accessToken: string, endpoint: string, useBeta = false): Promise<any[]> {
+  const baseUrl = useBeta ? 'https://graph.microsoft.com/beta' : 'https://graph.microsoft.com/v1.0';
+  let nextUrl: string | null = `${baseUrl}${endpoint}`;
+  const results: any[] = [];
+
+  while (nextUrl) {
+    const response: Response = await fetch(nextUrl, {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error(`Graph API collection error for ${nextUrl}:`, errorData);
+      return results;
+    }
+
+    const page: any = await response.json();
+    const pageValues = Array.isArray(page?.value) ? page.value : [];
+    results.push(...pageValues);
+
+    nextUrl = typeof page?.['@odata.nextLink'] === 'string' ? page['@odata.nextLink'] : null;
+  }
+
+  return results;
+}
+
 async function fetchSecurityMetrics(accessToken: string): Promise<GovernanceMetrics['security']> {
   const [riskySignIns, secureScore, conditionalAccess] = await Promise.all([
     fetchGraphData(accessToken, '/identityProtection/riskySignInDetections?$top=100', true).catch(() => null),
@@ -207,9 +238,8 @@ async function fetchIdentityMetrics(accessToken: string): Promise<GovernanceMetr
 }
 
 async function fetchLicensingMetrics(accessToken: string): Promise<GovernanceMetrics['licensing']> {
-  const subscribedSkus = await fetchGraphData(accessToken, '/subscribedSkus').catch(() => null);
-
-  const skusData = subscribedSkus?.value || [];
+  // NOTE: Graph may paginate subscribedSkus; fetch all pages.
+  const skusData = await fetchGraphCollection(accessToken, '/subscribedSkus?$top=999').catch(() => []);
   let totalLicenses = 0;
   let assignedLicenses = 0;
 
@@ -517,6 +547,12 @@ serve(async (req) => {
     console.log('Getting access token for tenant:', tenant_id, 'using credentialConnectionId:', credentialConnectionId);
     const accessToken = await getGraphAccessToken(client_id, client_secret, tenant_id);
 
+    // Fetch tenant info (helps ensure the connected tenant matches what the user expects)
+    const organization = await fetchGraphData(accessToken, '/organization?$select=id,displayName').catch(() => null);
+    const tenantInfo = organization?.value?.[0]
+      ? { id: organization.value[0].id, displayName: organization.value[0].displayName }
+      : null;
+
     // Fetch all metrics in parallel
     console.log('Fetching governance metrics...');
     const [securityMetrics, identityMetrics, licensingMetrics] = await Promise.all([
@@ -556,6 +592,7 @@ serve(async (req) => {
 
     return new Response(JSON.stringify({
       success: true,
+      tenant: tenantInfo,
       metrics,
       actions: dynamicActions,
     }), {
