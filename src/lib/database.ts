@@ -87,21 +87,31 @@ export async function getTenantConnectionsByCustomerId(customerId: string) {
   return data;
 }
 
-// Store encrypted credentials server-side
+// Store encrypted credentials server-side via edge function
 export async function storeEncryptedCredential(
   tenantConnectionId: string,
   clientId: string,
   clientSecret: string
 ): Promise<string> {
-  const { data, error } = await supabase
-    .rpc('store_encrypted_credential', {
-      p_tenant_connection_id: tenantConnectionId,
-      p_client_id: clientId,
-      p_client_secret: clientSecret,
-    });
+  const { data, error } = await supabase.functions.invoke('store-credentials', {
+    body: {
+      tenantConnectionId,
+      clientId,
+      clientSecret,
+    },
+  });
 
-  if (error) throw sanitizeDatabaseError(error, 'store credentials');
-  return data;
+  if (error) {
+    console.error('Edge function error:', error);
+    throw new Error('Failed to store credentials. Please try again.');
+  }
+
+  if (!data?.success) {
+    console.error('Store credentials failed:', data?.error);
+    throw new Error(data?.error || 'Failed to store credentials. Please try again.');
+  }
+
+  return data.credentialId;
 }
 
 // Check if credentials are stored for a connection
