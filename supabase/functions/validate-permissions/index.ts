@@ -75,26 +75,32 @@ const GRAPH_TEST_ENDPOINTS: Record<string, { endpoint: string; description: stri
     description: 'Enterprise Applications' 
   },
   'entra-id/directory-settings': { 
-    endpoint: '/settings', 
-    description: 'Directory Settings' 
+    // Use beta API for directory settings (groupSettings)
+    endpoint: '/groupSettings', 
+    description: 'Directory Settings',
+    useBeta: true
   },
   'entra-id/roles': { 
-    endpoint: '/directoryRoles?$top=1', 
+    // directoryRoles doesn't support $top pagination
+    endpoint: '/directoryRoles', 
     description: 'Directory Roles' 
   },
   
-  // Defender
+  // Defender - all intents endpoints require beta API
   'defender/asr-policies': { 
-    endpoint: '/deviceManagement/intents?$filter=templateId%20eq%20%27e8c053d6-9f95-42b1-a7f1-ebfd71c67571%27&$top=1', 
-    description: 'Attack Surface Reduction' 
+    endpoint: '/deviceManagement/intents?$top=1', 
+    description: 'Attack Surface Reduction',
+    useBeta: true
   },
   'defender/antivirus-policies': { 
-    endpoint: '/deviceManagement/intents?$filter=templateId%20eq%20%27804339ad-1553-4478-a742-138fb5807418%27&$top=1', 
-    description: 'Antivirus Policies' 
+    endpoint: '/deviceManagement/intents?$top=1', 
+    description: 'Antivirus Policies',
+    useBeta: true
   },
   'defender/firewall-policies': { 
-    endpoint: '/deviceManagement/intents?$filter=templateId%20eq%20%274356d05c-a4ab-4a07-9ece-739f7c792910%27&$top=1', 
-    description: 'Firewall Policies' 
+    endpoint: '/deviceManagement/intents?$top=1', 
+    description: 'Firewall Policies',
+    useBeta: true
   },
   
   // SharePoint
