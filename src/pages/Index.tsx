@@ -64,6 +64,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Loader2, LogOut } from 'lucide-react';
+import { TenantSelector } from '@/components/TenantSelector';
 
 const Index = () => {
   const navigate = useNavigate();
@@ -428,10 +429,16 @@ const Index = () => {
       
       <main className="flex-1 overflow-auto">
         <div className="p-6 lg:p-8 max-w-7xl mx-auto">
-          {/* User info and sign out */}
-          <div className="flex justify-end mb-4">
-            <div className="flex items-center gap-4">
-              <span className="text-sm text-muted-foreground">
+          {/* Global header: tenant selection + user actions */}
+          <div className="flex flex-col gap-3 mb-4 md:flex-row md:items-center md:justify-between">
+            <div className="w-full md:max-w-md">
+              <TenantSelector
+                onNavigateToAuth={() => setActiveTab('auth')}
+                onNavigateToCustomers={() => setActiveTab('customers')}
+              />
+            </div>
+            <div className="flex items-center gap-4 justify-end">
+              <span className="text-sm text-muted-foreground truncate max-w-[60vw] md:max-w-none">
                 {user?.email}
               </span>
               <Button variant="ghost" size="sm" onClick={handleSignOut}>
