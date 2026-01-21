@@ -295,28 +295,14 @@ export const Sidebar = ({ activeTab, onTabChange, isConnected = false }: Sidebar
         ))}
       </nav>
 
-      {/* Connection Status */}
-      {!collapsed && (
-        <div className="p-4 border-t border-sidebar-border relative z-10">
-          <div className="glass-panel p-4 rounded-xl">
-            <div className="flex items-center gap-2.5 mb-2">
-              <div className={cn(
-                "status-dot",
-                isConnected ? "status-dot-success" : "status-dot-warning"
-              )} />
-              <span className="text-xs font-semibold text-foreground">
-                {isConnected ? 'Connected' : 'Not Connected'}
-              </span>
-            </div>
-            <p className="text-[11px] text-muted-foreground leading-relaxed">
-              {isConnected 
-                ? 'Ready to export tenant configuration'
-                : 'Connect to a tenant to begin exporting'
-              }
-            </p>
-          </div>
-        </div>
-      )}
+      {/* Tenant Selector */}
+      <div className="p-3 border-t border-sidebar-border relative z-10">
+        <TenantSelector 
+          onNavigateToAuth={() => onTabChange('auth')}
+          onNavigateToCustomers={() => onTabChange('customers')}
+          collapsed={collapsed}
+        />
+      </div>
     </motion.aside>
   );
 };
