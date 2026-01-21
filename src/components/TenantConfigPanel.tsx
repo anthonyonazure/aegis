@@ -14,6 +14,7 @@ import {
   RefreshCw,
   Eye,
   EyeOff,
+  Sparkles,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -49,6 +50,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Customer } from '@/types/tenant';
 import { storeEncryptedCredential, hasStoredCredentials } from '@/lib/database';
+import { TenantSetupWizard } from './TenantSetupWizard';
 
 interface TenantConnection {
   id: string;
@@ -86,6 +88,7 @@ export const TenantConfigPanel = ({ customer, onBack }: TenantConfigPanelProps) 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [credentialsDialogOpen, setCredentialsDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(false);
   const [editingTenant, setEditingTenant] = useState<TenantConnection | null>(null);
   const [deletingTenant, setDeletingTenant] = useState<TenantConnection | null>(null);
   const [configuringTenant, setConfiguringTenant] = useState<TenantConnection | null>(null);
@@ -507,10 +510,14 @@ export const TenantConfigPanel = ({ customer, onBack }: TenantConfigPanelProps) 
   return (
     <div className="space-y-6">
       {/* Add Tenant Button */}
-      <div className="flex justify-end">
-        <Button onClick={handleOpenCreate} className="gap-2">
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" onClick={handleOpenCreate} className="gap-2">
           <Plus className="w-4 h-4" />
-          Add Tenant
+          Quick Add
+        </Button>
+        <Button onClick={() => setWizardOpen(true)} className="gap-2">
+          <Sparkles className="w-4 h-4" />
+          Setup Wizard
         </Button>
       </div>
 
@@ -584,9 +591,9 @@ export const TenantConfigPanel = ({ customer, onBack }: TenantConfigPanelProps) 
               <p className="text-muted-foreground mb-4">
                 Add tenant connections for {customer.name}
               </p>
-              <Button onClick={handleOpenCreate} className="gap-2">
-                <Plus className="w-4 h-4" />
-                Add Tenant
+              <Button onClick={() => setWizardOpen(true)} className="gap-2">
+                <Sparkles className="w-4 h-4" />
+                Setup Wizard
               </Button>
             </div>
           ) : (
@@ -940,6 +947,15 @@ export const TenantConfigPanel = ({ customer, onBack }: TenantConfigPanelProps) 
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Setup Wizard */}
+      <TenantSetupWizard
+        open={wizardOpen}
+        onOpenChange={setWizardOpen}
+        customerId={customer.id}
+        customerName={customer.name}
+        onComplete={loadData}
+      />
     </div>
   );
 };
