@@ -427,14 +427,19 @@ export async function getRecentAnalyses(options?: {
 }
 
 // Get the most recent analysis result for a specific type
-export async function getLastAnalysis(analysisType: string): Promise<AIAnalysisResult | null> {
-  const { data, error } = await supabase
+export async function getLastAnalysis(analysisType: string, tenantConnectionId?: string): Promise<AIAnalysisResult | null> {
+  let query = supabase
     .from('ai_analysis_results')
     .select('*')
     .eq('analysis_type', analysisType)
     .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(1);
+
+  if (tenantConnectionId) {
+    query = query.eq('tenant_connection_id', tenantConnectionId);
+  }
+
+  const { data, error } = await query.maybeSingle();
 
   if (error || !data) {
     return null;

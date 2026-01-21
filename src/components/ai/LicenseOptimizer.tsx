@@ -168,30 +168,36 @@ export function LicenseOptimizer() {
     }
   }, []);
 
-  // Load last analysis on mount
+  // Load last analysis when tenant changes
   useEffect(() => {
-    const loadLastAnalysis = async () => {
+    const loadLastAnalysisForTenant = async () => {
+      setIsLoading(true);
       try {
-        const lastAnalysis = await getLastAnalysis('license-optimizer');
+        // Load last analysis for this specific tenant (or global if no tenant selected)
+        const lastAnalysis = await getLastAnalysis('license-optimizer', connectionId || undefined);
         if (lastAnalysis?.result) {
           setResult(lastAnalysis.result as unknown as OptimizationResult);
           setLastAnalyzedAt(lastAnalysis.createdAt);
+        } else {
+          setResult(null);
+          setLastAnalyzedAt(null);
         }
       } catch (error) {
         console.error('Failed to load last analysis:', error);
+        setResult(null);
+        setLastAnalyzedAt(null);
       } finally {
         setIsLoading(false);
       }
     };
-    loadLastAnalysis();
-  }, []);
+    loadLastAnalysisForTenant();
+  }, [connectionId]);
 
   // Auto-fetch licenses when tenant changes or is connected with credentials
   useEffect(() => {
     if (connectionId && hasStoredCredentials) {
       // Reset licenses and fetch new data when tenant changes
       setLicenses([]);
-      setResult(null);
       setDataSource('sample');
       fetchTenantLicenses();
     } else {
