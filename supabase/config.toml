@@ -128,3 +128,6 @@ verify_jwt = false
 
 [functions.run-scheduled-ai-analysis]
 verify_jwt = false
+
+[functions.store-credentials]
+verify_jwt = false
