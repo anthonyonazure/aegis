@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, type WheelEvent } from 'react';
 import { motion } from 'framer-motion';
 import {
   CheckCircle2,
@@ -532,10 +532,22 @@ export function PreflightCheckDialog({
                   </div>
                   
                   {liveResults && !liveResults.success && (
-                    <ScrollArea className="max-h-48">
+                    <div
+                      className="max-h-48 overflow-y-auto overscroll-contain touch-pan-y"
+                      // Prevent the parent dialog scroll container from stealing wheel/trackpad scroll
+                      onWheel={(e: WheelEvent<HTMLDivElement>) => {
+                        const el = e.currentTarget;
+                        const atTop = el.scrollTop <= 0;
+                        const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight;
+                        // Only stop bubbling when this panel can actually scroll further
+                        if (!(atTop && e.deltaY < 0) && !(atBottom && e.deltaY > 0)) {
+                          e.stopPropagation();
+                        }
+                      }}
+                    >
                       <div className="p-3 space-y-2">
                         {liveResults.results.filter(r => !r.success).map((res) => (
-                          <div 
+                          <div
                             key={res.resourceId}
                             className="flex items-start gap-2 p-2 rounded bg-destructive/5 text-sm"
                           >
@@ -556,7 +568,7 @@ export function PreflightCheckDialog({
                           </div>
                         ))}
                       </div>
-                    </ScrollArea>
+                    </div>
                   )}
                 </motion.div>
               )}
