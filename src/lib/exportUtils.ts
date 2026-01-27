@@ -1,7 +1,12 @@
 import JSZip from 'jszip';
-import { saveAs } from 'file-saver';
 import { supabase } from '@/integrations/supabase/client';
 import { convertToFormat } from './graphApi';
+import {
+  downloadBlobFallback,
+  isFileSystemAccessSupported,
+  promptSaveFileHandle,
+  writeBlobToHandle,
+} from './saveFile';
 
 interface ExportedResource {
   id: string;
@@ -23,6 +28,27 @@ interface ExportJob {
 }
 
 export async function downloadExportAsZip(jobId: string): Promise<void> {
+  // Prompt the "Save As" dialog immediately (user activation) before any async work.
+  // If unsupported or it fails, we fall back to a standard browser download.
+  let saveHandle: FileSystemFileHandle | null = null;
+  if (isFileSystemAccessSupported()) {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      saveHandle = await promptSaveFileHandle({
+        suggestedName: `m365-export-${today}.zip`,
+        types: [
+          {
+            description: 'ZIP Archive',
+            accept: { 'application/zip': ['.zip'] },
+          },
+        ],
+      });
+    } catch (err: any) {
+      if (err?.name === 'AbortError') return;
+      saveHandle = null;
+    }
+  }
+
   // Fetch job details
   const { data: job, error: jobError } = await supabase
     .from('export_jobs')
@@ -147,9 +173,18 @@ Total Resources: ${resources.length}
   }
 
   // Generate the ZIP file
-  const content = await zip.generateAsync({ type: 'blob' });
+  const content = await zip.generateAsync({
+    type: 'blob',
+    compression: 'DEFLATE',
+    compressionOptions: { level: 6 },
+  });
   const fileName = `m365-export-${exportDate}.zip`;
-  saveAs(content, fileName);
+
+  if (saveHandle) {
+    await writeBlobToHandle(saveHandle, content);
+  } else {
+    downloadBlobFallback(content, fileName);
+  }
 }
 
 export async function getExportResourceCount(jobId: string): Promise<number> {
