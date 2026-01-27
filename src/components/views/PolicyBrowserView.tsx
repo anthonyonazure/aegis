@@ -309,16 +309,36 @@ export const PolicyBrowserView = () => {
           };
         }
 
-        const data = resource.data as Record<string, unknown>;
-        grouped[key].policies.push({
-          id: resource.resource_id || resource.id,
-          displayName: resource.resource_name || (data.displayName as string) || (data.name as string) || resource.id,
-          description: data.description as string | undefined,
-          createdDateTime: data.createdDateTime as string | undefined,
-          modifiedDateTime: data.modifiedDateTime as string | undefined,
-          state: data.state as string | undefined,
-          data,
-        });
+        const rawData = resource.data;
+        
+        // Handle array of policies (most common case from Graph API exports)
+        if (Array.isArray(rawData)) {
+          for (const item of rawData) {
+            const data = item as Record<string, unknown>;
+            grouped[key].policies.push({
+              id: (data.id as string) || `${resource.id}-${grouped[key].policies.length}`,
+              displayName: (data.displayName as string) || (data.name as string) || (data.id as string) || 'Unnamed Policy',
+              description: data.description as string | undefined,
+              createdDateTime: data.createdDateTime as string | undefined,
+              modifiedDateTime: (data.modifiedDateTime as string) || (data.lastModifiedDateTime as string) || undefined,
+              state: data.state as string | undefined,
+              data,
+            });
+          }
+        } 
+        // Handle single object (less common)
+        else if (rawData && typeof rawData === 'object') {
+          const data = rawData as Record<string, unknown>;
+          grouped[key].policies.push({
+            id: resource.resource_id || resource.id,
+            displayName: resource.resource_name || (data.displayName as string) || (data.name as string) || resource.id,
+            description: data.description as string | undefined,
+            createdDateTime: data.createdDateTime as string | undefined,
+            modifiedDateTime: data.modifiedDateTime as string | undefined,
+            state: data.state as string | undefined,
+            data,
+          });
+        }
       }
 
       setLoadedCategories(Object.values(grouped));
