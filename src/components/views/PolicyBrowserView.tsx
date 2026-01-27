@@ -192,6 +192,9 @@ export const PolicyBrowserView = () => {
     tenantConnectionId: string | null;
   } | null>(null);
   
+  // Export confirmation dialog state
+  const [exportConfirmOpen, setExportConfirmOpen] = useState(false);
+  
   const { toast } = useToast();
 
   // Check if the selected export is from a different tenant
@@ -529,7 +532,8 @@ export const PolicyBrowserView = () => {
     setSelectedFormats(newFormats);
   };
 
-  const handleExport = async () => {
+  // Show confirmation dialog before export
+  const handleExportClick = () => {
     if (selectedPolicies.size === 0) {
       toast({
         title: 'No policies selected',
@@ -538,6 +542,11 @@ export const PolicyBrowserView = () => {
       });
       return;
     }
+    setExportConfirmOpen(true);
+  };
+
+  const handleExport = async () => {
+    setExportConfirmOpen(false);
 
     setExporting(true);
     setExportProgress(0);
@@ -1324,7 +1333,7 @@ Formats: ${formats.join(', ')}
 
               {/* Export Button */}
               <Button
-                onClick={handleExport}
+                onClick={handleExportClick}
                 disabled={selectedPolicies.size === 0 || exporting || !isConnected}
                 className="w-full gap-2"
                 size="lg"
@@ -1448,6 +1457,64 @@ Formats: ${formats.join(', ')}
               }}
             >
               I Understand, Continue
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Export Confirmation Dialog */}
+      <AlertDialog open={exportConfirmOpen} onOpenChange={setExportConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Download className="w-5 h-5 text-primary" />
+              Save Policies to Disk
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-3">
+              <p>
+                You are about to export <strong className="text-foreground">{selectedPolicies.size} policies</strong> in{' '}
+                <strong className="text-foreground">{selectedFormats.size} format(s)</strong>.
+              </p>
+              
+              <div className="bg-secondary/50 rounded-lg p-3 space-y-2">
+                <p className="text-sm font-medium text-foreground">Export Details:</p>
+                <ul className="text-sm space-y-1">
+                  <li className="flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-muted-foreground" />
+                    Formats: {Array.from(selectedFormats).join(', ').toUpperCase()}
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <Building2 className="w-4 h-4 text-muted-foreground" />
+                    Source: {dataSource === 'export' && loadedExportSourceInfo 
+                      ? loadedExportSourceInfo.customerName || loadedExportSourceInfo.tenantName
+                      : displayTenantName || 'Current Tenant'}
+                  </li>
+                </ul>
+              </div>
+
+              {dataSource === 'export' && loadedExportSourceInfo && selectedTenantId && 
+                loadedExportSourceInfo.tenantConnectionId !== selectedTenantId && (
+                <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
+                  <p className="text-sm font-medium text-amber-700 dark:text-amber-300 flex items-center gap-1">
+                    <AlertTriangle className="w-4 h-4" />
+                    Cross-Tenant Export
+                  </p>
+                  <p className="text-xs text-amber-600/90 dark:text-amber-400/90 mt-1">
+                    These policies are from a different tenant than your current session.
+                  </p>
+                </div>
+              )}
+
+              <p className="text-sm text-muted-foreground">
+                A ZIP file will be downloaded containing your policies organized by format.
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleExport} className="gap-2">
+              <Download className="w-4 h-4" />
+              Save to Disk
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
