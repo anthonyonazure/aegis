@@ -15,6 +15,7 @@ import {
   Check,
   RefreshCw,
   AlertCircle,
+  AlertTriangle,
   ChevronRight,
   ChevronDown,
   Eye,
@@ -38,7 +39,18 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
+  DialogFooter,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import {
   Select,
   SelectContent,
@@ -171,7 +183,37 @@ export const PolicyBrowserView = () => {
   const [exporting, setExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
   
+  // Cross-tenant warning state
+  const [pendingExportJobId, setPendingExportJobId] = useState<string | null>(null);
+  const [crossTenantWarningOpen, setCrossTenantWarningOpen] = useState(false);
+  const [loadedExportSourceInfo, setLoadedExportSourceInfo] = useState<{
+    tenantName: string;
+    customerName?: string;
+    tenantConnectionId: string | null;
+  } | null>(null);
+  
   const { toast } = useToast();
+
+  // Check if the selected export is from a different tenant
+  const getExportSourceInfo = (jobId: string) => {
+    const job = exportJobs.find(j => j.id === jobId);
+    if (!job) return null;
+    
+    const customerName = job.tenant_connection?.customer?.name;
+    const tenantName = job.tenant_connection?.display_name || job.tenant_connection?.tenant_name || 'Unknown Tenant';
+    
+    return {
+      tenantName,
+      customerName,
+      tenantConnectionId: job.tenant_connection_id,
+    };
+  };
+
+  const isCrossTenantExport = (jobId: string) => {
+    const job = exportJobs.find(j => j.id === jobId);
+    if (!job || !selectedTenantId) return false;
+    return job.tenant_connection_id !== selectedTenantId;
+  };
 
   // Fetch available export jobs
   useEffect(() => {
@@ -829,8 +871,15 @@ Formats: ${formats.join(', ')}
                   <Select
                     value={selectedExportJobId || ''}
                     onValueChange={(value) => {
-                      setSelectedExportJobId(value);
-                      if (value) loadFromExportJob(value);
+                      if (value && isCrossTenantExport(value)) {
+                        // Show confirmation dialog for cross-tenant export
+                        setPendingExportJobId(value);
+                        setCrossTenantWarningOpen(true);
+                      } else {
+                        setSelectedExportJobId(value);
+                        setLoadedExportSourceInfo(value ? getExportSourceInfo(value) : null);
+                        if (value) loadFromExportJob(value);
+                      }
                     }}
                     disabled={loadingExportJobs || loadingFromExport}
                   >
@@ -857,6 +906,8 @@ Formats: ${formats.join(', ')}
                           const tenantInfo = job.tenant_connection?.customer?.name 
                             || job.tenant_connection?.display_name 
                             || job.tenant_connection?.tenant_name;
+                          const isCrossTenant = job.tenant_connection_id !== selectedTenantId;
+                          
                           return (
                             <SelectItem key={job.id} value={job.id}>
                               <div className="flex flex-col gap-0.5">
@@ -865,9 +916,18 @@ Formats: ${formats.join(', ')}
                                   <span className="text-xs text-muted-foreground">
                                     {format(new Date(job.created_at), 'MMM d, yyyy HH:mm')}
                                   </span>
+                                  {isCrossTenant && (
+                                    <Badge variant="outline" className="text-amber-500 border-amber-500/50 text-[10px] px-1.5 py-0">
+                                      <AlertTriangle className="w-3 h-3 mr-0.5" />
+                                      Different Tenant
+                                    </Badge>
+                                  )}
                                 </div>
                                 {tenantInfo && (
-                                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                  <span className={cn(
+                                    "text-xs flex items-center gap-1",
+                                    isCrossTenant ? "text-amber-500" : "text-muted-foreground"
+                                  )}>
                                     <Building2 className="w-3 h-3" />
                                     {tenantInfo}
                                   </span>
@@ -904,6 +964,31 @@ Formats: ${formats.join(', ')}
             <p className="font-medium text-warning">No tenant connected</p>
             <p className="text-sm text-muted-foreground">
               Connect a tenant to browse live policies, or load from a previous export
+            </p>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Cross-Tenant Warning Banner */}
+      {dataSource === 'export' && loadedExportSourceInfo && selectedTenantId && loadedExportSourceInfo.tenantConnectionId !== selectedTenantId && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex items-start gap-4 p-4 rounded-lg bg-amber-500/10 border-2 border-amber-500/40"
+        >
+          <AlertTriangle className="w-6 h-6 text-amber-500 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="font-semibold text-amber-600 dark:text-amber-400 text-lg">
+              ⚠️ Cross-Tenant Data Loaded
+            </p>
+            <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+              You are viewing policies from <strong className="font-semibold">{loadedExportSourceInfo.customerName || loadedExportSourceInfo.tenantName}</strong> 
+              {displayTenantName && (
+                <> while connected to <strong className="font-semibold">{displayTenantName}</strong></>
+              )}.
+            </p>
+            <p className="text-sm text-amber-600/80 dark:text-amber-400/80 mt-2">
+              Be careful when importing or deploying these policies - they will be applied to the currently connected tenant.
             </p>
           </div>
         </motion.div>
@@ -1283,6 +1368,70 @@ Formats: ${formats.join(', ')}
           </Tabs>
         </DialogContent>
       </Dialog>
+
+      {/* Cross-Tenant Confirmation Dialog */}
+      <AlertDialog open={crossTenantWarningOpen} onOpenChange={setCrossTenantWarningOpen}>
+        <AlertDialogContent className="max-w-lg">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+              <AlertTriangle className="w-5 h-5" />
+              Loading Policies from Different Customer
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-3">
+              {pendingExportJobId && (() => {
+                const sourceInfo = getExportSourceInfo(pendingExportJobId);
+                return (
+                  <>
+                    <p className="text-foreground">
+                      You are about to load policies exported from{' '}
+                      <strong className="text-amber-600 dark:text-amber-400">
+                        {sourceInfo?.customerName || sourceInfo?.tenantName || 'another tenant'}
+                      </strong>
+                      {displayTenantName && (
+                        <> into your session connected to{' '}
+                          <strong className="text-primary">
+                            {displayTenantName}
+                          </strong>
+                        </>
+                      )}.
+                    </p>
+                    <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 mt-2">
+                      <p className="text-sm font-medium text-amber-700 dark:text-amber-300">
+                        ⚠️ Important Warning
+                      </p>
+                      <p className="text-sm text-amber-600/90 dark:text-amber-400/90 mt-1">
+                        If you export or import these policies, they will be applied to your{' '}
+                        <strong>currently connected tenant</strong>, not the original source tenant.
+                      </p>
+                    </div>
+                  </>
+                );
+              })()}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => {
+              setPendingExportJobId(null);
+            }}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+              onClick={() => {
+                if (pendingExportJobId) {
+                  setSelectedExportJobId(pendingExportJobId);
+                  setLoadedExportSourceInfo(getExportSourceInfo(pendingExportJobId));
+                  loadFromExportJob(pendingExportJobId);
+                }
+                setPendingExportJobId(null);
+                setCrossTenantWarningOpen(false);
+              }}
+            >
+              I Understand, Continue
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
