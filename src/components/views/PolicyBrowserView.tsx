@@ -64,6 +64,12 @@ import { useTenant } from '@/contexts/TenantContext';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
+import {
+  downloadBlobFallback,
+  isFileSystemAccessSupported,
+  promptSaveFileHandle,
+  writeBlobToHandle,
+} from '@/lib/saveFile';
 
 // Policy categories with their Graph API endpoints
 const POLICY_CATEGORIES = [
@@ -552,6 +558,33 @@ export const PolicyBrowserView = () => {
     setExportProgress(0);
 
     try {
+      const dateStr = new Date().toISOString().split('T')[0];
+      const defaultZipFilename = `m365-policies-${dateStr}.zip`;
+
+      // IMPORTANT: Prompt the save dialog immediately (user activation), before any long async work.
+      // This avoids browsers blocking the picker and helps prevent incomplete .crdownload files.
+      let saveHandle: FileSystemFileHandle | null = null;
+      if (isFileSystemAccessSupported()) {
+        try {
+          saveHandle = await promptSaveFileHandle({
+            suggestedName: defaultZipFilename,
+            types: [
+              {
+                description: 'ZIP Archive',
+                accept: { 'application/zip': ['.zip'] },
+              },
+            ],
+          });
+        } catch (err: any) {
+          if (err?.name === 'AbortError') {
+            setExporting(false);
+            return;
+          }
+          // If the picker fails for any other reason, continue with fallback download.
+          saveHandle = null;
+        }
+      }
+
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
 
@@ -612,7 +645,6 @@ export const PolicyBrowserView = () => {
       const JSZipModule = await import('jszip');
       const JSZip = JSZipModule.default;
       const zip = new JSZip();
-      const dateStr = new Date().toISOString().split('T')[0];
       
       // Add README
       zip.file('README.md', `# M365 Policy Export
@@ -637,42 +669,11 @@ Formats: ${formats.join(', ')}
         compression: 'DEFLATE',
         compressionOptions: { level: 6 }
       });
-      
-      const defaultFilename = `m365-policies-${dateStr}.zip`;
-      
-      // Try to use File System Access API for "Save As" dialog
-      if ('showSaveFilePicker' in window) {
-        try {
-          const handle = await (window as any).showSaveFilePicker({
-            suggestedName: defaultFilename,
-            types: [
-              {
-                description: 'ZIP Archive',
-                accept: { 'application/zip': ['.zip'] },
-              },
-            ],
-          });
-          const writable = await handle.createWritable();
-          await writable.write(blob);
-          await writable.close();
-        } catch (err: any) {
-          // User cancelled the save dialog
-          if (err.name === 'AbortError') {
-            setExporting(false);
-            return;
-          }
-          throw err;
-        }
+
+      if (saveHandle) {
+        await writeBlobToHandle(saveHandle, blob);
       } else {
-        // Fallback for browsers that don't support File System Access API
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = defaultFilename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
+        downloadBlobFallback(blob, defaultZipFilename);
       }
 
       toast({
@@ -694,13 +695,33 @@ Formats: ${formats.join(', ')}
 
   const handleExportSingle = async (policy: PolicyItem, categoryId: string, policyTypeId: string, format: ExportFormat) => {
     try {
-      let content: string;
-      let filename: string;
       const safeName = (policy.displayName || policy.id).replace(/[^a-z0-9]/gi, '_').substring(0, 50);
+      const ext = format === 'json' ? 'json' : format === 'terraform' ? 'tf' : format === 'bicep' ? 'bicep' : 'ps1';
+      const filename = `${safeName}.${ext}`;
+
+      // Prompt save location immediately for best reliability.
+      let saveHandle: FileSystemFileHandle | null = null;
+      if (isFileSystemAccessSupported()) {
+        try {
+          saveHandle = await promptSaveFileHandle({
+            suggestedName: filename,
+            types: [
+              {
+                description: ext.toUpperCase(),
+                accept: { 'text/plain': [`.${ext}`] },
+              },
+            ],
+          });
+        } catch (err: any) {
+          if (err?.name === 'AbortError') return;
+          saveHandle = null;
+        }
+      }
+
+      let content: string;
 
       if (format === 'json') {
         content = JSON.stringify(policy.data, null, 2);
-        filename = `${safeName}.json`;
       } else {
         const response = await supabase.functions.invoke('convert-format', {
           body: {
@@ -715,14 +736,16 @@ Formats: ${formats.join(', ')}
         }
 
         content = response.data.output;
-        const ext = format === 'terraform' ? 'tf' : format === 'bicep' ? 'bicep' : 'ps1';
-        filename = `${safeName}.${ext}`;
       }
 
       // Download file
       const blob = new Blob([content], { type: 'text/plain' });
-      const { saveAs } = await import('file-saver');
-      saveAs(blob, filename);
+
+      if (saveHandle) {
+        await writeBlobToHandle(saveHandle, blob);
+      } else {
+        downloadBlobFallback(blob, filename);
+      }
 
       toast({
         title: 'Downloaded',

@@ -282,8 +282,8 @@ export const JobsView = () => {
     try {
       await downloadExportAsZip(job.id);
       toast({
-        title: 'Download Started',
-        description: 'Your export is being downloaded as a ZIP file',
+        title: 'Download complete',
+        description: 'Your export was saved as a ZIP file',
       });
     } catch (error) {
       console.error('Download failed:', error);
