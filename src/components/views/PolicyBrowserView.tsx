@@ -631,22 +631,49 @@ Formats: ${formats.join(', ')}
         }
       }
 
-      // Generate blob and trigger download
+      // Generate blob and trigger download with save dialog
       const blob = await zip.generateAsync({ 
         type: 'blob',
         compression: 'DEFLATE',
         compressionOptions: { level: 6 }
       });
       
-      // Use a more reliable download method
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `m365-policies-${dateStr}.zip`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      const defaultFilename = `m365-policies-${dateStr}.zip`;
+      
+      // Try to use File System Access API for "Save As" dialog
+      if ('showSaveFilePicker' in window) {
+        try {
+          const handle = await (window as any).showSaveFilePicker({
+            suggestedName: defaultFilename,
+            types: [
+              {
+                description: 'ZIP Archive',
+                accept: { 'application/zip': ['.zip'] },
+              },
+            ],
+          });
+          const writable = await handle.createWritable();
+          await writable.write(blob);
+          await writable.close();
+        } catch (err: any) {
+          // User cancelled the save dialog
+          if (err.name === 'AbortError') {
+            setExporting(false);
+            return;
+          }
+          throw err;
+        }
+      } else {
+        // Fallback for browsers that don't support File System Access API
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = defaultFilename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }
 
       toast({
         title: 'Export complete',
