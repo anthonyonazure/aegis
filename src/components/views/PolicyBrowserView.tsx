@@ -128,6 +128,13 @@ interface ExportJob {
   status: string;
   tenant_connection_id: string | null;
   categories: string[];
+  tenant_connection?: {
+    display_name?: string;
+    tenant_name?: string;
+    customer?: {
+      name: string;
+    };
+  } | null;
 }
 
 type ExportFormat = 'json' | 'terraform' | 'bicep' | 'powershell';
@@ -176,14 +183,40 @@ export const PolicyBrowserView = () => {
 
         const { data, error } = await supabase
           .from('export_jobs')
-          .select('id, name, created_at, status, tenant_connection_id, categories')
+          .select(`
+            id, 
+            name, 
+            created_at, 
+            status, 
+            tenant_connection_id, 
+            categories,
+            tenant_connections:tenant_connection_id (
+              display_name,
+              tenant_name,
+              customers:customer_id (
+                name
+              )
+            )
+          `)
           .eq('user_id', session.user.id)
           .eq('status', 'completed')
           .order('created_at', { ascending: false })
-          .limit(50);
+          .limit(100);
 
         if (error) throw error;
-        setExportJobs(data || []);
+        
+        // Transform the data to match our interface
+        const transformedData: ExportJob[] = (data || []).map(job => ({
+          id: job.id,
+          name: job.name,
+          created_at: job.created_at,
+          status: job.status,
+          tenant_connection_id: job.tenant_connection_id,
+          categories: job.categories,
+          tenant_connection: job.tenant_connections as ExportJob['tenant_connection'],
+        }));
+        
+        setExportJobs(transformedData);
       } catch (err) {
         console.error('Failed to fetch export jobs:', err);
       } finally {
@@ -595,8 +628,63 @@ Formats: ${formats.join(', ')}
     }
   };
 
-  // Filter policies based on search
+  // Filter policies based on search - handle both live and export modes
   const filteredCategories = useMemo(() => {
+    // For export mode, build categories dynamically from loaded data
+    if (dataSource === 'export') {
+      // Group loaded categories by their categoryId
+      const categoryMap = new Map<string, { policies: Array<{ id: string; name: string }> }>();
+      
+      for (const loaded of loadedCategories) {
+        if (!categoryMap.has(loaded.categoryId)) {
+          categoryMap.set(loaded.categoryId, { policies: [] });
+        }
+        // Add this policy type with its policy count
+        categoryMap.get(loaded.categoryId)!.policies.push({
+          id: loaded.policyTypeId,
+          name: loaded.policyTypeId.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+        });
+      }
+
+      // Build dynamic categories from loaded data
+      const dynamicCategories = Array.from(categoryMap.entries()).map(([catId, data]) => {
+        // Try to find matching static category for icon/color
+        const staticCat = POLICY_CATEGORIES.find(c => c.id === catId);
+        return {
+          id: catId,
+          name: staticCat?.name || catId.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+          icon: staticCat?.icon || FileText,
+          color: staticCat?.color || 'text-gray-500',
+          policies: data.policies.map(p => ({
+            id: p.id,
+            name: p.name,
+            endpoint: '',
+          })),
+        };
+      });
+
+      // Apply search filter
+      if (!searchQuery && categoryFilter === 'all') return dynamicCategories;
+      
+      return dynamicCategories
+        .filter(cat => categoryFilter === 'all' || cat.id === categoryFilter)
+        .map(cat => ({
+          ...cat,
+          policies: cat.policies.filter(p => {
+            const loaded = loadedCategories.find(
+              c => c.categoryId === cat.id && c.policyTypeId === p.id
+            );
+            if (!loaded) return true;
+            return loaded.policies.some(pol => 
+              pol.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+              pol.description?.toLowerCase().includes(searchQuery.toLowerCase())
+            );
+          }),
+        }))
+        .filter(cat => cat.policies.length > 0);
+    }
+
+    // For live mode, use static categories
     if (!searchQuery && categoryFilter === 'all') return POLICY_CATEGORIES;
     
     return POLICY_CATEGORIES
@@ -615,7 +703,7 @@ Formats: ${formats.join(', ')}
         }),
       }))
       .filter(cat => cat.policies.length > 0);
-  }, [searchQuery, categoryFilter, loadedCategories]);
+  }, [searchQuery, categoryFilter, loadedCategories, dataSource]);
 
   return (
     <div className="space-y-6">
@@ -760,22 +848,35 @@ Formats: ${formats.join(', ')}
                         </>
                       )}
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="max-h-80">
                       {exportJobs.length === 0 ? (
                         <div className="p-3 text-sm text-muted-foreground text-center">
                           No completed exports found
                         </div>
                       ) : (
-                        exportJobs.map(job => (
-                          <SelectItem key={job.id} value={job.id}>
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium">{job.name}</span>
-                              <span className="text-xs text-muted-foreground">
-                                {format(new Date(job.created_at), 'MMM d, yyyy HH:mm')}
-                              </span>
-                            </div>
-                          </SelectItem>
-                        ))
+                        exportJobs.map(job => {
+                          const tenantInfo = job.tenant_connection?.customer?.name 
+                            || job.tenant_connection?.display_name 
+                            || job.tenant_connection?.tenant_name;
+                          return (
+                            <SelectItem key={job.id} value={job.id}>
+                              <div className="flex flex-col gap-0.5">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium">{job.name}</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {format(new Date(job.created_at), 'MMM d, yyyy HH:mm')}
+                                  </span>
+                                </div>
+                                {tenantInfo && (
+                                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                    <Building2 className="w-3 h-3" />
+                                    {tenantInfo}
+                                  </span>
+                                )}
+                              </div>
+                            </SelectItem>
+                          );
+                        })
                       )}
                     </SelectContent>
                   </Select>
@@ -841,11 +942,41 @@ Formats: ${formats.join(', ')}
             </CardContent>
           </Card>
 
+          {/* Empty State for Export Mode */}
+          {dataSource === 'export' && !selectedExportJobId && (
+            <Card className="glass-panel">
+              <CardContent className="p-8 text-center">
+                <FolderOpen className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                <h3 className="text-lg font-medium mb-2">Select an Export</h3>
+                <p className="text-sm text-muted-foreground">
+                  Choose an export job from the dropdown above to browse and re-export policies
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
+          {dataSource === 'export' && selectedExportJobId && filteredCategories.length === 0 && !loadingFromExport && (
+            <Card className="glass-panel">
+              <CardContent className="p-8 text-center">
+                <FileText className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                <h3 className="text-lg font-medium mb-2">No Policies Found</h3>
+                <p className="text-sm text-muted-foreground">
+                  This export does not contain any policy resources, or they don't match your search criteria
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Policy Categories */}
           <div className="space-y-3">
             {filteredCategories.map((category) => {
               const Icon = category.icon;
               const isExpanded = expandedCategories.has(category.id);
+
+              // Calculate total policies in this category
+              const totalPoliciesInCategory = loadedCategories
+                .filter(lc => lc.categoryId === category.id)
+                .reduce((sum, lc) => sum + lc.policies.length, 0);
 
               return (
                 <Card key={category.id} className="glass-panel overflow-hidden">
@@ -862,6 +993,9 @@ Formats: ${formats.join(', ')}
                         <h3 className="font-medium text-foreground">{category.name}</h3>
                         <p className="text-xs text-muted-foreground">
                           {category.policies.length} policy types
+                          {totalPoliciesInCategory > 0 && (
+                            <span className="ml-1">• {totalPoliciesInCategory} policies</span>
+                          )}
                         </p>
                       </div>
                     </div>
