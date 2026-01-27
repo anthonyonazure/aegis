@@ -28,6 +28,13 @@ const ExportRequestSchema = z.object({
   exportJobId: z.string().uuid('Invalid export job ID format'),
 });
 
+// Schema for fetching policies without storing (for Policy Browser)
+const FetchRequestSchema = z.object({
+  action: z.literal('fetch'),
+  accessToken: z.string().min(1, 'Access token required').max(10000, 'Access token too long'),
+  resources: z.array(z.string().regex(/^[a-z-]+\/[a-z0-9-]+$/, 'Invalid resource format')).min(1, 'At least one resource required').max(100, 'Too many resources'),
+});
+
 // Schema for import requests
 const ImportRequestSchema = z.object({
   action: z.literal('import'),
@@ -674,6 +681,73 @@ serve(async (req) => {
           results,
           completed,
           total,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Handle fetch action - retrieve policies without storing (for Policy Browser)
+    if (rawBody.action === 'fetch') {
+      const parseResult = FetchRequestSchema.safeParse(rawBody);
+      if (!parseResult.success) {
+        console.error('Validation error:', parseResult.error.errors);
+        return new Response(
+          JSON.stringify({ error: 'Invalid request parameters' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const { accessToken, resources } = parseResult.data;
+
+      console.log(`Fetch request for ${resources.length} resource types (no storage)`);
+
+      const results: Array<{
+        resource: string;
+        success: boolean;
+        data?: any;
+        error?: string;
+      }> = [];
+
+      for (const resource of resources) {
+        const endpointConfig = GRAPH_ENDPOINTS[resource];
+        if (!endpointConfig) {
+          results.push({ resource, success: false, error: `Unknown resource type: ${resource}` });
+          continue;
+        }
+
+        try {
+          const baseUrl = endpointConfig.useBeta ? 'https://graph.microsoft.com/beta' : 'https://graph.microsoft.com/v1.0';
+          const graphUrl = `${baseUrl}${endpointConfig.endpoint}`;
+
+          console.log(`Fetching ${resource} from ${graphUrl}`);
+
+          const response = await fetch(graphUrl, {
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Content-Type': 'application/json',
+            },
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            const errorMessage = errorData.error?.message || `API_ERROR_${response.status}`;
+            console.error(`Graph API error for ${resource}:`, errorMessage);
+            results.push({ resource, success: false, error: sanitizeError(errorMessage) });
+            continue;
+          }
+
+          const data = await response.json();
+          results.push({ resource, success: true, data });
+        } catch (error) {
+          console.error(`Error fetching ${resource}:`, error);
+          results.push({ resource, success: false, error: sanitizeError(error) });
+        }
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          results,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );

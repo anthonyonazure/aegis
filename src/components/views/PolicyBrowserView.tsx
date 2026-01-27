@@ -335,10 +335,9 @@ export const PolicyBrowserView = () => {
 
       const response = await supabase.functions.invoke('graph-api', {
         body: {
-          action: 'export',
+          action: 'fetch',
           accessToken,
           resources: [`${categoryId}/${policyTypeId}`],
-          exportJobId: crypto.randomUUID(), // Dummy job ID for fetch
         },
       });
 
