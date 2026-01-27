@@ -97,6 +97,7 @@ const navGroups: NavGroup[] = [
     title: 'Configuration',
     items: [
       { id: 'resources', label: 'Resources', icon: FolderTree },
+      { id: 'policy-browser', label: 'Policy Browser', icon: Eye },
       { id: 'config-optimizer', label: 'Config Optimizer', icon: SlidersHorizontal, isAI: true },
       { id: 'migration-planner', label: 'Migration Planner', icon: ArrowRightLeft, isAI: true },
       { id: 'export', label: 'Export', icon: Download },
