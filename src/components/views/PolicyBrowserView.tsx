@@ -568,7 +568,7 @@ export const PolicyBrowserView = () => {
       }
 
       const formats = Array.from(selectedFormats);
-      const exportData: Record<string, Record<string, string>> = {};
+      const exportData: Record<string, { filename: string; content: string }> = {};
       let processed = 0;
       const total = Object.keys(groupedPolicies).length * formats.length;
 
@@ -608,10 +608,9 @@ export const PolicyBrowserView = () => {
         }
       }
 
-      // Create and download ZIP file
-      const JSZip = (await import('jszip')).default;
-      const { saveAs } = await import('file-saver');
-      
+      // Create ZIP file using static imports
+      const JSZipModule = await import('jszip');
+      const JSZip = JSZipModule.default;
       const zip = new JSZip();
       const dateStr = new Date().toISOString().split('T')[0];
       
@@ -632,8 +631,22 @@ Formats: ${formats.join(', ')}
         }
       }
 
-      const blob = await zip.generateAsync({ type: 'blob' });
-      saveAs(blob, `m365-policies-${dateStr}.zip`);
+      // Generate blob and trigger download
+      const blob = await zip.generateAsync({ 
+        type: 'blob',
+        compression: 'DEFLATE',
+        compressionOptions: { level: 6 }
+      });
+      
+      // Use a more reliable download method
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `m365-policies-${dateStr}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
 
       toast({
         title: 'Export complete',
