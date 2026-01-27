@@ -20,6 +20,7 @@ import { ScheduledDriftView } from '@/components/views/ScheduledDriftView';
 import { PoliciesView } from '@/components/views/PoliciesView';
 import { PolicyTemplatesView } from '@/components/views/PolicyTemplatesView';
 import { PolicyDeploymentView } from '@/components/views/PolicyDeploymentView';
+import { PolicyBrowserView } from '@/components/views/PolicyBrowserView';
 import { ScheduledDeploymentsView } from '@/components/views/ScheduledDeploymentsView';
 import { PSAIntegrationsView } from '@/components/views/PSAIntegrationsView';
 import { ReportsView } from '@/components/views/ReportsView';
@@ -320,6 +321,8 @@ const Index = () => {
             onSetResources={setSelectedResources}
           />
         );
+      case 'policy-browser':
+        return <PolicyBrowserView />;
       case 'migration-planner':
         return <MigrationPlannerView />;
       case 'export':

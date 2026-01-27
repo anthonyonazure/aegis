@@ -1,0 +1,942 @@
+import { useState, useEffect, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  Shield,
+  Lock,
+  Laptop,
+  Settings,
+  FileJson,
+  FileCode,
+  Terminal,
+  Download,
+  Loader2,
+  Search,
+  Filter,
+  Check,
+  RefreshCw,
+  AlertCircle,
+  ChevronRight,
+  ChevronDown,
+  Eye,
+  CheckSquare,
+  Square,
+  Building2,
+  FileText,
+} from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { useToast } from '@/hooks/use-toast';
+import { useTenant } from '@/contexts/TenantContext';
+import { supabase } from '@/integrations/supabase/client';
+import { cn } from '@/lib/utils';
+
+// Policy categories with their Graph API endpoints
+const POLICY_CATEGORIES = [
+  {
+    id: 'conditional-access',
+    name: 'Conditional Access',
+    icon: Lock,
+    color: 'text-blue-500',
+    policies: [
+      { id: 'ca-policies', name: 'CA Policies', endpoint: '/identity/conditionalAccess/policies' },
+      { id: 'named-locations', name: 'Named Locations', endpoint: '/identity/conditionalAccess/namedLocations' },
+      { id: 'auth-strengths', name: 'Auth Strengths', endpoint: '/identity/conditionalAccess/authenticationStrengths/policies' },
+    ],
+  },
+  {
+    id: 'intune',
+    name: 'Intune / Endpoint',
+    icon: Laptop,
+    color: 'text-green-500',
+    policies: [
+      { id: 'device-configurations', name: 'Device Configurations', endpoint: '/deviceManagement/deviceConfigurations' },
+      { id: 'compliance-policies', name: 'Compliance Policies', endpoint: '/deviceManagement/deviceCompliancePolicies' },
+      { id: 'autopilot', name: 'Autopilot Profiles', endpoint: '/deviceManagement/windowsAutopilotDeploymentProfiles' },
+      { id: 'scripts', name: 'PowerShell Scripts', endpoint: '/deviceManagement/deviceManagementScripts' },
+    ],
+  },
+  {
+    id: 'defender',
+    name: 'Defender',
+    icon: Shield,
+    color: 'text-red-500',
+    policies: [
+      { id: 'security-baselines', name: 'Security Baselines', endpoint: '/deviceManagement/configurationPolicies', useBeta: true },
+      { id: 'asr-policies', name: 'ASR Policies', endpoint: '/deviceManagement/configurationPolicies', useBeta: true },
+      { id: 'antivirus-policies', name: 'Antivirus Policies', endpoint: '/deviceManagement/configurationPolicies', useBeta: true },
+    ],
+  },
+  {
+    id: 'entra-id',
+    name: 'Entra ID',
+    icon: Building2,
+    color: 'text-purple-500',
+    policies: [
+      { id: 'groups', name: 'Groups', endpoint: '/groups' },
+      { id: 'app-registrations', name: 'App Registrations', endpoint: '/applications' },
+      { id: 'admin-units', name: 'Admin Units', endpoint: '/administrativeUnits' },
+      { id: 'directory-settings', name: 'Directory Settings', endpoint: '/groupSettings' },
+    ],
+  },
+];
+
+interface PolicyItem {
+  id: string;
+  displayName: string;
+  description?: string;
+  createdDateTime?: string;
+  modifiedDateTime?: string;
+  state?: string;
+  data: Record<string, unknown>;
+}
+
+interface LoadedCategory {
+  categoryId: string;
+  policyTypeId: string;
+  policies: PolicyItem[];
+  loading: boolean;
+  error?: string;
+}
+
+type ExportFormat = 'json' | 'terraform' | 'bicep' | 'powershell';
+
+const EXPORT_FORMATS: { id: ExportFormat; name: string; icon: React.ElementType; description: string }[] = [
+  { id: 'json', name: 'JSON', icon: FileJson, description: 'Raw Graph API export' },
+  { id: 'terraform', name: 'Terraform', icon: FileCode, description: 'HashiCorp HCL format' },
+  { id: 'bicep', name: 'Bicep', icon: FileCode, description: 'Azure native IaC' },
+  { id: 'powershell', name: 'PowerShell', icon: Terminal, description: 'Executable scripts' },
+];
+
+export const PolicyBrowserView = () => {
+  const { selectedTenantId, tenants, isConnected, tenantName, accessToken } = useTenant();
+  const selectedTenant = tenants.find(t => t.id === selectedTenantId);
+  const displayTenantName = tenantName || selectedTenant?.displayName || selectedTenant?.tenantName;
+
+  const [loadedCategories, setLoadedCategories] = useState<LoadedCategory[]>([]);
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [selectedPolicies, setSelectedPolicies] = useState<Map<string, PolicyItem>>(new Map());
+  const [searchQuery, setSearchQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [previewPolicy, setPreviewPolicy] = useState<PolicyItem | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  
+  // Export state
+  const [selectedFormats, setSelectedFormats] = useState<Set<ExportFormat>>(new Set(['json']));
+  const [exporting, setExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState(0);
+  
+  const { toast } = useToast();
+
+  const fetchPolicies = async (categoryId: string, policyTypeId: string, endpoint: string, useBeta = false) => {
+    if (!accessToken || !selectedTenantId) return;
+
+    const key = `${categoryId}/${policyTypeId}`;
+    
+    // Mark as loading
+    setLoadedCategories(prev => {
+      const existing = prev.find(c => c.categoryId === categoryId && c.policyTypeId === policyTypeId);
+      if (existing) {
+        return prev.map(c => 
+          c.categoryId === categoryId && c.policyTypeId === policyTypeId 
+            ? { ...c, loading: true, error: undefined } 
+            : c
+        );
+      }
+      return [...prev, { categoryId, policyTypeId, policies: [], loading: true }];
+    });
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
+
+      const response = await supabase.functions.invoke('graph-api', {
+        body: {
+          action: 'export',
+          accessToken,
+          resources: [`${categoryId}/${policyTypeId}`],
+          exportJobId: crypto.randomUUID(), // Dummy job ID for fetch
+        },
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message || 'Failed to fetch policies');
+      }
+
+      const results = response.data?.results || [];
+      const policies: PolicyItem[] = [];
+      
+      for (const result of results) {
+        if (result.success && result.data?.value) {
+          for (const item of result.data.value) {
+            policies.push({
+              id: item.id,
+              displayName: item.displayName || item.name || item.id,
+              description: item.description,
+              createdDateTime: item.createdDateTime,
+              modifiedDateTime: item.modifiedDateTime || item.lastModifiedDateTime,
+              state: item.state,
+              data: item,
+            });
+          }
+        } else if (result.success && result.data && !result.data.value) {
+          // Single object response
+          const item = result.data;
+          if (item.id) {
+            policies.push({
+              id: item.id,
+              displayName: item.displayName || item.name || item.id,
+              description: item.description,
+              createdDateTime: item.createdDateTime,
+              modifiedDateTime: item.modifiedDateTime,
+              state: item.state,
+              data: item,
+            });
+          }
+        }
+      }
+
+      setLoadedCategories(prev => 
+        prev.map(c => 
+          c.categoryId === categoryId && c.policyTypeId === policyTypeId 
+            ? { ...c, policies, loading: false } 
+            : c
+        )
+      );
+    } catch (error) {
+      console.error('Failed to fetch policies:', error);
+      setLoadedCategories(prev => 
+        prev.map(c => 
+          c.categoryId === categoryId && c.policyTypeId === policyTypeId 
+            ? { ...c, loading: false, error: error instanceof Error ? error.message : 'Failed to fetch' } 
+            : c
+        )
+      );
+    }
+  };
+
+  const toggleCategory = (categoryId: string) => {
+    const newExpanded = new Set(expandedCategories);
+    if (newExpanded.has(categoryId)) {
+      newExpanded.delete(categoryId);
+    } else {
+      newExpanded.add(categoryId);
+      // Auto-load policies when expanding
+      const category = POLICY_CATEGORIES.find(c => c.id === categoryId);
+      if (category) {
+        for (const policyType of category.policies) {
+          const existing = loadedCategories.find(
+            c => c.categoryId === categoryId && c.policyTypeId === policyType.id
+          );
+          if (!existing) {
+            fetchPolicies(categoryId, policyType.id, policyType.endpoint);
+          }
+        }
+      }
+    }
+    setExpandedCategories(newExpanded);
+  };
+
+  const togglePolicySelection = (policy: PolicyItem, categoryId: string, policyTypeId: string) => {
+    const key = `${categoryId}/${policyTypeId}/${policy.id}`;
+    const newSelected = new Map(selectedPolicies);
+    if (newSelected.has(key)) {
+      newSelected.delete(key);
+    } else {
+      newSelected.set(key, policy);
+    }
+    setSelectedPolicies(newSelected);
+  };
+
+  const selectAllInCategory = (categoryId: string, policyTypeId: string) => {
+    const policies = loadedCategories.find(
+      c => c.categoryId === categoryId && c.policyTypeId === policyTypeId
+    )?.policies || [];
+    
+    const newSelected = new Map(selectedPolicies);
+    for (const policy of policies) {
+      const key = `${categoryId}/${policyTypeId}/${policy.id}`;
+      newSelected.set(key, policy);
+    }
+    setSelectedPolicies(newSelected);
+  };
+
+  const deselectAllInCategory = (categoryId: string, policyTypeId: string) => {
+    const newSelected = new Map(selectedPolicies);
+    for (const [key] of newSelected) {
+      if (key.startsWith(`${categoryId}/${policyTypeId}/`)) {
+        newSelected.delete(key);
+      }
+    }
+    setSelectedPolicies(newSelected);
+  };
+
+  const toggleFormat = (format: ExportFormat) => {
+    const newFormats = new Set(selectedFormats);
+    if (newFormats.has(format)) {
+      if (newFormats.size > 1) {
+        newFormats.delete(format);
+      }
+    } else {
+      newFormats.add(format);
+    }
+    setSelectedFormats(newFormats);
+  };
+
+  const handleExport = async () => {
+    if (selectedPolicies.size === 0) {
+      toast({
+        title: 'No policies selected',
+        description: 'Select at least one policy to export',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setExporting(true);
+    setExportProgress(0);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
+
+      // Group policies by category/type for export
+      const groupedPolicies: Record<string, { categoryId: string; policyTypeId: string; policies: PolicyItem[] }> = {};
+      
+      for (const [key, policy] of selectedPolicies) {
+        const [categoryId, policyTypeId] = key.split('/');
+        const groupKey = `${categoryId}/${policyTypeId}`;
+        if (!groupedPolicies[groupKey]) {
+          groupedPolicies[groupKey] = { categoryId, policyTypeId, policies: [] };
+        }
+        groupedPolicies[groupKey].policies.push(policy);
+      }
+
+      const formats = Array.from(selectedFormats);
+      const exportData: Record<string, Record<string, string>> = {};
+      let processed = 0;
+      const total = Object.keys(groupedPolicies).length * formats.length;
+
+      for (const [groupKey, { categoryId, policyTypeId, policies }] of Object.entries(groupedPolicies)) {
+        for (const format of formats) {
+          if (format === 'json') {
+            // JSON is just the raw data
+            exportData[`${groupKey}_${format}`] = {
+              filename: `${categoryId}_${policyTypeId}.json`,
+              content: JSON.stringify(policies.map(p => p.data), null, 2),
+            };
+          } else {
+            // Convert using the convert-format edge function
+            try {
+              const response = await supabase.functions.invoke('convert-format', {
+                body: {
+                  data: policies.map(p => p.data),
+                  resourceType: `${categoryId}/${policyTypeId}`,
+                  format,
+                },
+              });
+
+              if (response.data?.output) {
+                const ext = format === 'terraform' ? 'tf' : format === 'bicep' ? 'bicep' : 'ps1';
+                exportData[`${groupKey}_${format}`] = {
+                  filename: `${categoryId}_${policyTypeId}.${ext}`,
+                  content: response.data.output,
+                };
+              }
+            } catch (err) {
+              console.error(`Failed to convert ${groupKey} to ${format}:`, err);
+            }
+          }
+
+          processed++;
+          setExportProgress(Math.round((processed / total) * 100));
+        }
+      }
+
+      // Create and download ZIP file
+      const JSZip = (await import('jszip')).default;
+      const { saveAs } = await import('file-saver');
+      
+      const zip = new JSZip();
+      const dateStr = new Date().toISOString().split('T')[0];
+      
+      // Add README
+      zip.file('README.md', `# M365 Policy Export
+Export Date: ${new Date().toISOString()}
+Tenant: ${displayTenantName || 'Unknown'}
+Policies: ${selectedPolicies.size}
+Formats: ${formats.join(', ')}
+`);
+
+      // Add files organized by format
+      for (const [key, { filename, content }] of Object.entries(exportData)) {
+        const format = key.split('_').pop();
+        const folder = zip.folder(format);
+        if (folder && content) {
+          folder.file(filename, content);
+        }
+      }
+
+      const blob = await zip.generateAsync({ type: 'blob' });
+      saveAs(blob, `m365-policies-${dateStr}.zip`);
+
+      toast({
+        title: 'Export complete',
+        description: `Exported ${selectedPolicies.size} policies to ${formats.length} format(s)`,
+      });
+    } catch (error) {
+      console.error('Export failed:', error);
+      toast({
+        title: 'Export failed',
+        description: error instanceof Error ? error.message : 'Failed to export policies',
+        variant: 'destructive',
+      });
+    } finally {
+      setExporting(false);
+      setExportProgress(0);
+    }
+  };
+
+  const handleExportSingle = async (policy: PolicyItem, categoryId: string, policyTypeId: string, format: ExportFormat) => {
+    try {
+      let content: string;
+      let filename: string;
+      const safeName = (policy.displayName || policy.id).replace(/[^a-z0-9]/gi, '_').substring(0, 50);
+
+      if (format === 'json') {
+        content = JSON.stringify(policy.data, null, 2);
+        filename = `${safeName}.json`;
+      } else {
+        const response = await supabase.functions.invoke('convert-format', {
+          body: {
+            data: policy.data,
+            resourceType: `${categoryId}/${policyTypeId}`,
+            format,
+          },
+        });
+
+        if (!response.data?.output) {
+          throw new Error('Conversion failed');
+        }
+
+        content = response.data.output;
+        const ext = format === 'terraform' ? 'tf' : format === 'bicep' ? 'bicep' : 'ps1';
+        filename = `${safeName}.${ext}`;
+      }
+
+      // Download file
+      const blob = new Blob([content], { type: 'text/plain' });
+      const { saveAs } = await import('file-saver');
+      saveAs(blob, filename);
+
+      toast({
+        title: 'Downloaded',
+        description: `Exported ${policy.displayName} as ${format.toUpperCase()}`,
+      });
+    } catch (error) {
+      console.error('Single export failed:', error);
+      toast({
+        title: 'Export failed',
+        description: error instanceof Error ? error.message : 'Failed to export policy',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Filter policies based on search
+  const filteredCategories = useMemo(() => {
+    if (!searchQuery && categoryFilter === 'all') return POLICY_CATEGORIES;
+    
+    return POLICY_CATEGORIES
+      .filter(cat => categoryFilter === 'all' || cat.id === categoryFilter)
+      .map(cat => ({
+        ...cat,
+        policies: cat.policies.filter(p => {
+          const loaded = loadedCategories.find(
+            c => c.categoryId === cat.id && c.policyTypeId === p.id
+          );
+          if (!loaded) return true; // Show unloaded categories
+          return loaded.policies.some(pol => 
+            pol.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            pol.description?.toLowerCase().includes(searchQuery.toLowerCase())
+          );
+        }),
+      }))
+      .filter(cat => cat.policies.length > 0);
+  }, [searchQuery, categoryFilter, loadedCategories]);
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Policy Browser</h1>
+          <p className="text-muted-foreground mt-1">
+            View, compare, and export M365 policies across formats
+          </p>
+          {displayTenantName && (
+            <div className="flex items-center gap-2 mt-2">
+              <Building2 className="w-4 h-4 text-primary" />
+              <span className="text-sm text-primary font-medium">
+                {displayTenantName}
+              </span>
+            </div>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          <Badge variant="outline" className="px-3 py-1">
+            {selectedPolicies.size} selected
+          </Badge>
+          <Button
+            onClick={handleExport}
+            disabled={selectedPolicies.size === 0 || exporting || !isConnected}
+            className="gap-2"
+          >
+            {exporting ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Exporting... {exportProgress}%
+              </>
+            ) : (
+              <>
+                <Download className="w-4 h-4" />
+                Export Selected
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
+
+      {/* Connection Warning */}
+      {!isConnected && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex items-center gap-3 p-4 rounded-lg bg-warning/10 border border-warning/20"
+        >
+          <AlertCircle className="w-5 h-5 text-warning" />
+          <div>
+            <p className="font-medium text-warning">No tenant connected</p>
+            <p className="text-sm text-muted-foreground">
+              Connect a tenant to browse and export policies
+            </p>
+          </div>
+        </motion.div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left Panel - Policy Browser */}
+        <div className="lg:col-span-2 space-y-4">
+          {/* Search & Filters */}
+          <Card className="glass-panel">
+            <CardContent className="p-4">
+              <div className="flex flex-col sm:flex-row gap-4">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search policies..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-9 bg-secondary/50"
+                  />
+                </div>
+                <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                  <SelectTrigger className="w-full sm:w-48 bg-secondary/50">
+                    <Filter className="w-4 h-4 mr-2" />
+                    <SelectValue placeholder="Filter by category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Categories</SelectItem>
+                    {POLICY_CATEGORIES.map(cat => (
+                      <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Policy Categories */}
+          <div className="space-y-3">
+            {filteredCategories.map((category) => {
+              const Icon = category.icon;
+              const isExpanded = expandedCategories.has(category.id);
+
+              return (
+                <Card key={category.id} className="glass-panel overflow-hidden">
+                  <button
+                    onClick={() => toggleCategory(category.id)}
+                    className="w-full p-4 flex items-center justify-between hover:bg-secondary/50 transition-colors"
+                    disabled={!isConnected}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={cn("p-2 rounded-lg bg-secondary", category.color)}>
+                        <Icon className="w-5 h-5" />
+                      </div>
+                      <div className="text-left">
+                        <h3 className="font-medium text-foreground">{category.name}</h3>
+                        <p className="text-xs text-muted-foreground">
+                          {category.policies.length} policy types
+                        </p>
+                      </div>
+                    </div>
+                    {isExpanded ? (
+                      <ChevronDown className="w-5 h-5 text-muted-foreground" />
+                    ) : (
+                      <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                    )}
+                  </button>
+
+                  <AnimatePresence>
+                    {isExpanded && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="border-t border-border"
+                      >
+                        {category.policies.map((policyType) => {
+                          const loaded = loadedCategories.find(
+                            c => c.categoryId === category.id && c.policyTypeId === policyType.id
+                          );
+                          const policies = loaded?.policies || [];
+                          const isLoading = loaded?.loading;
+                          const error = loaded?.error;
+
+                          return (
+                            <div key={policyType.id} className="border-b border-border/50 last:border-0">
+                              <div className="px-4 py-3 bg-secondary/30 flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <FileText className="w-4 h-4 text-muted-foreground" />
+                                  <span className="text-sm font-medium">{policyType.name}</span>
+                                  {isLoading && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
+                                  {!isLoading && policies.length > 0 && (
+                                    <Badge variant="secondary" className="text-xs">
+                                      {policies.length}
+                                    </Badge>
+                                  )}
+                                </div>
+                                {policies.length > 0 && (
+                                  <div className="flex items-center gap-2">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-7 text-xs"
+                                      onClick={() => selectAllInCategory(category.id, policyType.id)}
+                                    >
+                                      <CheckSquare className="w-3 h-3 mr-1" />
+                                      Select All
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-7 text-xs"
+                                      onClick={() => deselectAllInCategory(category.id, policyType.id)}
+                                    >
+                                      <Square className="w-3 h-3 mr-1" />
+                                      Clear
+                                    </Button>
+                                  </div>
+                                )}
+                              </div>
+
+                              {error && (
+                                <div className="px-4 py-2 text-sm text-destructive bg-destructive/10">
+                                  {error}
+                                </div>
+                              )}
+
+                              {policies.length > 0 && (
+                                <div className="divide-y divide-border/50">
+                                  {policies.map((policy) => {
+                                    const key = `${category.id}/${policyType.id}/${policy.id}`;
+                                    const isSelected = selectedPolicies.has(key);
+
+                                    return (
+                                      <div
+                                        key={policy.id}
+                                        className={cn(
+                                          "px-4 py-3 flex items-center justify-between hover:bg-secondary/30 transition-colors",
+                                          isSelected && "bg-primary/5"
+                                        )}
+                                      >
+                                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                                          <Checkbox
+                                            checked={isSelected}
+                                            onCheckedChange={() => 
+                                              togglePolicySelection(policy, category.id, policyType.id)
+                                            }
+                                          />
+                                          <div className="min-w-0 flex-1">
+                                            <p className="text-sm font-medium truncate">
+                                              {policy.displayName}
+                                            </p>
+                                            {policy.description && (
+                                              <p className="text-xs text-muted-foreground truncate">
+                                                {policy.description}
+                                              </p>
+                                            )}
+                                          </div>
+                                          {policy.state && (
+                                            <Badge
+                                              variant={policy.state === 'enabled' ? 'default' : 'secondary'}
+                                              className="text-xs"
+                                            >
+                                              {policy.state}
+                                            </Badge>
+                                          )}
+                                        </div>
+                                        <div className="flex items-center gap-1 ml-2">
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-8 w-8"
+                                            onClick={() => {
+                                              setPreviewPolicy(policy);
+                                              setPreviewOpen(true);
+                                            }}
+                                          >
+                                            <Eye className="w-4 h-4" />
+                                          </Button>
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-8 w-8"
+                                            onClick={() => 
+                                              handleExportSingle(policy, category.id, policyType.id, 'json')
+                                            }
+                                          >
+                                            <Download className="w-4 h-4" />
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+
+                              {!isLoading && policies.length === 0 && !error && (
+                                <div className="px-4 py-3 text-sm text-muted-foreground text-center">
+                                  No policies found
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Right Panel - Export Options */}
+        <div className="space-y-4">
+          <Card className="glass-panel sticky top-4">
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Download className="w-5 h-5 text-primary" />
+                Export Options
+              </CardTitle>
+              <CardDescription>
+                Choose formats for bulk export
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Format Selection */}
+              <div className="space-y-3">
+                <p className="text-sm font-medium">Export Formats</p>
+                {EXPORT_FORMATS.map((format) => {
+                  const Icon = format.icon;
+                  const isSelected = selectedFormats.has(format.id);
+
+                  return (
+                    <button
+                      key={format.id}
+                      onClick={() => toggleFormat(format.id)}
+                      className={cn(
+                        "w-full p-3 rounded-lg border transition-all flex items-center gap-3",
+                        isSelected
+                          ? "border-primary bg-primary/10"
+                          : "border-border hover:border-primary/50"
+                      )}
+                    >
+                      <div className={cn(
+                        "w-8 h-8 rounded-lg flex items-center justify-center",
+                        isSelected ? "bg-primary/20" : "bg-secondary"
+                      )}>
+                        <Icon className={cn(
+                          "w-4 h-4",
+                          isSelected ? "text-primary" : "text-muted-foreground"
+                        )} />
+                      </div>
+                      <div className="flex-1 text-left">
+                        <p className="text-sm font-medium">{format.name}</p>
+                        <p className="text-xs text-muted-foreground">{format.description}</p>
+                      </div>
+                      <div className={cn(
+                        "w-5 h-5 rounded-full border-2 flex items-center justify-center",
+                        isSelected ? "bg-primary border-primary" : "border-muted-foreground"
+                      )}>
+                        {isSelected && <Check className="w-3 h-3 text-primary-foreground" />}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Selected Policies Summary */}
+              {selectedPolicies.size > 0 && (
+                <div className="p-3 rounded-lg bg-secondary/50">
+                  <p className="text-sm font-medium mb-2">Selection Summary</p>
+                  <div className="space-y-1 text-xs text-muted-foreground">
+                    <p>{selectedPolicies.size} policies selected</p>
+                    <p>{selectedFormats.size} export format(s)</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Export Button */}
+              <Button
+                onClick={handleExport}
+                disabled={selectedPolicies.size === 0 || exporting || !isConnected}
+                className="w-full gap-2"
+                size="lg"
+              >
+                {exporting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Exporting... {exportProgress}%
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-4 h-4" />
+                    Export {selectedPolicies.size} Policies
+                  </>
+                )}
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      {/* Policy Preview Dialog */}
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle>{previewPolicy?.displayName}</DialogTitle>
+            <DialogDescription>{previewPolicy?.description}</DialogDescription>
+          </DialogHeader>
+          <Tabs defaultValue="json" className="mt-4">
+            <TabsList>
+              <TabsTrigger value="json">JSON</TabsTrigger>
+              <TabsTrigger value="terraform">Terraform</TabsTrigger>
+              <TabsTrigger value="bicep">Bicep</TabsTrigger>
+              <TabsTrigger value="powershell">PowerShell</TabsTrigger>
+            </TabsList>
+            <TabsContent value="json">
+              <ScrollArea className="h-[400px] w-full rounded-md border p-4">
+                <pre className="text-xs font-mono whitespace-pre-wrap">
+                  {previewPolicy ? JSON.stringify(previewPolicy.data, null, 2) : ''}
+                </pre>
+              </ScrollArea>
+            </TabsContent>
+            <TabsContent value="terraform">
+              <PolicyFormatPreview
+                policy={previewPolicy}
+                format="terraform"
+              />
+            </TabsContent>
+            <TabsContent value="bicep">
+              <PolicyFormatPreview
+                policy={previewPolicy}
+                format="bicep"
+              />
+            </TabsContent>
+            <TabsContent value="powershell">
+              <PolicyFormatPreview
+                policy={previewPolicy}
+                format="powershell"
+              />
+            </TabsContent>
+          </Tabs>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+};
+
+// Helper component for format previews
+const PolicyFormatPreview = ({ 
+  policy, 
+  format 
+}: { 
+  policy: PolicyItem | null; 
+  format: ExportFormat;
+}) => {
+  const [content, setContent] = useState<string>('Loading...');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!policy) return;
+
+    const convert = async () => {
+      setLoading(true);
+      try {
+        // For preview, we just show placeholder until actual conversion
+        const response = await supabase.functions.invoke('convert-format', {
+          body: {
+            data: policy.data,
+            resourceType: 'conditional-access/ca-policies', // Generic type for preview
+            format,
+          },
+        });
+
+        if (response.data?.output) {
+          setContent(response.data.output);
+        } else {
+          setContent('# Conversion not available for this resource type');
+        }
+      } catch (err) {
+        setContent('# Failed to generate preview');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    convert();
+  }, [policy, format]);
+
+  return (
+    <ScrollArea className="h-[400px] w-full rounded-md border p-4">
+      {loading ? (
+        <div className="flex items-center justify-center h-full">
+          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : (
+        <pre className="text-xs font-mono whitespace-pre-wrap">{content}</pre>
+      )}
+    </ScrollArea>
+  );
+};
