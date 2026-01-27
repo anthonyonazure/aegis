@@ -22,6 +22,9 @@ import {
   Square,
   Building2,
   FileText,
+  FolderOpen,
+  Cloud,
+  History,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -48,6 +51,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useTenant } from '@/contexts/TenantContext';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
+import { format } from 'date-fns';
 
 // Policy categories with their Graph API endpoints
 const POLICY_CATEGORIES = [
@@ -117,7 +121,17 @@ interface LoadedCategory {
   error?: string;
 }
 
+interface ExportJob {
+  id: string;
+  name: string;
+  created_at: string;
+  status: string;
+  tenant_connection_id: string | null;
+  categories: string[];
+}
+
 type ExportFormat = 'json' | 'terraform' | 'bicep' | 'powershell';
+type DataSource = 'live' | 'export';
 
 const EXPORT_FORMATS: { id: ExportFormat; name: string; icon: React.ElementType; description: string }[] = [
   { id: 'json', name: 'JSON', icon: FileJson, description: 'Raw Graph API export' },
@@ -131,6 +145,12 @@ export const PolicyBrowserView = () => {
   const selectedTenant = tenants.find(t => t.id === selectedTenantId);
   const displayTenantName = tenantName || selectedTenant?.displayName || selectedTenant?.tenantName;
 
+  const [dataSource, setDataSource] = useState<DataSource>('live');
+  const [exportJobs, setExportJobs] = useState<ExportJob[]>([]);
+  const [selectedExportJobId, setSelectedExportJobId] = useState<string | null>(null);
+  const [loadingExportJobs, setLoadingExportJobs] = useState(false);
+  const [loadingFromExport, setLoadingFromExport] = useState(false);
+  
   const [loadedCategories, setLoadedCategories] = useState<LoadedCategory[]>([]);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [selectedPolicies, setSelectedPolicies] = useState<Map<string, PolicyItem>>(new Map());
@@ -145,6 +165,118 @@ export const PolicyBrowserView = () => {
   const [exportProgress, setExportProgress] = useState(0);
   
   const { toast } = useToast();
+
+  // Fetch available export jobs
+  useEffect(() => {
+    const fetchExportJobs = async () => {
+      setLoadingExportJobs(true);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
+
+        const { data, error } = await supabase
+          .from('export_jobs')
+          .select('id, name, created_at, status, tenant_connection_id, categories')
+          .eq('user_id', session.user.id)
+          .eq('status', 'completed')
+          .order('created_at', { ascending: false })
+          .limit(50);
+
+        if (error) throw error;
+        setExportJobs(data || []);
+      } catch (err) {
+        console.error('Failed to fetch export jobs:', err);
+      } finally {
+        setLoadingExportJobs(false);
+      }
+    };
+
+    fetchExportJobs();
+  }, []);
+
+  // Load policies from an export job
+  const loadFromExportJob = async (jobId: string) => {
+    setLoadingFromExport(true);
+    setLoadedCategories([]);
+    setSelectedPolicies(new Map());
+    setExpandedCategories(new Set());
+
+    try {
+      const { data: resources, error } = await supabase
+        .from('exported_resources')
+        .select('*')
+        .eq('export_job_id', jobId);
+
+      if (error) throw error;
+      if (!resources || resources.length === 0) {
+        toast({
+          title: 'No resources found',
+          description: 'This export does not contain any policy resources',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      // Group resources by category/type
+      const grouped: Record<string, LoadedCategory> = {};
+
+      for (const resource of resources) {
+        const categoryId = resource.category;
+        const policyTypeId = resource.resource_type;
+        const key = `${categoryId}/${policyTypeId}`;
+
+        if (!grouped[key]) {
+          grouped[key] = {
+            categoryId,
+            policyTypeId,
+            policies: [],
+            loading: false,
+          };
+        }
+
+        const data = resource.data as Record<string, unknown>;
+        grouped[key].policies.push({
+          id: resource.resource_id || resource.id,
+          displayName: resource.resource_name || (data.displayName as string) || (data.name as string) || resource.id,
+          description: data.description as string | undefined,
+          createdDateTime: data.createdDateTime as string | undefined,
+          modifiedDateTime: data.modifiedDateTime as string | undefined,
+          state: data.state as string | undefined,
+          data,
+        });
+      }
+
+      setLoadedCategories(Object.values(grouped));
+      
+      // Auto-expand categories that have loaded data
+      const categoriesToExpand = new Set<string>();
+      Object.values(grouped).forEach(cat => categoriesToExpand.add(cat.categoryId));
+      setExpandedCategories(categoriesToExpand);
+
+      toast({
+        title: 'Export loaded',
+        description: `Loaded ${resources.length} resources from export`,
+      });
+    } catch (err) {
+      console.error('Failed to load export:', err);
+      toast({
+        title: 'Failed to load export',
+        description: err instanceof Error ? err.message : 'Unknown error',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoadingFromExport(false);
+    }
+  };
+
+  // Handle data source change
+  const handleDataSourceChange = (source: DataSource) => {
+    setDataSource(source);
+    setLoadedCategories([]);
+    setSelectedPolicies(new Map());
+    setExpandedCategories(new Set());
+    setSelectedExportJobId(null);
+  };
 
   const fetchPolicies = async (categoryId: string, policyTypeId: string, endpoint: string, useBeta = false) => {
     if (!accessToken || !selectedTenantId) return;
@@ -239,15 +371,17 @@ export const PolicyBrowserView = () => {
       newExpanded.delete(categoryId);
     } else {
       newExpanded.add(categoryId);
-      // Auto-load policies when expanding
-      const category = POLICY_CATEGORIES.find(c => c.id === categoryId);
-      if (category) {
-        for (const policyType of category.policies) {
-          const existing = loadedCategories.find(
-            c => c.categoryId === categoryId && c.policyTypeId === policyType.id
-          );
-          if (!existing) {
-            fetchPolicies(categoryId, policyType.id, policyType.endpoint);
+      // Auto-load policies when expanding (only for live mode)
+      if (dataSource === 'live') {
+        const category = POLICY_CATEGORIES.find(c => c.id === categoryId);
+        if (category) {
+          for (const policyType of category.policies) {
+            const existing = loadedCategories.find(
+              c => c.categoryId === categoryId && c.policyTypeId === policyType.id
+            );
+            if (!existing) {
+              fetchPolicies(categoryId, policyType.id, policyType.endpoint);
+            }
           }
         }
       }
@@ -492,11 +626,19 @@ Formats: ${formats.join(', ')}
           <p className="text-muted-foreground mt-1">
             View, compare, and export M365 policies across formats
           </p>
-          {displayTenantName && (
+          {dataSource === 'live' && displayTenantName && (
             <div className="flex items-center gap-2 mt-2">
               <Building2 className="w-4 h-4 text-primary" />
               <span className="text-sm text-primary font-medium">
                 {displayTenantName}
+              </span>
+            </div>
+          )}
+          {dataSource === 'export' && selectedExportJobId && (
+            <div className="flex items-center gap-2 mt-2">
+              <FolderOpen className="w-4 h-4 text-primary" />
+              <span className="text-sm text-primary font-medium">
+                From Export: {exportJobs.find(j => j.id === selectedExportJobId)?.name || 'Selected Export'}
               </span>
             </div>
           )}
@@ -507,7 +649,7 @@ Formats: ${formats.join(', ')}
           </Badge>
           <Button
             onClick={handleExport}
-            disabled={selectedPolicies.size === 0 || exporting || !isConnected}
+            disabled={selectedPolicies.size === 0 || exporting}
             className="gap-2"
           >
             {exporting ? (
@@ -525,8 +667,133 @@ Formats: ${formats.join(', ')}
         </div>
       </div>
 
-      {/* Connection Warning */}
-      {!isConnected && (
+      {/* Data Source Toggle */}
+      <Card className="glass-panel">
+        <CardContent className="p-4">
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-foreground">Load policies from:</span>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                onClick={() => handleDataSourceChange('live')}
+                className={cn(
+                  "flex-1 p-4 rounded-lg border-2 transition-all flex items-center gap-3",
+                  dataSource === 'live'
+                    ? "border-primary bg-primary/10"
+                    : "border-border hover:border-primary/50"
+                )}
+              >
+                <div className={cn(
+                  "w-10 h-10 rounded-lg flex items-center justify-center",
+                  dataSource === 'live' ? "bg-primary/20" : "bg-secondary"
+                )}>
+                  <Cloud className={cn(
+                    "w-5 h-5",
+                    dataSource === 'live' ? "text-primary" : "text-muted-foreground"
+                  )} />
+                </div>
+                <div className="text-left">
+                  <p className="text-sm font-medium">Fetch Live</p>
+                  <p className="text-xs text-muted-foreground">Query policies directly from Graph API</p>
+                </div>
+                {dataSource === 'live' && (
+                  <Check className="w-5 h-5 text-primary ml-auto" />
+                )}
+              </button>
+              
+              <button
+                onClick={() => handleDataSourceChange('export')}
+                className={cn(
+                  "flex-1 p-4 rounded-lg border-2 transition-all flex items-center gap-3",
+                  dataSource === 'export'
+                    ? "border-primary bg-primary/10"
+                    : "border-border hover:border-primary/50"
+                )}
+              >
+                <div className={cn(
+                  "w-10 h-10 rounded-lg flex items-center justify-center",
+                  dataSource === 'export' ? "bg-primary/20" : "bg-secondary"
+                )}>
+                  <History className={cn(
+                    "w-5 h-5",
+                    dataSource === 'export' ? "text-primary" : "text-muted-foreground"
+                  )} />
+                </div>
+                <div className="text-left">
+                  <p className="text-sm font-medium">Load from Export</p>
+                  <p className="text-xs text-muted-foreground">Browse policies from a previous export</p>
+                </div>
+                {dataSource === 'export' && (
+                  <Check className="w-5 h-5 text-primary ml-auto" />
+                )}
+              </button>
+            </div>
+
+            {/* Export Job Selector (only shown when "Load from Export" is selected) */}
+            {dataSource === 'export' && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="pt-2"
+              >
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <Select
+                    value={selectedExportJobId || ''}
+                    onValueChange={(value) => {
+                      setSelectedExportJobId(value);
+                      if (value) loadFromExportJob(value);
+                    }}
+                    disabled={loadingExportJobs || loadingFromExport}
+                  >
+                    <SelectTrigger className="flex-1 bg-secondary/50">
+                      {loadingExportJobs ? (
+                        <div className="flex items-center gap-2">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Loading exports...</span>
+                        </div>
+                      ) : (
+                        <>
+                          <FolderOpen className="w-4 h-4 mr-2" />
+                          <SelectValue placeholder="Select an export job..." />
+                        </>
+                      )}
+                    </SelectTrigger>
+                    <SelectContent>
+                      {exportJobs.length === 0 ? (
+                        <div className="p-3 text-sm text-muted-foreground text-center">
+                          No completed exports found
+                        </div>
+                      ) : (
+                        exportJobs.map(job => (
+                          <SelectItem key={job.id} value={job.id}>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{job.name}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {format(new Date(job.created_at), 'MMM d, yyyy HH:mm')}
+                              </span>
+                            </div>
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                  {loadingFromExport && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Loading policies...
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Connection Warning (only for live mode) */}
+      {dataSource === 'live' && !isConnected && (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -536,7 +803,7 @@ Formats: ${formats.join(', ')}
           <div>
             <p className="font-medium text-warning">No tenant connected</p>
             <p className="text-sm text-muted-foreground">
-              Connect a tenant to browse and export policies
+              Connect a tenant to browse live policies, or load from a previous export
             </p>
           </div>
         </motion.div>
@@ -585,7 +852,7 @@ Formats: ${formats.join(', ')}
                   <button
                     onClick={() => toggleCategory(category.id)}
                     className="w-full p-4 flex items-center justify-between hover:bg-secondary/50 transition-colors"
-                    disabled={!isConnected}
+                    disabled={dataSource === 'live' && !isConnected}
                   >
                     <div className="flex items-center gap-3">
                       <div className={cn("p-2 rounded-lg bg-secondary", category.color)}>
