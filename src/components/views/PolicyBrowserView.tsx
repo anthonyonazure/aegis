@@ -26,6 +26,7 @@ import {
   FolderOpen,
   Cloud,
   History,
+  Upload,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -69,7 +70,10 @@ import {
   isFileSystemAccessSupported,
   promptSaveFileHandle,
   writeBlobToHandle,
+  buildExportFilename,
 } from '@/lib/saveFile';
+import { PolicyDeployDialog } from '@/components/PolicyDeployDialog';
+import type { PolicyItem as DeployPolicyItem } from '@/lib/policyDeployment';
 
 // Policy categories with their Graph API endpoints
 const POLICY_CATEGORIES = [
@@ -169,6 +173,7 @@ export const PolicyBrowserView = () => {
   const { selectedTenantId, tenants, isConnected, tenantName, accessToken } = useTenant();
   const selectedTenant = tenants.find(t => t.id === selectedTenantId);
   const displayTenantName = tenantName || selectedTenant?.displayName || selectedTenant?.tenantName;
+  // Customer name will come from loaded export source info or we'll fetch it separately
 
   const [dataSource, setDataSource] = useState<DataSource>('live');
   const [exportJobs, setExportJobs] = useState<ExportJob[]>([]);
@@ -200,6 +205,9 @@ export const PolicyBrowserView = () => {
   
   // Export confirmation dialog state
   const [exportConfirmOpen, setExportConfirmOpen] = useState(false);
+  
+  // Deploy dialog state
+  const [deployDialogOpen, setDeployDialogOpen] = useState(false);
   
   const { toast } = useToast();
 
@@ -558,8 +566,14 @@ export const PolicyBrowserView = () => {
     setExportProgress(0);
 
     try {
-      const dateStr = new Date().toISOString().split('T')[0];
-      const defaultZipFilename = `m365-policies-${dateStr}.zip`;
+      // Build smart filename with customer/tenant name and timestamp
+      const sourceCustomerName = loadedExportSourceInfo?.customerName;
+      const sourceTenantName = loadedExportSourceInfo?.tenantName || displayTenantName;
+      const defaultZipFilename = buildExportFilename(
+        sourceCustomerName,
+        sourceTenantName,
+        'm365-policies'
+      );
 
       // IMPORTANT: Prompt the save dialog immediately (user activation), before any long async work.
       // This avoids browsers blocking the picker and helps prevent incomplete .crdownload files.
@@ -646,13 +660,16 @@ export const PolicyBrowserView = () => {
       const JSZip = JSZipModule.default;
       const zip = new JSZip();
       
-      // Add README
-      zip.file('README.md', `# M365 Policy Export
+      // Add README with source info
+      const readmeContent = `# M365 Policy Export
 Export Date: ${new Date().toISOString()}
-Tenant: ${displayTenantName || 'Unknown'}
+${sourceCustomerName ? `Customer: ${sourceCustomerName}` : ''}
+Tenant: ${sourceTenantName || 'Unknown'}
 Policies: ${selectedPolicies.size}
 Formats: ${formats.join(', ')}
-`);
+Source: ${dataSource === 'export' ? 'Previous Export' : 'Live Tenant'}
+`;
+      zip.file('README.md', readmeContent);
 
       // Add files organized by format
       for (const [key, { filename, content }] of Object.entries(exportData)) {
@@ -869,7 +886,16 @@ Formats: ${formats.join(', ')}
             {selectedPolicies.size} selected
           </Badge>
           <Button
-            onClick={handleExport}
+            variant="outline"
+            onClick={() => setDeployDialogOpen(true)}
+            disabled={selectedPolicies.size === 0}
+            className="gap-2"
+          >
+            <Upload className="w-4 h-4" />
+            Deploy to Tenant
+          </Button>
+          <Button
+            onClick={handleExportClick}
             disabled={selectedPolicies.size === 0 || exporting}
             className="gap-2"
           >
@@ -1582,6 +1608,18 @@ Formats: ${formats.join(', ')}
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Policy Deploy Dialog */}
+      <PolicyDeployDialog
+        open={deployDialogOpen}
+        onOpenChange={setDeployDialogOpen}
+        selectedPolicies={selectedPolicies as Map<string, DeployPolicyItem>}
+        sourceInfo={{
+          tenantName: loadedExportSourceInfo?.tenantName || displayTenantName || undefined,
+          customerName: loadedExportSourceInfo?.customerName,
+          tenantConnectionId: loadedExportSourceInfo?.tenantConnectionId || selectedTenantId,
+        }}
+      />
     </div>
   );
 };

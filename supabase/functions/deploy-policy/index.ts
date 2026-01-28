@@ -7,13 +7,19 @@ const corsHeaders = {
 };
 
 interface DeployRequest {
-  action?: 'deploy' | 'rollback';
-  deploymentId: string;
-  resultId: string;
+  action?: 'deploy' | 'rollback' | 'import-policies';
+  deploymentId?: string;
+  resultId?: string;
   tenantConnectionId: string;
+  sourceTenantConnectionId?: string | null;
   dryRun: boolean;
   policyData: Record<string, unknown>;
   resourceTypes: string[];
+  options?: {
+    skipExisting?: boolean;
+    overwriteExisting?: boolean;
+    renameDuplicates?: boolean;
+  };
 }
 
 interface RollbackRequest {
@@ -24,7 +30,7 @@ interface RollbackRequest {
 
 interface PolicyChange {
   resourceType: string;
-  action: 'create' | 'update' | 'delete' | 'skip' | 'rollback';
+  action: 'create' | 'update' | 'delete' | 'skip' | 'rollback' | 'rename';
   resourceId?: string;
   resourceName?: string;
   currentValue?: unknown;
@@ -167,7 +173,6 @@ async function rollbackDeployment(
     const resourceName = (item.originalValue.displayName || item.originalValue.name || item.resourceId) as string;
 
     try {
-      // For updates, restore the original value
       const result = await updateResource(accessToken, endpoint, item.resourceId, item.originalValue);
 
       if (result.success) {
@@ -211,8 +216,178 @@ function getEndpointForResourceType(resourceType: string): string {
     'authenticationMethod': 'policies/authenticationMethodsPolicy',
     'securityDefaults': 'policies/identitySecurityDefaultsEnforcementPolicy',
     'authorizationPolicy': 'policies/authorizationPolicy',
+    // Cross-tenant import mappings
+    'conditional-access/ca-policies': 'identity/conditionalAccess/policies',
+    'conditional-access/named-locations': 'identity/conditionalAccess/namedLocations',
+    'conditional-access/auth-strengths': 'identity/conditionalAccess/authenticationStrengths/policies',
+    'intune/device-configurations': 'deviceManagement/deviceConfigurations',
+    'intune/compliance-policies': 'deviceManagement/deviceCompliancePolicies',
+    'intune/autopilot': 'deviceManagement/windowsAutopilotDeploymentProfiles',
+    'intune/scripts': 'deviceManagement/deviceManagementScripts',
+    'entra-id/groups': 'groups',
+    'entra-id/app-registrations': 'applications',
+    'entra-id/admin-units': 'administrativeUnits',
+    'entra-id/directory-settings': 'groupSettings',
   };
   return endpoints[resourceType] || resourceType;
+}
+
+// Clean policy data for import - remove read-only and tenant-specific properties
+function cleanPolicyForImport(policy: Record<string, unknown>): Record<string, unknown> {
+  const readOnlyProps = [
+    'id',
+    '@odata.context',
+    '@odata.type',
+    'createdDateTime',
+    'modifiedDateTime',
+    'lastModifiedDateTime',
+    'version',
+    'createdBy',
+    'lastModifiedBy',
+    'templateId',
+    'templateReference',
+    'deletedDateTime',
+    'renewedDateTime',
+  ];
+
+  const cleaned: Record<string, unknown> = {};
+  
+  for (const [key, value] of Object.entries(policy)) {
+    if (!readOnlyProps.includes(key) && !key.startsWith('@')) {
+      // Recursively clean nested objects
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        cleaned[key] = cleanPolicyForImport(value as Record<string, unknown>);
+      } else {
+        cleaned[key] = value;
+      }
+    }
+  }
+
+  return cleaned;
+}
+
+async function importPoliciesToTenant(
+  accessToken: string,
+  policyData: Record<string, unknown>,
+  resourceTypes: string[],
+  options: { skipExisting?: boolean; overwriteExisting?: boolean; renameDuplicates?: boolean },
+  dryRun: boolean
+): Promise<{ changes: PolicyChange[]; success: boolean; errors: string[] }> {
+  const changes: PolicyChange[] = [];
+  const errors: string[] = [];
+
+  for (const resourceType of resourceTypes) {
+    const endpoint = getEndpointForResourceType(resourceType);
+    const policies = (policyData[resourceType] || []) as Record<string, unknown>[];
+
+    if (!Array.isArray(policies)) continue;
+
+    for (const rawPolicy of policies) {
+      // Clean the policy data for import
+      const policy = cleanPolicyForImport(rawPolicy);
+      let policyName = (policy.displayName || policy.name) as string;
+      
+      try {
+        // Check if policy already exists
+        const existing = await getExistingResource(
+          accessToken,
+          endpoint,
+          policyName ? `displayName eq '${policyName.replace(/'/g, "''")}'` : undefined
+        );
+
+        if (existing && existing.length > 0) {
+          const existingPolicy = existing[0] as Record<string, unknown>;
+          const existingId = existingPolicy.id as string;
+
+          if (options.skipExisting) {
+            changes.push({
+              resourceType,
+              action: 'skip',
+              resourceId: existingId,
+              resourceName: policyName,
+              reason: 'Policy already exists (skip existing enabled)',
+            });
+            continue;
+          }
+
+          if (options.overwriteExisting) {
+            changes.push({
+              resourceType,
+              action: 'update',
+              resourceId: existingId,
+              resourceName: policyName,
+              currentValue: existingPolicy,
+              newValue: policy,
+              reason: 'Policy exists and will be updated (overwrite enabled)',
+            });
+
+            if (!dryRun) {
+              const result = await updateResource(accessToken, endpoint, existingId, policy);
+              if (!result.success) {
+                errors.push(`Failed to update ${policyName}: ${result.error}`);
+              }
+            }
+            continue;
+          }
+
+          if (options.renameDuplicates) {
+            // Append suffix to make name unique
+            const newName = `${policyName} (Imported)`;
+            policy.displayName = newName;
+            
+            changes.push({
+              resourceType,
+              action: 'rename',
+              resourceName: newName,
+              newValue: policy,
+              reason: `Policy renamed from "${policyName}" to avoid conflict`,
+            });
+
+            if (!dryRun) {
+              const result = await createResource(accessToken, endpoint, policy);
+              if (!result.success) {
+                errors.push(`Failed to create renamed policy ${newName}: ${result.error}`);
+              }
+            }
+            continue;
+          }
+
+          // Default: skip if exists
+          changes.push({
+            resourceType,
+            action: 'skip',
+            resourceId: existingId,
+            resourceName: policyName,
+            reason: 'Policy already exists',
+          });
+        } else {
+          // Create new policy
+          changes.push({
+            resourceType,
+            action: 'create',
+            resourceName: policyName,
+            newValue: policy,
+            reason: 'Policy does not exist, will be created',
+          });
+
+          if (!dryRun) {
+            const result = await createResource(accessToken, endpoint, policy);
+            if (!result.success) {
+              errors.push(`Failed to create ${policyName}: ${result.error}`);
+            }
+          }
+        }
+      } catch (policyError) {
+        errors.push(`Error processing ${policyName}: ${policyError instanceof Error ? policyError.message : 'Unknown error'}`);
+      }
+    }
+  }
+
+  return {
+    changes,
+    success: errors.length === 0,
+    errors,
+  };
 }
 
 async function analyzeAndDeployPolicy(
@@ -234,7 +409,6 @@ async function analyzeAndDeployPolicy(
       const policyName = (policy.displayName || policy.name) as string;
       
       try {
-        // Check if policy already exists
         const existing = await getExistingResource(
           accessToken,
           endpoint,
@@ -245,7 +419,6 @@ async function analyzeAndDeployPolicy(
           const existingPolicy = existing[0] as Record<string, unknown>;
           const existingId = existingPolicy.id as string;
 
-          // Determine if update is needed
           const needsUpdate = JSON.stringify(existingPolicy) !== JSON.stringify(policy);
 
           if (needsUpdate) {
@@ -335,12 +508,84 @@ serve(async (req) => {
     const body = await req.json();
     const action = body.action || 'deploy';
 
+    // Handle import-policies action (cross-tenant deployment)
+    if (action === 'import-policies') {
+      const { tenantConnectionId, sourceTenantConnectionId, dryRun, policyData, resourceTypes, options } = body as DeployRequest;
+      
+      console.log('Import policies to tenant:', tenantConnectionId, 'from source:', sourceTenantConnectionId, 'dry-run:', dryRun);
+
+      // Get credentials for target tenant
+      const { data: credentials, error: credError } = await supabase.rpc('get_decrypted_credential', {
+        p_tenant_connection_id: tenantConnectionId,
+        p_user_id: user.id,
+      });
+
+      if (credError || !credentials || credentials.length === 0) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'No credentials found for target tenant', changes: [], errors: ['No credentials found'] }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const cred = credentials[0];
+
+      try {
+        const accessToken = await getGraphAccessToken(cred.client_id, cred.client_secret, cred.tenant_id);
+        
+        const result = await importPoliciesToTenant(
+          accessToken,
+          policyData,
+          resourceTypes,
+          options || {},
+          dryRun
+        );
+
+        // Log the import action
+        if (!dryRun) {
+          await supabase.from('audit_logs').insert({
+            user_id: user.id,
+            action: 'import_policies',
+            resource_type: 'policies',
+            tenant_connection_id: tenantConnectionId,
+            details: {
+              source_tenant_connection_id: sourceTenantConnectionId,
+              resource_types: resourceTypes,
+              created: result.changes.filter(c => c.action === 'create').length,
+              updated: result.changes.filter(c => c.action === 'update').length,
+              skipped: result.changes.filter(c => c.action === 'skip').length,
+              errors: result.errors.length,
+            },
+          });
+        }
+
+        return new Response(
+          JSON.stringify({
+            success: result.success,
+            dryRun,
+            changes: result.changes,
+            errors: result.errors,
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      } catch (importError) {
+        console.error('Import error:', importError);
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: importError instanceof Error ? importError.message : 'Import failed',
+            changes: [],
+            errors: [importError instanceof Error ? importError.message : 'Import failed'],
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
     // Handle rollback action
     if (action === 'rollback') {
       const { resultId, tenantConnectionId } = body as RollbackRequest;
       console.log('Rolling back deployment result:', resultId);
 
-      // Get the deployment result with rollback data
       const { data: deployResult, error: resultError } = await supabase
         .from('deployment_results')
         .select('rollback_data, deployment_id')
@@ -354,13 +599,11 @@ serve(async (req) => {
         );
       }
 
-      // Update status to running
       await supabase
         .from('deployment_results')
         .update({ status: 'running', started_at: new Date().toISOString() })
         .eq('id', resultId);
 
-      // Get credentials
       const { data: credentials, error: credError } = await supabase.rpc('get_decrypted_credential', {
         p_tenant_connection_id: tenantConnectionId,
         p_user_id: user.id,
@@ -385,7 +628,6 @@ serve(async (req) => {
         const rollbackItems = deployResult.rollback_data as RollbackItem[];
         const result = await rollbackDeployment(accessToken, rollbackItems);
 
-        // Update the result
         await supabase
           .from('deployment_results')
           .update({
@@ -396,12 +638,11 @@ serve(async (req) => {
               changes: result.changes,
               errors: result.errors,
             },
-            rollback_data: null, // Clear rollback data after successful rollback
+            rollback_data: null,
             error_message: result.errors.length > 0 ? result.errors.join('; ') : null,
           })
           .eq('id', resultId);
 
-        // Update deployment status
         await supabase
           .from('policy_deployments')
           .update({ status: 'rolled_back' })
@@ -438,7 +679,6 @@ serve(async (req) => {
     const deployBody = body as DeployRequest;
     console.log('Deploying policy:', deployBody.deploymentId, 'to tenant:', deployBody.tenantConnectionId, 'dry-run:', deployBody.dryRun);
 
-    // Update result status to running
     await supabase
       .from('deployment_results')
       .update({ 
@@ -447,7 +687,6 @@ serve(async (req) => {
       })
       .eq('id', deployBody.resultId);
 
-    // Get credentials for the tenant
     const { data: credentials, error: credError } = await supabase.rpc('get_decrypted_credential', {
       p_tenant_connection_id: deployBody.tenantConnectionId,
       p_user_id: user.id,
@@ -472,14 +711,12 @@ serve(async (req) => {
     const cred = credentials[0];
 
     try {
-      // Get access token
       const accessToken = await getGraphAccessToken(
         cred.client_id,
         cred.client_secret,
         cred.tenant_id
       );
 
-      // Analyze and optionally deploy policies
       const result = await analyzeAndDeployPolicy(
         accessToken,
         deployBody.policyData,
@@ -487,7 +724,6 @@ serve(async (req) => {
         deployBody.dryRun
       );
 
-      // Update result with findings
       const updateData: Record<string, unknown> = {
         status: result.success ? 'completed' : 'failed',
         completed_at: new Date().toISOString(),
@@ -514,7 +750,6 @@ serve(async (req) => {
             failed: result.errors.length,
           },
         };
-        // Store rollback data for potential rollback
         updateData.rollback_data = result.changes
           .filter(c => c.action === 'update' && c.currentValue)
           .map(c => ({
@@ -533,7 +768,6 @@ serve(async (req) => {
         .update(updateData)
         .eq('id', deployBody.resultId);
 
-      // Update deployment progress
       const { data: allResults } = await supabase
         .from('deployment_results')
         .select('status')
