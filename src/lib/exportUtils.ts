@@ -6,6 +6,7 @@ import {
   isFileSystemAccessSupported,
   promptSaveFileHandle,
   writeBlobToHandle,
+  buildExportFilename,
 } from './saveFile';
 
 interface ExportedResource {
@@ -25,17 +26,51 @@ interface ExportJob {
   formats: string[];
   categories: string[];
   created_at: string;
+  tenant_connection_id: string | null;
+}
+
+interface TenantConnectionInfo {
+  display_name: string | null;
+  tenant_name: string | null;
+  customers: { name: string } | null;
 }
 
 export async function downloadExportAsZip(jobId: string): Promise<void> {
+  // First fetch job details to get tenant/customer info for filename
+  const { data: job, error: jobError } = await supabase
+    .from('export_jobs')
+    .select(`
+      *,
+      tenant_connections:tenant_connection_id (
+        display_name,
+        tenant_name,
+        customers:customer_id (
+          name
+        )
+      )
+    `)
+    .eq('id', jobId)
+    .single();
+
+  if (jobError || !job) {
+    throw new Error('Failed to fetch export job');
+  }
+
+  // Extract customer and tenant names for smart filename
+  const tenantConnection = job.tenant_connections as TenantConnectionInfo | null;
+  const customerName = tenantConnection?.customers?.name;
+  const tenantName = tenantConnection?.display_name || tenantConnection?.tenant_name;
+  
+  // Build smart filename with customer/tenant and timestamp
+  const suggestedFilename = buildExportFilename(customerName, tenantName, 'm365-export');
+
   // Prompt the "Save As" dialog immediately (user activation) before any async work.
   // If unsupported or it fails, we fall back to a standard browser download.
   let saveHandle: FileSystemFileHandle | null = null;
   if (isFileSystemAccessSupported()) {
     try {
-      const today = new Date().toISOString().split('T')[0];
       saveHandle = await promptSaveFileHandle({
-        suggestedName: `m365-export-${today}.zip`,
+        suggestedName: suggestedFilename,
         types: [
           {
             description: 'ZIP Archive',
@@ -47,17 +82,6 @@ export async function downloadExportAsZip(jobId: string): Promise<void> {
       if (err?.name === 'AbortError') return;
       saveHandle = null;
     }
-  }
-
-  // Fetch job details
-  const { data: job, error: jobError } = await supabase
-    .from('export_jobs')
-    .select('*')
-    .eq('id', jobId)
-    .single();
-
-  if (jobError || !job) {
-    throw new Error('Failed to fetch export job');
   }
 
   // Fetch exported resources
@@ -78,10 +102,12 @@ export async function downloadExportAsZip(jobId: string): Promise<void> {
   const formats = job.formats || ['json'];
   const exportDate = new Date(job.created_at).toISOString().split('T')[0];
 
-  // Add a readme file
+  // Add a readme file with source info
   const readme = `# M365 Tenant Export
 Export Name: ${job.name}
 Export Date: ${job.created_at}
+${customerName ? `Customer: ${customerName}` : ''}
+${tenantName ? `Tenant: ${tenantName}` : ''}
 Categories: ${job.categories?.join(', ') || 'All'}
 Formats: ${formats.join(', ')}
 Total Resources: ${resources.length}
@@ -178,12 +204,11 @@ Total Resources: ${resources.length}
     compression: 'DEFLATE',
     compressionOptions: { level: 6 },
   });
-  const fileName = `m365-export-${exportDate}.zip`;
 
   if (saveHandle) {
     await writeBlobToHandle(saveHandle, content);
   } else {
-    downloadBlobFallback(content, fileName);
+    downloadBlobFallback(content, suggestedFilename);
   }
 }
 
