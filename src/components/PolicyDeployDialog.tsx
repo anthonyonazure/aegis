@@ -33,6 +33,11 @@ import {
   Plus,
   RefreshCw,
   SkipForward,
+  Shield,
+  ExternalLink,
+  Copy,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -44,6 +49,13 @@ import {
   GroupedPolicy,
   PolicyItem,
 } from '@/lib/policyDeployment';
+import {
+  validateWritePermissions,
+  WriteValidationResponse,
+  getPermissionDisplayName,
+  getAzurePortalPermissionsUrl,
+  formatMissingPermissionsText,
+} from '@/lib/writePermissionValidator';
 import { cn } from '@/lib/utils';
 
 interface PolicyDeployDialogProps {
@@ -57,7 +69,7 @@ interface PolicyDeployDialogProps {
   };
 }
 
-type DeployStep = 'configure' | 'preview' | 'deploying' | 'complete';
+type DeployStep = 'configure' | 'preflight' | 'preview' | 'deploying' | 'complete';
 
 export function PolicyDeployDialog({
   open,
@@ -83,6 +95,10 @@ export function PolicyDeployDialog({
   const [deployResult, setDeployResult] = useState<DeploymentResult | null>(null);
   const [deploying, setDeploying] = useState(false);
   const [previewing, setPreviewing] = useState(false);
+  
+  // Preflight write permission check
+  const [preflightResult, setPreflightResult] = useState<WriteValidationResponse | null>(null);
+  const [checkingPreflight, setCheckingPreflight] = useState(false);
 
   // Load available targets
   useEffect(() => {
@@ -93,6 +109,7 @@ export function PolicyDeployDialog({
       setSelectedTargetId('');
       setPreviewResult(null);
       setDeployResult(null);
+      setPreflightResult(null);
       setSkipExisting(true);
       setOverwriteExisting(false);
       setRenameDuplicates(false);
@@ -167,8 +184,13 @@ export function PolicyDeployDialog({
     return Object.values(groups);
   }, [selectedPolicies]);
 
-  // Handle preview (dry run)
-  const handlePreview = async () => {
+  // Get unique resource types from grouped policies
+  const resourceTypesForPreflight = useMemo(() => {
+    return groupedPolicies.map(g => `${g.categoryId}/${g.policyTypeId}`);
+  }, [groupedPolicies]);
+
+  // Handle preflight permission check
+  const handlePreflightCheck = async () => {
     if (!selectedTargetId) {
       toast({
         title: 'Select a target',
@@ -177,6 +199,42 @@ export function PolicyDeployDialog({
       });
       return;
     }
+
+    setCheckingPreflight(true);
+    setStep('preflight');
+    
+    try {
+      const result = await validateWritePermissions(selectedTargetId, resourceTypesForPreflight);
+      setPreflightResult(result);
+      
+      if (result.success) {
+        toast({
+          title: 'Permission Check Passed ✓',
+          description: `All ${result.summary.passed} required write permissions are available.`,
+        });
+      } else {
+        toast({
+          title: 'Missing Permissions',
+          description: `${result.summary.failed} permissions need to be added before deployment.`,
+          variant: 'destructive',
+        });
+      }
+    } catch (err) {
+      console.error('Preflight check failed:', err);
+      toast({
+        title: 'Permission check failed',
+        description: err instanceof Error ? err.message : 'Could not validate permissions',
+        variant: 'destructive',
+      });
+      setStep('configure');
+    } finally {
+      setCheckingPreflight(false);
+    }
+  };
+
+  // Handle preview (dry run) - only after preflight passes
+  const handlePreview = async () => {
+    if (!selectedTargetId) return;
 
     setPreviewing(true);
     try {
@@ -429,6 +487,125 @@ export function PolicyDeployDialog({
             </div>
           )}
 
+          {/* Step: Preflight Permission Check */}
+          {step === 'preflight' && (
+            <div className="space-y-4">
+              {checkingPreflight ? (
+                <div className="flex flex-col items-center justify-center py-12 space-y-4">
+                  <Loader2 className="w-12 h-12 animate-spin text-primary" />
+                  <p className="text-lg font-medium">Checking Write Permissions...</p>
+                  <p className="text-sm text-muted-foreground">
+                    Validating permissions on target tenant
+                  </p>
+                </div>
+              ) : preflightResult ? (
+                <>
+                  {/* Summary */}
+                  <div className={cn(
+                    'flex items-center gap-3 p-4 rounded-lg',
+                    preflightResult.success ? 'bg-green-500/10' : 'bg-destructive/10'
+                  )}>
+                    {preflightResult.success ? (
+                      <CheckCircle2 className="w-8 h-8 text-green-500" />
+                    ) : (
+                      <XCircle className="w-8 h-8 text-destructive" />
+                    )}
+                    <div>
+                      <h3 className="font-medium">
+                        {preflightResult.success ? 'All Permissions Available' : 'Missing Permissions Detected'}
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        {preflightResult.summary.passed} passed | {preflightResult.summary.failed} missing
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Missing permissions list */}
+                  {preflightResult.missingPermissions.length > 0 && (
+                    <div className="p-4 bg-destructive/10 border border-destructive/30 rounded-lg space-y-3">
+                      <div className="flex items-start gap-3">
+                        <Shield className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
+                        <div className="flex-1">
+                          <p className="font-medium text-destructive">Add these permissions to your App Registration:</p>
+                          <ul className="mt-2 space-y-1">
+                            {preflightResult.missingPermissions.map(perm => (
+                              <li key={perm} className="text-sm flex items-center gap-2">
+                                <XCircle className="w-3 h-3 text-destructive" />
+                                <span className="font-mono text-xs">{perm}</span>
+                                <span className="text-muted-foreground">- {getPermissionDisplayName(perm)}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-destructive/20">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          asChild
+                        >
+                          <a 
+                            href={getAzurePortalPermissionsUrl()}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            <ExternalLink className="w-3 h-3 mr-1" />
+                            Open App Registrations
+                          </a>
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            navigator.clipboard.writeText(
+                              formatMissingPermissionsText(preflightResult.missingPermissions)
+                            );
+                            toast({
+                              title: 'Copied!',
+                              description: 'Permission instructions copied to clipboard',
+                            });
+                          }}
+                        >
+                          <Copy className="w-3 h-3 mr-1" />
+                          Copy Instructions
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Resource details */}
+                  <ScrollArea className="h-[200px] border rounded-lg">
+                    <div className="p-3 space-y-2">
+                      {preflightResult.results.map((result, idx) => (
+                        <div 
+                          key={idx}
+                          className={cn(
+                            'flex items-center gap-3 p-2 rounded-lg',
+                            result.hasPermission ? 'bg-green-500/10' : 'bg-destructive/10'
+                          )}
+                        >
+                          {result.hasPermission ? (
+                            <CheckCircle2 className="w-4 h-4 text-green-500" />
+                          ) : (
+                            <XCircle className="w-4 h-4 text-destructive" />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{result.resourceName}</p>
+                            <p className="text-xs text-muted-foreground font-mono">
+                              {result.requiredPermission}
+                              {result.useBeta && <Badge variant="outline" className="ml-2 text-[10px]">Beta API</Badge>}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </>
+              ) : null}
+            </div>
+          )}
+
           {/* Step: Preview */}
           {step === 'preview' && previewResult && (
             <div className="space-y-4">
@@ -542,24 +719,64 @@ export function PolicyDeployDialog({
                 Cancel
               </Button>
               <Button
-                onClick={handlePreview}
-                disabled={!selectedTargetId || previewing}
+                onClick={handlePreflightCheck}
+                disabled={!selectedTargetId || checkingPreflight}
+                className="gap-2"
               >
-                {previewing ? (
+                {checkingPreflight ? (
                   <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Previewing...
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Checking...
                   </>
                 ) : (
-                  'Preview Changes'
+                  <>
+                    <Shield className="w-4 h-4" />
+                    Check Permissions
+                  </>
                 )}
               </Button>
             </>
           )}
 
-          {step === 'preview' && (
+          {step === 'preflight' && !checkingPreflight && preflightResult && (
             <>
               <Button variant="outline" onClick={() => setStep('configure')}>
+                Back
+              </Button>
+              {preflightResult.success ? (
+                <Button
+                  onClick={handlePreview}
+                  disabled={previewing}
+                  className="gap-2"
+                >
+                  {previewing ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Previewing...
+                    </>
+                  ) : (
+                    <>
+                      <ArrowRight className="w-4 h-4" />
+                      Continue to Preview
+                    </>
+                  )}
+                </Button>
+              ) : (
+                <Button
+                  onClick={handlePreflightCheck}
+                  variant="outline"
+                  className="gap-2"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  Re-check Permissions
+                </Button>
+              )}
+            </>
+          )}
+
+          {step === 'preview' && (
+            <>
+              <Button variant="outline" onClick={() => setStep('preflight')}>
                 Back
               </Button>
               <Button
