@@ -19,6 +19,14 @@ export interface WriteValidationResponse {
     passed: number;
     failed: number;
   };
+  debug?: {
+    tenantConnectionId: string;
+    credentialClientId?: string;
+    tokenTenantId?: string;
+    tokenAppId?: string;
+    tokenRolesCount?: number;
+    tokenRolesSample?: string[];
+  };
 }
 
 /**

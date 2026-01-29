@@ -58,7 +58,8 @@ function getEndpointForResourceType(categoryId: string, policyTypeId: string): s
   const endpoints: Record<string, string> = {
     'conditional-access/ca-policies': 'identity/conditionalAccess/policies',
     'conditional-access/named-locations': 'identity/conditionalAccess/namedLocations',
-    'conditional-access/auth-strengths': 'identity/conditionalAccess/authenticationStrengths/policies',
+    // Graph uses `authenticationStrength` (singular) in the path
+    'conditional-access/auth-strengths': 'identity/conditionalAccess/authenticationStrength/policies',
     'intune/device-configurations': 'deviceManagement/deviceConfigurations',
     'intune/compliance-policies': 'deviceManagement/deviceCompliancePolicies',
     'intune/autopilot': 'deviceManagement/windowsAutopilotDeploymentProfiles',
