@@ -6,6 +6,25 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+function decodeBase64Url(input: string): string {
+  // base64url -> base64
+  let base64 = input.replace(/-/g, '+').replace(/_/g, '/');
+  const pad = base64.length % 4;
+  if (pad) base64 += '='.repeat(4 - pad);
+  return atob(base64);
+}
+
+function safeParseJwtPayload(token: string): Record<string, unknown> | null {
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+  try {
+    const json = decodeBase64Url(parts[1]);
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
 // Required write permissions for each resource type
 const WRITE_PERMISSION_REQUIREMENTS: Record<string, {
   permission: string;
@@ -133,6 +152,14 @@ interface ValidationResponse {
     passed: number;
     failed: number;
   };
+  debug?: {
+    tenantConnectionId: string;
+    credentialClientId?: string;
+    tokenTenantId?: string;
+    tokenAppId?: string;
+    tokenRolesCount?: number;
+    tokenRolesSample?: string[];
+  };
 }
 
 async function getGraphAccessToken(clientId: string, clientSecret: string, tenantId: string): Promise<string> {
@@ -206,57 +233,33 @@ async function testWritePermission(
       };
     }
 
-    // If read succeeds, check if the token has write scope by inspecting claims
-    // We can't directly test write without creating/modifying resources,
-    // so we check if the required permission exists in the token
-    
-    // Parse token to check roles (JWT middle section)
-    const tokenParts = accessToken.split('.');
-    if (tokenParts.length === 3) {
-      try {
-        const payload = JSON.parse(atob(tokenParts[1]));
-        const roles = payload.roles || [];
-        const hasWritePermission = roles.includes(config.permission);
-        
-        // Also check for broader write permissions
-        const hasAnyWrite = roles.some((role: string) => 
-          role.includes('ReadWrite') && (
-            role.startsWith(config.permission.split('.')[0]) ||
-            role === 'Directory.ReadWrite.All'
-          )
-        );
+    // If read succeeds, determine write permission by inspecting token roles.
+    // (We avoid attempting writes in preflight.)
+    const payload = safeParseJwtPayload(accessToken);
+    const roles = (payload?.roles as string[] | undefined) || [];
+    const hasWritePermission = roles.includes(config.permission);
 
-        await readResponse.text(); // Consume body
-        
-        return {
-          resourceType,
-          resourceName: config.description,
-          requiredPermission: config.permission,
-          hasPermission: hasWritePermission || hasAnyWrite,
-          error: hasWritePermission || hasAnyWrite ? undefined : `Missing ${config.permission}`,
-          statusCode: 200,
-          useBeta: config.useBeta,
-        };
-      } catch {
-        await readResponse.text();
-        // Token parsing failed, assume we need to test by attempting an operation
-        return {
-          resourceType,
-          resourceName: config.description,
-          requiredPermission: config.permission,
-          hasPermission: true, // Assume permission if we can't verify
-          statusCode: 200,
-          useBeta: config.useBeta,
-        };
-      }
-    }
+    // Also check for broader write permissions
+    const hasAnyWrite = roles.some((role: string) =>
+      role.includes('ReadWrite') && (
+        role.startsWith(config.permission.split('.')[0]) ||
+        role === 'Directory.ReadWrite.All'
+      )
+    );
 
-    await readResponse.text();
+    await readResponse.text(); // Consume body
+
+    const ok = hasWritePermission || hasAnyWrite;
     return {
       resourceType,
       resourceName: config.description,
       requiredPermission: config.permission,
-      hasPermission: true,
+      hasPermission: ok,
+      error: ok
+        ? undefined
+        : payload
+          ? `Missing ${config.permission} (token roles did not include it)`
+          : 'Could not inspect token roles (check application permissions + admin consent)',
       statusCode: 200,
       useBeta: config.useBeta,
     };
@@ -331,8 +334,17 @@ serve(async (req) => {
       );
     }
 
-    const cred = credentials[0];
-    const accessToken = await getGraphAccessToken(cred.client_id, cred.client_secret, cred.tenant_id);
+     const cred = credentials[0];
+     const accessToken = await getGraphAccessToken(cred.client_id, cred.client_secret, cred.tenant_id);
+
+     const tokenPayload = safeParseJwtPayload(accessToken);
+     const tokenRoles = (tokenPayload?.roles as string[] | undefined) || [];
+     const tokenAppId = (tokenPayload?.appid as string | undefined) || (tokenPayload?.azp as string | undefined);
+     const tokenTenantId = tokenPayload?.tid as string | undefined;
+
+     console.log(
+       `Token diagnostics: tenantId=${tokenTenantId || 'unknown'} appId=${tokenAppId || 'unknown'} roles=${tokenRoles.length}`
+     );
 
     const results: WritePermissionResult[] = [];
     const missingPermissions = new Set<string>();
@@ -365,7 +377,7 @@ serve(async (req) => {
 
     console.log(`Write permission check complete: ${passed} passed, ${failed} failed`);
 
-    const response: ValidationResponse = {
+     const response: ValidationResponse = {
       success: failed === 0,
       results,
       missingPermissions: Array.from(missingPermissions),
@@ -374,6 +386,14 @@ serve(async (req) => {
         passed,
         failed,
       },
+       debug: {
+         tenantConnectionId,
+         credentialClientId: cred.client_id,
+         tokenTenantId,
+         tokenAppId,
+         tokenRolesCount: tokenRoles.length,
+         tokenRolesSample: tokenRoles.slice(0, 25),
+       },
     };
 
     return new Response(

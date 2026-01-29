@@ -574,6 +574,45 @@ export function PolicyDeployDialog({
                     </div>
                   )}
 
+                   {/* Diagnostics (helps detect wrong App Registration / consent) */}
+                   {!preflightResult.success && preflightResult.debug && (
+                     <div className="p-4 bg-muted/30 border rounded-lg space-y-2">
+                       <p className="text-sm font-medium">Diagnostics</p>
+                       <div className="space-y-1 text-xs text-muted-foreground">
+                         <p>
+                           Stored Client ID:{' '}
+                           <span className="font-mono text-foreground">
+                             {preflightResult.debug.credentialClientId || 'unknown'}
+                           </span>
+                           <span className="ml-2">(this must match the App Registration you updated)</span>
+                         </p>
+                         <p>
+                           Token appId:{' '}
+                           <span className="font-mono text-foreground">
+                             {preflightResult.debug.tokenAppId || 'unknown'}
+                           </span>
+                           {'  '}| Token tenant:{' '}
+                           <span className="font-mono text-foreground">
+                             {preflightResult.debug.tokenTenantId || 'unknown'}
+                           </span>
+                         </p>
+                         <p>
+                           Token roles: {preflightResult.debug.tokenRolesCount ?? 'unknown'}
+                           {preflightResult.debug.tokenRolesSample?.length ? (
+                             <span className="ml-2">
+                               (sample: <span className="font-mono">{preflightResult.debug.tokenRolesSample.join(', ')}</span>)
+                             </span>
+                           ) : null}
+                         </p>
+                         <p>
+                           If roles are 0 or don’t include the permissions above, double-check you added
+                           <span className="text-foreground"> Application permissions</span> (not Delegated) and clicked
+                           <span className="text-foreground"> Grant admin consent</span> in the target tenant.
+                         </p>
+                       </div>
+                     </div>
+                   )}
+
                   {/* Resource details */}
                   <ScrollArea className="h-[200px] border rounded-lg">
                     <div className="p-3 space-y-2">
