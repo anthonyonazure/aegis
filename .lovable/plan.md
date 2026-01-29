@@ -1,261 +1,214 @@
+# Performance Optimization Plan
 
-# Implementation Plan: Enhanced Export Naming & Cross-Tenant Policy Import
-
-## Overview
-
-This plan addresses two key features:
-1. **Smart Export Naming**: Include customer/tenant name along with date and time in export filenames
-2. **Cross-Tenant Policy Import**: Upload policies from one tenant to deploy to another tenant (e.g., export custom CA policies from your master tenant and deploy them to your clients)
+## Problem Summary
+The application experiences sluggishness during tenant/policy operations due to:
+1. N+1 query pattern in credential checks
+2. Redundant API calls from frequent re-renders
+3. No caching layer for tenant/customer data
+4. Large policy payloads causing UI freezes
 
 ---
 
-## Part 1: Enhanced Export Naming
+## Phase 1: Batch Credential Checks ✅ PRIORITY
+**File:** `src/lib/database.ts` + `src/contexts/TenantContext.tsx`
 
-### Current Behavior
-- Policy Browser exports: `m365-policies-YYYY-MM-DD.zip`
-- Full exports (Jobs): `m365-export-YYYY-MM-DD.zip`
-
-### New Naming Convention
-```
-{CustomerName}_{TenantName}_{YYYY-MM-DD}_{HH-mm-ss}.zip
-```
-
-**Examples:**
-- `Contoso_Production-Tenant_2026-01-28_14-30-45.zip`
-- `Acme-Corp_Dev-Environment_2026-01-28_09-15-22.zip`
-
-### Files to Modify
-
-| File | Changes |
-|------|---------|
-| `src/components/views/PolicyBrowserView.tsx` | Update filename generation to include tenant/customer name and time |
-| `src/lib/exportUtils.ts` | Update `downloadExportAsZip` to include source info in filename |
-| `src/lib/saveFile.ts` | Add utility function to sanitize filenames |
-
-### Implementation Details
-
-**1. Create filename sanitization utility** (`src/lib/saveFile.ts`):
+### Current Problem
 ```typescript
-export function sanitizeFilename(name: string): string {
-  return name
-    .replace(/[^a-zA-Z0-9-_ ]/g, '')
-    .replace(/\s+/g, '-')
-    .substring(0, 50);
+// Sequential N+1 queries - BAD
+for (const tenant of connectedTenants) {
+  tenant.hasCredentials = await hasStoredCredentials(tenant.id);
 }
+```
 
-export function buildExportFilename(
-  customerName?: string,
-  tenantName?: string,
-  prefix = 'm365-export'
-): string {
-  const now = new Date();
-  const date = now.toISOString().split('T')[0];
-  const time = now.toTimeString().split(' ')[0].replace(/:/g, '-');
+### Solution
+Create a batch query function:
+```typescript
+export async function batchCheckCredentials(connectionIds: string[]): Promise<Record<string, boolean>> {
+  if (connectionIds.length === 0) return {};
   
-  const parts = [prefix];
-  if (customerName) parts.push(sanitizeFilename(customerName));
-  if (tenantName) parts.push(sanitizeFilename(tenantName));
-  parts.push(`${date}_${time}`);
+  const { data } = await supabase
+    .from('tenant_credentials')
+    .select('tenant_connection_id')
+    .in('tenant_connection_id', connectionIds);
   
-  return `${parts.join('_')}.zip`;
+  return connectionIds.reduce((acc, id) => {
+    acc[id] = data?.some(c => c.tenant_connection_id === id) ?? false;
+    return acc;
+  }, {} as Record<string, boolean>);
 }
 ```
 
-**2. Update PolicyBrowserView.tsx**:
-- Extract customer name from loaded export source or current context
-- Pass customer/tenant info to filename builder
-- Update both bulk export and single-file export functions
-
-**3. Update exportUtils.ts**:
-- Fetch customer/tenant names from the export job's tenant connection
-- Use new naming convention for ZIP downloads
+### Tasks
+- [ ] Add `batchCheckCredentials` function to `src/lib/database.ts`
+- [ ] Update `loadCustomersAndTenants` in TenantContext to use batch function
+- [ ] Remove sequential for-loop
 
 ---
 
-## Part 2: Cross-Tenant Policy Import from Policy Browser
+## Phase 2: React Query Caching
+**New Files:**
+- `src/hooks/useTenantData.ts`
+- `src/hooks/useCustomerData.ts`
 
-### User Flow
+### Solution
+Extract data fetching into dedicated React Query hooks with caching:
 
-```text
-                                    +-----------------------+
-                                    |  Policy Browser View  |
-                                    +-----------------------+
-                                              |
-                    +-------------------------+-------------------------+
-                    |                                                   |
-           [Load from Live Tenant]                           [Load from Export Job]
-                    |                                                   |
-                    v                                                   v
-           Select policies to export                         Select policies to import
-                    |                                                   |
-                    +-----------------> [Select Policies] <-------------+
-                                              |
-                    +-------------------------+-------------------------+
-                    |                                                   |
-            [Export to Disk]                                  [Deploy to Tenant]
-                    |                                                   |
-                    v                                                   v
-            Save ZIP file                               +---------------------------+
-                                                        | Select Target Tenant      |
-                                                        | (from different customer) |
-                                                        +---------------------------+
-                                                                    |
-                                                                    v
-                                                        +---------------------------+
-                                                        | Preview Changes           |
-                                                        | - What will be created    |
-                                                        | - What already exists     |
-                                                        +---------------------------+
-                                                                    |
-                                                                    v
-                                                        +---------------------------+
-                                                        | Confirm & Deploy          |
-                                                        +---------------------------+
-```
-
-### Files to Create/Modify
-
-| File | Action | Purpose |
-|------|--------|---------|
-| `src/components/views/PolicyBrowserView.tsx` | Modify | Add "Deploy to Tenant" button and flow |
-| `src/components/PolicyDeployDialog.tsx` | Create | Dialog for selecting target tenant and previewing deployment |
-| `src/lib/policyDeployment.ts` | Create | Client-side logic for policy deployment |
-| `supabase/functions/deploy-policy/index.ts` | Modify | Add support for bulk CA policy deployment |
-
-### Implementation Details
-
-**1. Add Deploy Button to Policy Browser** (`PolicyBrowserView.tsx`):
-- New "Deploy to Tenant" button next to "Export" button
-- Only enabled when policies are selected
-- Opens deployment dialog
-
-**2. Create PolicyDeployDialog Component**:
 ```typescript
-interface PolicyDeployDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  selectedPolicies: Map<string, PolicyItem>;
-  sourceInfo: {
-    tenantName?: string;
-    customerName?: string;
-  };
+// src/hooks/useTenantData.ts
+export function useTenantConnections() {
+  return useQuery({
+    queryKey: ['tenant-connections'],
+    queryFn: async () => {
+      const tenants = await getTenantConnections();
+      const connectedIds = tenants
+        .filter(t => t.status === 'connected')
+        .map(t => t.id);
+      const credentials = await batchCheckCredentials(connectedIds);
+      return tenants.map(t => ({ 
+        ...t, 
+        hasCredentials: credentials[t.id] ?? false 
+      }));
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 10 * 60 * 1000,   // 10 minutes
+  });
 }
 ```
 
-**Dialog Features:**
-- **Target Tenant Selector**: Dropdown showing all connected tenants grouped by customer
-- **Cross-tenant warning**: Visual indicator when deploying across customers
-- **Dry Run Preview**: Shows what will be created vs. what already exists
-- **Deployment Options**:
-  - Skip existing (only create new)
-  - Overwrite existing
-  - Rename duplicates (append suffix)
-- **Progress indicator**: Real-time deployment progress
-
-**3. Create policyDeployment.ts utility**:
-```typescript
-export interface DeploymentTarget {
-  tenantConnectionId: string;
-  tenantName: string;
-  customerName?: string;
-}
-
-export interface DeploymentOptions {
-  skipExisting: boolean;
-  overwriteExisting: boolean;
-  renameDuplicates: boolean;
-  dryRun: boolean;
-}
-
-export interface DeploymentResult {
-  success: boolean;
-  created: number;
-  skipped: number;
-  updated: number;
-  failed: number;
-  errors: string[];
-  changes: PolicyChange[];
-}
-
-export async function deployPoliciesToTenant(
-  policies: PolicyItem[],
-  targetTenantConnectionId: string,
-  options: DeploymentOptions
-): Promise<DeploymentResult>
-```
-
-**4. Update deploy-policy edge function**:
-- Add new action type for bulk policy import: `action: 'import-policies'`
-- Accept array of policy data with resource types
-- Support dry-run mode for preview
-- Return detailed change list
-
-### Database Considerations
-- No new tables required
-- Reuse existing `policy_deployments` and `deployment_results` tables for tracking
-- Add `source_tenant_connection_id` to metadata for cross-tenant audit trail
+### Tasks
+- [ ] Create `src/hooks/useTenantData.ts` with React Query
+- [ ] Create `src/hooks/useCustomerData.ts` with React Query
+- [ ] Refactor `TenantContext` to consume these hooks
+- [ ] Add query invalidation on connect/disconnect/selectTenant
 
 ---
 
-## Technical Details
+## Phase 3: Optimize TenantContext Re-renders
+**File:** `src/contexts/TenantContext.tsx`
 
-### Supported Policy Types for Cross-Tenant Import
-Based on the existing `graph-api` edge function, these resource types support import:
+### Problems
+1. `loadCustomersAndTenants` triggered on every render
+2. State updates trigger full context re-renders
+3. Missing memoization on context value object
 
-| Category | Resource Type | Import Support |
-|----------|---------------|----------------|
-| Conditional Access | CA Policies | Yes |
-| Conditional Access | Named Locations | Yes |
-| Intune | Device Configurations | Yes |
-| Intune | Compliance Policies | Yes |
-| Intune | Autopilot Profiles | Yes |
-| Intune | PowerShell Scripts | Yes |
-| Entra ID | Groups | Yes |
-| Entra ID | Admin Units | Yes |
-| Entra ID | App Registrations | Yes |
+### Solutions
 
-### Security Considerations
-- Validate user has access to both source and target tenants
-- Store source tenant info in deployment audit log
-- Verify credentials exist for target tenant before deployment
-- Remove tenant-specific IDs and read-only properties before import
+#### 3.1 Memoize Context Value
+```typescript
+const value = useMemo<TenantContextValue>(() => ({
+  ...state,
+  isConnecting,
+  isRefreshing,
+  isLoading,
+  connect,
+  disconnect,
+  refreshToken,
+  getValidToken,
+  selectCustomer,
+  selectTenant,
+  loadCustomersAndTenants,
+  getTenantsForCustomer,
+  getAllConnectedTenants,
+}), [
+  state, isConnecting, isRefreshing, isLoading,
+  connect, disconnect, refreshToken, getValidToken,
+  selectCustomer, selectTenant, loadCustomersAndTenants,
+  getTenantsForCustomer, getAllConnectedTenants
+]);
+```
 
-### UI/UX Considerations
-- Clear visual distinction between "Export to Disk" and "Deploy to Tenant"
-- Cross-tenant warnings with customer/tenant names prominently displayed
-- Confirmation dialogs with policy counts and target information
-- Progress feedback during deployment
+#### 3.2 Ensure Stable Callbacks
+All `useCallback` hooks must have proper dependency arrays.
+
+### Tasks
+- [ ] Wrap context value in `useMemo`
+- [ ] Audit all `useCallback` dependencies
+- [ ] Consider splitting into StateContext + ActionsContext (optional)
+
+---
+
+## Phase 4: Virtualize Large Policy Lists
+**Files:**
+- `src/components/views/PolicyBrowserView.tsx`
+- `src/components/PolicyDeployDialog.tsx`
+
+### Problem
+Rendering 50+ policies with large JSON payloads (11-31KB each) freezes UI.
+
+### Solution
+Use `@tanstack/react-virtual`:
+
+```typescript
+import { useVirtualizer } from '@tanstack/react-virtual';
+
+const parentRef = useRef<HTMLDivElement>(null);
+const virtualizer = useVirtualizer({
+  count: policies.length,
+  getScrollElement: () => parentRef.current,
+  estimateSize: () => 64, // row height
+});
+```
+
+### Tasks
+- [ ] Install `@tanstack/react-virtual`
+- [ ] Virtualize policy table in `PolicyBrowserView`
+- [ ] Virtualize tenant list in `PolicyDeployDialog`
+- [ ] Lazy-load full policy JSON only on expand/select
+
+---
+
+## Phase 5: Additional Optimizations
+
+### 5.1 Lazy Load Policy Details
+```typescript
+// Only show full JSON when user expands a policy
+const [expandedId, setExpandedId] = useState<string | null>(null);
+// Render JSON viewer only for expandedId
+```
+
+### 5.2 Memoize Expensive Computations
+```typescript
+const filteredPolicies = useMemo(() => 
+  policies.filter(p => p.name.includes(searchTerm)),
+  [policies, searchTerm]
+);
+```
+
+### 5.3 Debounce Search Inputs
+```typescript
+const debouncedSearch = useDebouncedCallback(setSearchTerm, 300);
+```
+
+### Tasks
+- [ ] Add lazy loading for policy JSON details
+- [ ] Memoize filtered/sorted lists
+- [ ] Debounce search/filter inputs
 
 ---
 
 ## Implementation Order
 
-1. **Phase 1: Export Naming** (simpler, foundational)
-   - Add filename utilities to `saveFile.ts`
-   - Update PolicyBrowserView export naming
-   - Update exportUtils download naming
-
-2. **Phase 2: Cross-Tenant Deploy UI**
-   - Create PolicyDeployDialog component
-   - Add "Deploy to Tenant" button to PolicyBrowserView
-   - Implement target tenant selector with customer grouping
-
-3. **Phase 3: Deployment Backend**
-   - Create policyDeployment.ts utility
-   - Update deploy-policy edge function for bulk imports
-   - Add dry-run preview capability
-
-4. **Phase 4: Testing & Polish**
-   - Test cross-tenant CA policy deployment flow
-   - Add error handling and edge cases
-   - Polish UI feedback and confirmations
+| Phase | Impact | Effort | Priority |
+|-------|--------|--------|----------|
+| 1. Batch credentials | HIGH | LOW | ⭐⭐⭐ |
+| 2. React Query cache | HIGH | MEDIUM | ⭐⭐⭐ |
+| 3. Context memoization | MEDIUM | LOW | ⭐⭐ |
+| 4. List virtualization | MEDIUM | MEDIUM | ⭐⭐ |
+| 5. Additional polish | LOW | LOW | ⭐ |
 
 ---
 
-## Summary
+## Success Metrics
+- [ ] Network tab shows single credential query (not N+1)
+- [ ] Tenant/customer data only fetched once per 5 minutes
+- [ ] Policy list renders <100ms even with 100+ items
+- [ ] React DevTools shows stable context value references
 
-This implementation will allow you to:
-1. **Export with meaningful names** like `Contoso_Prod-Tenant_2026-01-28_14-30-45.zip`
-2. **Deploy your master CA policies** to any connected client tenant
-3. **Preview changes** before deployment with dry-run mode
-4. **Track cross-tenant deployments** in the audit log
+---
+
+## Separate Issue: Deployment Forbidden Error
+The screenshot shows a **Graph API permission error**, not a performance issue:
+```
+"Application must have one of the following scopes: DeviceManagementConfiguration..."
+```
+This requires adding the `DeviceManagementConfiguration.ReadWrite.All` permission to the Azure App Registration - separate from this performance plan.
