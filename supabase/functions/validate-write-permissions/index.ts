@@ -159,6 +159,7 @@ interface ValidationResponse {
     tokenAppId?: string;
     tokenRolesCount?: number;
     tokenRolesSample?: string[];
+    allRoles?: string[];
   };
 }
 
@@ -392,7 +393,8 @@ serve(async (req) => {
          tokenTenantId,
          tokenAppId,
          tokenRolesCount: tokenRoles.length,
-         tokenRolesSample: tokenRoles.slice(0, 25),
+         tokenRolesSample: tokenRoles.slice(0, 50), // Show all roles
+         allRoles: tokenRoles, // Full list for debugging
        },
     };
 
