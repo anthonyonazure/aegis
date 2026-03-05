@@ -3,7 +3,7 @@ import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
 interface ReportRequest {
@@ -30,55 +30,78 @@ interface RealData {
   psaTicketsCount: number;
   billingUsageCount: number;
   totalBillableAmount: number;
+  // Enriched data
+  secureScores: Array<{ tenantName: string; currentScore: number; maxScore: number; percentage: number }>;
+  avgSecureScorePercent: number;
+  governanceMetrics: Record<string, unknown> | null;
+  complianceDetails: Array<{ baselineName: string; passedCount: number; failedCount: number; warningCount: number; totalChecks: number; score: number; completedAt: string | null }>;
+  driftDetails: Array<{ status: string; totalResources: number; addedCount: number; removedCount: number; modifiedCount: number; completedAt: string | null }>;
+  psaTicketDetails: Array<{ title: string; status: string; priority: string; ticketType: string; createdAt: string }>;
+  tenantList: Array<{ id: string; tenantName: string; displayName: string; status: string; environment: string; healthStatus: string; lastSync: string | null }>;
+  exportedResourceCounts: Record<string, number>;
+  copilotMetrics: { totalUsers: number; activeUsers: number; adoptionRate: number; totalQueries: number } | null;
+  riskAssessments: Array<{ overallScore: number; createdAt: string }>;
 }
 
-// Fetch real data from the database
 async function fetchRealData(supabase: SupabaseClient, userId: string, customerId?: string, dateRangeStart?: string, dateRangeEnd?: string): Promise<RealData> {
   try {
-    // Build customer query
+    // Build queries
     let customerQuery = supabase.from('customers').select('id', { count: 'exact' }).eq('user_id', userId);
-    
-    // Build tenant query
-    let tenantQuery = supabase.from('tenant_connections').select('id', { count: 'exact' }).eq('user_id', userId);
+    let tenantQuery = supabase.from('tenant_connections').select('id, tenant_name, display_name, status, environment, health_status, last_sync').eq('user_id', userId);
     if (customerId) {
       tenantQuery = tenantQuery.eq('customer_id', customerId);
     }
 
-    // Build export jobs query
     let exportQuery = supabase.from('export_jobs').select('id, status', { count: 'exact' }).eq('user_id', userId);
     if (dateRangeStart) exportQuery = exportQuery.gte('created_at', dateRangeStart);
     if (dateRangeEnd) exportQuery = exportQuery.lte('created_at', dateRangeEnd);
 
-    // Build compliance results query
-    let complianceQuery = supabase.from('compliance_results').select('id, passed_count, total_checks').eq('user_id', userId);
+    let complianceQuery = supabase.from('compliance_results').select('id, passed_count, failed_count, warning_count, total_checks, baseline_name, completed_at, status').eq('user_id', userId);
     if (dateRangeStart) complianceQuery = complianceQuery.gte('created_at', dateRangeStart);
     if (dateRangeEnd) complianceQuery = complianceQuery.lte('created_at', dateRangeEnd);
 
-    // Build drift runs query
-    let driftQuery = supabase.from('drift_detections').select('id, modified_count, added_count, removed_count').eq('user_id', userId);
+    let driftQuery = supabase.from('drift_detections').select('id, modified_count, added_count, removed_count, total_resources, status, completed_at').eq('user_id', userId);
     if (dateRangeStart) driftQuery = driftQuery.gte('created_at', dateRangeStart);
     if (dateRangeEnd) driftQuery = driftQuery.lte('created_at', dateRangeEnd);
 
-    // Build PSA tickets query
-    let psaQuery = supabase.from('psa_tickets').select('id', { count: 'exact' }).eq('user_id', userId);
+    let psaQuery = supabase.from('psa_tickets').select('id, title, status, priority, ticket_type, created_at').eq('user_id', userId);
     if (customerId) psaQuery = psaQuery.eq('customer_id', customerId);
     if (dateRangeStart) psaQuery = psaQuery.gte('created_at', dateRangeStart);
     if (dateRangeEnd) psaQuery = psaQuery.lte('created_at', dateRangeEnd);
 
-    // Build billing usage query
     let billingQuery = supabase.from('billing_usage').select('id, total_users, total_devices, billable_amount').eq('user_id', userId);
     if (customerId) billingQuery = billingQuery.eq('customer_id', customerId);
     if (dateRangeStart) billingQuery = billingQuery.gte('period_start', dateRangeStart);
     if (dateRangeEnd) billingQuery = billingQuery.lte('period_end', dateRangeEnd);
 
+    // Secure scores
+    const secureScoreQuery = supabase.from('tenant_secure_scores').select('current_score, max_score, score_percentage, tenant_connection_id').eq('user_id', userId);
+
+    // Governance metrics (latest per tenant)
+    const governanceQuery = supabase.from('governance_metrics_history').select('*').eq('user_id', userId).order('recorded_at', { ascending: false }).limit(10);
+
+    // Exported resources counts by category
+    const exportedResourcesQuery = supabase.from('exported_resources').select('category, export_job_id');
+
+    // Copilot usage
+    const copilotQuery = supabase.from('copilot_usage_metrics').select('total_users, active_users, adoption_rate, total_queries').eq('user_id', userId).order('recorded_at', { ascending: false }).limit(1);
+
+    // Risk assessments
+    const riskQuery = supabase.from('risk_assessments').select('overall_score, created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(5);
+
     const [
       { count: customerCount },
-      { count: tenantCount },
+      { data: tenants },
       { data: exportJobs, count: exportJobsCount },
       { data: complianceResults },
       { data: driftDetections },
-      { count: psaTicketsCount },
+      { data: psaTickets },
       { data: billingUsage },
+      { data: secureScores },
+      { data: governanceData },
+      { data: exportedResources },
+      { data: copilotData },
+      { data: riskData },
     ] = await Promise.all([
       customerQuery,
       tenantQuery,
@@ -87,23 +110,44 @@ async function fetchRealData(supabase: SupabaseClient, userId: string, customerI
       driftQuery,
       psaQuery,
       billingQuery,
+      secureScoreQuery,
+      governanceQuery,
+      exportedResourcesQuery,
+      copilotQuery,
+      riskQuery,
     ]);
 
-    // Calculate metrics from fetched data
     const completedExportsCount = exportJobs?.filter(j => j.status === 'completed').length || 0;
     
     let avgComplianceScore = 0;
-    if (complianceResults && complianceResults.length > 0) {
-      const totalScore = complianceResults.reduce((sum, r) => {
-        const score = r.total_checks > 0 ? (r.passed_count / r.total_checks) * 100 : 0;
-        return sum + score;
-      }, 0);
-      avgComplianceScore = Math.round(totalScore / complianceResults.length);
+    const complianceDetails = (complianceResults || []).map(r => {
+      const score = r.total_checks > 0 ? Math.round((r.passed_count / r.total_checks) * 100) : 0;
+      return {
+        baselineName: r.baseline_name,
+        passedCount: r.passed_count,
+        failedCount: r.failed_count,
+        warningCount: r.warning_count,
+        totalChecks: r.total_checks,
+        score,
+        completedAt: r.completed_at,
+      };
+    });
+    if (complianceDetails.length > 0) {
+      avgComplianceScore = Math.round(complianceDetails.reduce((sum, r) => sum + r.score, 0) / complianceDetails.length);
     }
 
     const driftDetectedCount = driftDetections?.filter(d => 
       (d.modified_count || 0) + (d.added_count || 0) + (d.removed_count || 0) > 0
     ).length || 0;
+
+    const driftDetails = (driftDetections || []).map(d => ({
+      status: d.status,
+      totalResources: d.total_resources,
+      addedCount: d.added_count,
+      removedCount: d.removed_count,
+      modifiedCount: d.modified_count,
+      completedAt: d.completed_at,
+    }));
 
     let totalUsers = 0;
     let totalDevices = 0;
@@ -114,9 +158,84 @@ async function fetchRealData(supabase: SupabaseClient, userId: string, customerI
       totalBillableAmount = billingUsage.reduce((sum, b) => sum + (b.billable_amount || 0), 0);
     }
 
+    // Process secure scores
+    const tenantMap = new Map((tenants || []).map(t => [t.id, t]));
+    const processedSecureScores = (secureScores || []).map(s => {
+      const tenant = tenantMap.get(s.tenant_connection_id);
+      return {
+        tenantName: tenant?.display_name || tenant?.tenant_name || 'Unknown',
+        currentScore: Number(s.current_score),
+        maxScore: Number(s.max_score),
+        percentage: Number(s.score_percentage) || (Number(s.max_score) > 0 ? Math.round((Number(s.current_score) / Number(s.max_score)) * 100) : 0),
+      };
+    });
+    const avgSecureScorePercent = processedSecureScores.length > 0
+      ? Math.round(processedSecureScores.reduce((sum, s) => sum + s.percentage, 0) / processedSecureScores.length)
+      : 0;
+
+    // Process governance metrics (latest)
+    const latestGovernance = governanceData && governanceData.length > 0 ? {
+      totalUsers: governanceData[0].total_users || 0,
+      adminUsers: governanceData[0].admin_users || 0,
+      guestUsers: governanceData[0].guest_users || 0,
+      mfaEnabledUsers: governanceData[0].mfa_enabled_users || 0,
+      riskyUsers: governanceData[0].risky_users || 0,
+      riskySignIns: governanceData[0].risky_sign_ins || 0,
+      staleAccounts: governanceData[0].stale_accounts || 0,
+      totalLicenses: governanceData[0].total_licenses || 0,
+      assignedLicenses: governanceData[0].assigned_licenses || 0,
+      unusedLicenses: governanceData[0].unused_licenses || 0,
+      licenseUtilization: Number(governanceData[0].license_utilization || 0),
+      licenseCostMonthly: Number(governanceData[0].license_cost_monthly || 0),
+      complianceScore: Number(governanceData[0].compliance_score || 0),
+      conditionalAccessPolicies: governanceData[0].conditional_access_policies || 0,
+      secureScore: Number(governanceData[0].secure_score || 0),
+      maxSecureScore: Number(governanceData[0].max_secure_score || 0),
+    } : null;
+
+    // Exported resources by category
+    const resourceCounts: Record<string, number> = {};
+    (exportedResources || []).forEach(r => {
+      resourceCounts[r.category] = (resourceCounts[r.category] || 0) + 1;
+    });
+
+    // Copilot
+    const copilotMetrics = copilotData && copilotData.length > 0 ? {
+      totalUsers: copilotData[0].total_users || 0,
+      activeUsers: copilotData[0].active_users || 0,
+      adoptionRate: Number(copilotData[0].adoption_rate || 0),
+      totalQueries: copilotData[0].total_queries || 0,
+    } : null;
+
+    // PSA ticket details
+    const psaTicketDetails = (psaTickets || []).map(t => ({
+      title: t.title,
+      status: t.status,
+      priority: t.priority,
+      ticketType: t.ticket_type,
+      createdAt: t.created_at,
+    }));
+
+    // Tenant list
+    const tenantList = (tenants || []).map(t => ({
+      id: t.id,
+      tenantName: t.tenant_name || '',
+      displayName: t.display_name || t.tenant_name || '',
+      status: t.status,
+      environment: t.environment || 'production',
+      healthStatus: t.health_status || 'unknown',
+      lastSync: t.last_sync,
+    }));
+
+    // Risk assessments
+    const riskAssessments = (riskData || []).map(r => ({
+      overallScore: Number(r.overall_score),
+      createdAt: r.created_at,
+    }));
+
     return {
       customerCount: customerCount || 0,
-      tenantCount: tenantCount || 0,
+      tenantCount: tenants?.length || 0,
       totalUsers,
       totalDevices,
       exportJobsCount: exportJobsCount || 0,
@@ -125,87 +244,110 @@ async function fetchRealData(supabase: SupabaseClient, userId: string, customerI
       avgComplianceScore,
       driftRunsCount: driftDetections?.length || 0,
       driftDetectedCount,
-      psaTicketsCount: psaTicketsCount || 0,
+      psaTicketsCount: psaTickets?.length || 0,
       billingUsageCount: billingUsage?.length || 0,
       totalBillableAmount,
+      secureScores: processedSecureScores,
+      avgSecureScorePercent,
+      governanceMetrics: latestGovernance,
+      complianceDetails,
+      driftDetails,
+      psaTicketDetails,
+      tenantList,
+      exportedResourceCounts: resourceCounts,
+      copilotMetrics,
+      riskAssessments,
     };
   } catch (error) {
     console.error('Error fetching real data:', error);
     return {
-      customerCount: 0,
-      tenantCount: 0,
-      totalUsers: 0,
-      totalDevices: 0,
-      exportJobsCount: 0,
-      completedExportsCount: 0,
-      complianceChecksCount: 0,
-      avgComplianceScore: 0,
-      driftRunsCount: 0,
-      driftDetectedCount: 0,
-      psaTicketsCount: 0,
-      billingUsageCount: 0,
-      totalBillableAmount: 0,
+      customerCount: 0, tenantCount: 0, totalUsers: 0, totalDevices: 0,
+      exportJobsCount: 0, completedExportsCount: 0, complianceChecksCount: 0,
+      avgComplianceScore: 0, driftRunsCount: 0, driftDetectedCount: 0,
+      psaTicketsCount: 0, billingUsageCount: 0, totalBillableAmount: 0,
+      secureScores: [], avgSecureScorePercent: 0, governanceMetrics: null,
+      complianceDetails: [], driftDetails: [], psaTicketDetails: [],
+      tenantList: [], exportedResourceCounts: {}, copilotMetrics: null,
+      riskAssessments: [],
     };
   }
 }
 
-// Generate template data with real database values
 function generateTemplateData(templateId: string, templateCategory: string, realData: RealData): Record<string, unknown> {
   const now = new Date().toISOString();
-  
-  // Use real data or reasonable defaults based on actual counts
+  const gov = realData.governanceMetrics as Record<string, number> | null;
   const hasData = realData.customerCount > 0 || realData.tenantCount > 0;
   
+  const mfaCoverage = gov && gov.totalUsers > 0 
+    ? Math.round((gov.mfaEnabledUsers / gov.totalUsers) * 100) : 0;
+
   switch (templateCategory) {
     case 'security': {
       return {
         summary: {
-          overallSecurityScore: realData.avgComplianceScore > 0 ? realData.avgComplianceScore : 0,
-          criticalIssues: 0,
-          highIssues: 0,
-          mediumIssues: 0,
-          lowIssues: 0,
-          policiesEnabled: 0,
-          policiesTotal: 0,
-          mfaCoverage: 0,
-          conditionalAccessCoverage: 0,
+          overallSecurityScore: realData.avgSecureScorePercent || realData.avgComplianceScore || 0,
+          secureScorePercent: realData.avgSecureScorePercent,
+          criticalIssues: gov?.riskyUsers || 0,
+          highIssues: gov?.riskySignIns || 0,
+          mediumIssues: gov?.staleAccounts || 0,
+          totalIssues: (gov?.riskyUsers || 0) + (gov?.riskySignIns || 0) + (gov?.staleAccounts || 0),
+          overallScore: realData.avgSecureScorePercent || realData.avgComplianceScore || 0,
+          mfaCoverage,
+          conditionalAccessPolicies: gov?.conditionalAccessPolicies || 0,
           customerCount: realData.customerCount,
           tenantCount: realData.tenantCount,
         },
-        findings: [],
-        recommendations: hasData ? [
-          'Connect to Microsoft Graph API to fetch security data',
-          'Run security assessments on connected tenants',
-        ] : [
-          'No customers or tenants configured',
-          'Add customer tenants to generate security reports',
+        secureScores: realData.secureScores,
+        criticalFindings: (gov?.riskyUsers || 0) > 0 ? [
+          { ruleName: 'Risky Users Detected', name: 'Risky Users', resourceType: 'Identity', message: `${gov?.riskyUsers} user(s) flagged as risky by Entra ID Protection`, resourceName: 'Entra ID' }
+        ] : [],
+        highFindings: [
+          ...(gov?.riskySignIns || 0) > 0 ? [{ ruleName: 'Risky Sign-Ins', resourceType: 'Authentication', message: `${gov?.riskySignIns} risky sign-in(s) detected`, resourceName: 'Sign-in Logs' }] : [],
+          ...(gov?.staleAccounts || 0) > 0 ? [{ ruleName: 'Stale Accounts', resourceType: 'Identity', message: `${gov?.staleAccounts} stale account(s) found`, resourceName: 'User Directory' }] : [],
+          ...mfaCoverage < 100 && mfaCoverage > 0 ? [{ ruleName: 'Incomplete MFA Coverage', resourceType: 'Authentication', message: `MFA coverage at ${mfaCoverage}% — ${100 - mfaCoverage}% of users unprotected`, resourceName: 'MFA Policies' }] : [],
         ],
-        trendData: [],
+        recommendations: [
+          ...(gov?.riskyUsers || 0) > 0 ? ['Investigate and remediate risky users in Entra ID Protection'] : [],
+          ...mfaCoverage < 100 ? [`Increase MFA coverage from ${mfaCoverage}% to 100%`] : [],
+          ...(gov?.staleAccounts || 0) > 0 ? [`Review and disable ${gov?.staleAccounts} stale accounts`] : [],
+          ...realData.avgSecureScorePercent < 70 && realData.avgSecureScorePercent > 0 ? ['Review Microsoft Secure Score recommendations to improve posture'] : [],
+          ...!hasData ? ['Connect tenant credentials to enable security monitoring'] : [],
+        ],
         generatedAt: now,
       };
     }
     
     case 'compliance': {
+      const lowestScore = realData.complianceDetails.length > 0 
+        ? Math.min(...realData.complianceDetails.map(c => c.score)) : 0;
+      const highestScore = realData.complianceDetails.length > 0 
+        ? Math.max(...realData.complianceDetails.map(c => c.score)) : 0;
+      
       return {
         summary: {
           overallComplianceScore: realData.avgComplianceScore,
-          totalChecks: realData.complianceChecksCount,
-          passedChecks: 0,
-          failedChecks: 0,
-          frameworks: [],
-          lastAssessment: now,
+          totalChecks: realData.complianceDetails.reduce((sum, c) => sum + c.totalChecks, 0),
+          passedChecks: realData.complianceDetails.reduce((sum, c) => sum + c.passedCount, 0),
+          failedChecks: realData.complianceDetails.reduce((sum, c) => sum + c.failedCount, 0),
+          averageScore: realData.avgComplianceScore,
+          lowestScore,
+          highestScore,
+          trend: 'stable',
           customerCount: realData.customerCount,
           tenantCount: realData.tenantCount,
         },
-        complianceByFramework: [],
-        failedControls: [],
-        history: [],
-        recommendations: hasData ? [
-          'Run compliance checks against connected tenants',
-          `${realData.complianceChecksCount} compliance checks recorded`,
-        ] : [
-          'No customers or tenants configured',
-          'Add customer tenants to run compliance checks',
+        history: realData.complianceDetails.map(c => ({
+          checked_at: c.completedAt,
+          score: c.score,
+          passed_count: c.passedCount,
+          failed_count: c.failedCount,
+          warning_count: c.warningCount,
+          baseline_name: c.baselineName,
+        })),
+        recommendations: [
+          ...realData.avgComplianceScore < 80 && realData.avgComplianceScore > 0 ? [`Compliance score is ${realData.avgComplianceScore}% — review failed checks`] : [],
+          ...lowestScore < 60 && lowestScore > 0 ? [`Lowest score is ${lowestScore}% — prioritize remediation`] : [],
+          ...!hasData ? ['Run compliance checks against connected tenants'] : [],
         ],
         generatedAt: now,
       };
@@ -214,29 +356,22 @@ function generateTemplateData(templateId: string, templateCategory: string, real
     case 'identity': {
       return {
         summary: {
-          totalUsers: realData.totalUsers,
-          activeUsers: 0,
-          guestUsers: 0,
-          adminUsers: 0,
-          usersWithMFA: 0,
-          mfaCoveragePercent: 0,
-          staleAccounts: 0,
-          riskyUsers: 0,
+          totalUsers: gov?.totalUsers || realData.totalUsers || 0,
+          adminUsers: gov?.adminUsers || 0,
+          guestUsers: gov?.guestUsers || 0,
+          mfaEnabledUsers: gov?.mfaEnabledUsers || 0,
+          mfaCoveragePercent: mfaCoverage,
+          staleAccounts: gov?.staleAccounts || 0,
+          riskyUsers: gov?.riskyUsers || 0,
+          conditionalAccessPolicies: gov?.conditionalAccessPolicies || 0,
           customerCount: realData.customerCount,
           tenantCount: realData.tenantCount,
         },
-        userBreakdown: {
-          byType: [],
-          byDepartment: [],
-          byLicense: [],
-        },
-        accessIssues: [],
-        recommendations: hasData ? [
-          `${realData.totalUsers} total users tracked across tenants`,
-          'Connect to Graph API for detailed identity data',
-        ] : [
-          'No identity data available',
-          'Add customer tenants to analyze identity posture',
+        recommendations: [
+          ...mfaCoverage < 100 ? [`Enable MFA for remaining ${100 - mfaCoverage}% of users`] : ['MFA coverage is at 100% — excellent!'],
+          ...(gov?.staleAccounts || 0) > 0 ? [`Disable or remove ${gov?.staleAccounts} stale accounts`] : [],
+          ...(gov?.riskyUsers || 0) > 0 ? [`Investigate ${gov?.riskyUsers} risky user(s)`] : [],
+          ...(gov?.adminUsers || 0) > 5 ? [`Review ${gov?.adminUsers} admin accounts — consider reducing privileged access`] : [],
         ],
         generatedAt: now,
       };
@@ -245,27 +380,14 @@ function generateTemplateData(templateId: string, templateCategory: string, real
     case 'devices': {
       return {
         summary: {
-          totalDevices: realData.totalDevices,
-          compliantDevices: 0,
-          nonCompliantDevices: 0,
-          complianceRate: 0,
-          managedDevices: 0,
-          unmanaged: 0,
+          totalDevices: gov ? (realData.totalDevices || 0) : 0,
           customerCount: realData.customerCount,
           tenantCount: realData.tenantCount,
         },
-        deviceBreakdown: {
-          byOS: [],
-          byType: [],
-        },
-        complianceIssues: [],
         recommendations: hasData ? [
-          `${realData.totalDevices} total devices tracked`,
-          'Connect to Intune for detailed device data',
-        ] : [
-          'No device data available',
-          'Add customer tenants to analyze device compliance',
-        ],
+          `${realData.totalDevices} devices tracked across tenants`,
+          'Run device compliance assessments via Intune integration',
+        ] : ['Connect tenants to monitor device compliance'],
         generatedAt: now,
       };
     }
@@ -273,33 +395,14 @@ function generateTemplateData(templateId: string, templateCategory: string, real
     case 'exchange': {
       return {
         summary: {
-          totalMailboxes: 0,
-          activeMailboxes: 0,
-          sharedMailboxes: 0,
-          mailFlowRules: 0,
-          quarantinedMessages: 0,
-          spamBlocked: 0,
           customerCount: realData.customerCount,
           tenantCount: realData.tenantCount,
+          totalUsers: gov?.totalUsers || realData.totalUsers || 0,
         },
-        mailboxStats: {
-          bySize: [],
-          byType: [],
-        },
-        securityMetrics: {
-          externalForwarding: 0,
-          autoForwardRules: 0,
-          delegatedAccess: 0,
-          inboxRules: 0,
-        },
-        issues: [],
         recommendations: hasData ? [
-          'Connect to Exchange Online for mailbox data',
-          'Run mail flow analysis on connected tenants',
-        ] : [
-          'No Exchange data available',
-          'Add customer tenants to analyze mailbox configuration',
-        ],
+          'Connect to Exchange Online for mailbox and mail flow data',
+          `${realData.tenantCount} tenant(s) available for Exchange analysis`,
+        ] : ['Add customer tenants to analyze Exchange configuration'],
         generatedAt: now,
       };
     }
@@ -307,27 +410,14 @@ function generateTemplateData(templateId: string, templateCategory: string, real
     case 'sharepoint': {
       return {
         summary: {
-          totalSites: 0,
-          activeSites: 0,
-          totalStorage: '0 GB',
-          usedStorage: '0 GB',
-          externalSharing: 0,
-          anonymousLinks: 0,
           customerCount: realData.customerCount,
           tenantCount: realData.tenantCount,
+          exportedResources: realData.exportedResourceCounts['sharepoint'] || 0,
         },
-        siteBreakdown: {
-          byType: [],
-          byActivity: [],
-        },
-        sharingRisks: [],
         recommendations: hasData ? [
-          'Connect to SharePoint Online for site data',
-          'Run sharing analysis on connected tenants',
-        ] : [
-          'No SharePoint data available',
-          'Add customer tenants to analyze SharePoint configuration',
-        ],
+          'Connect to SharePoint Online for site and sharing analytics',
+          `${realData.exportedResourceCounts['sharepoint'] || 0} SharePoint resources exported`,
+        ] : ['Add customer tenants to analyze SharePoint configuration'],
         generatedAt: now,
       };
     }
@@ -335,32 +425,14 @@ function generateTemplateData(templateId: string, templateCategory: string, real
     case 'teams': {
       return {
         summary: {
-          totalTeams: 0,
-          activeTeams: 0,
-          totalChannels: 0,
-          privateChannels: 0,
-          guestUsers: 0,
-          externalAccess: 0,
           customerCount: realData.customerCount,
           tenantCount: realData.tenantCount,
-        },
-        teamsBreakdown: {
-          byActivity: [],
-          bySize: [],
-        },
-        governance: {
-          teamsWithOwners: 0,
-          orphanedTeams: 0,
-          teamsWithGuests: 0,
-          teamsWithExternalSharing: 0,
+          exportedResources: realData.exportedResourceCounts['teams'] || 0,
         },
         recommendations: hasData ? [
-          'Connect to Teams for collaboration data',
-          'Run governance analysis on connected tenants',
-        ] : [
-          'No Teams data available',
-          'Add customer tenants to analyze Teams governance',
-        ],
+          'Connect to Teams for collaboration governance data',
+          `${realData.exportedResourceCounts['teams'] || 0} Teams resources exported`,
+        ] : ['Add customer tenants to analyze Teams governance'],
         generatedAt: now,
       };
     }
@@ -368,51 +440,40 @@ function generateTemplateData(templateId: string, templateCategory: string, real
     case 'licensing': {
       return {
         summary: {
-          totalLicenses: 0,
-          assignedLicenses: 0,
-          availableLicenses: 0,
-          utilizationRate: 0,
-          monthlySpend: '$0',
-          potentialSavings: '$0',
+          totalLicenses: gov?.totalLicenses || 0,
+          assignedLicenses: gov?.assignedLicenses || 0,
+          unusedLicenses: gov?.unusedLicenses || 0,
+          utilizationRate: gov?.licenseUtilization || 0,
+          monthlySpend: `$${(gov?.licenseCostMonthly || 0).toLocaleString()}`,
+          potentialSavings: gov?.unusedLicenses ? `$${Math.round((gov.unusedLicenses || 0) * (gov.licenseCostMonthly || 0) / Math.max(gov.totalLicenses || 1, 1)).toLocaleString()}` : '$0',
           customerCount: realData.customerCount,
           tenantCount: realData.tenantCount,
         },
-        licenseBreakdown: [],
-        unusedLicenses: [],
-        recommendations: hasData ? [
-          'Connect to Graph API for license data',
-          'Run license optimization analysis',
-        ] : [
-          'No licensing data available',
-          'Add customer tenants to analyze license usage',
+        recommendations: [
+          ...(gov?.unusedLicenses || 0) > 0 ? [`Reclaim ${gov?.unusedLicenses} unused licenses to save costs`] : [],
+          ...(gov?.licenseUtilization || 0) < 80 ? [`License utilization is ${gov?.licenseUtilization || 0}% — review assignments`] : [],
+          ...!gov ? ['Run governance metrics collection to populate license data'] : [],
         ],
         generatedAt: now,
       };
     }
     
     case 'copilot': {
+      const cm = realData.copilotMetrics;
       return {
         summary: {
-          totalLicenses: 0,
-          activatedUsers: 0,
-          activeUsers: 0,
-          adoptionRate: 0,
-          avgInteractionsPerUser: 0,
-          timeSavedHours: 0,
+          totalLicenses: cm?.totalUsers || 0,
+          activeUsers: cm?.activeUsers || 0,
+          adoptionRate: cm?.adoptionRate || 0,
+          totalQueries: cm?.totalQueries || 0,
           customerCount: realData.customerCount,
           tenantCount: realData.tenantCount,
         },
-        usageBreakdown: {
-          byApp: [],
-          byDepartment: [],
-        },
-        topUsers: [],
-        recommendations: hasData ? [
-          'Connect to Copilot analytics for usage data',
-          'Track adoption metrics across tenants',
-        ] : [
-          'No Copilot data available',
-          'Add customer tenants to analyze Copilot adoption',
+        recommendations: [
+          ...cm ? [
+            `${cm.activeUsers} active Copilot users out of ${cm.totalUsers} licensed`,
+            cm.adoptionRate < 50 ? 'Adoption rate below 50% — consider training programs' : `Good adoption rate at ${cm.adoptionRate}%`,
+          ] : ['Connect to Copilot analytics to track usage and adoption'],
         ],
         generatedAt: now,
       };
@@ -424,20 +485,26 @@ function generateTemplateData(templateId: string, templateCategory: string, real
           totalScans: realData.driftRunsCount,
           driftDetected: realData.driftDetectedCount,
           driftRate: realData.driftRunsCount > 0 ? Math.round((realData.driftDetectedCount / realData.driftRunsCount) * 100) : 0,
-          totalChanges: 0,
-          criticalChanges: 0,
-          autoRemediated: 0,
+          totalRuns: realData.driftRunsCount,
+          runsWithDrift: realData.driftDetectedCount,
+          totalChanges: realData.driftDetails.reduce((sum, d) => sum + d.addedCount + d.removedCount + d.modifiedCount, 0),
+          totalDifferences: realData.driftDetails.reduce((sum, d) => sum + d.addedCount + d.removedCount + d.modifiedCount, 0),
           customerCount: realData.customerCount,
           tenantCount: realData.tenantCount,
         },
-        recentDrift: [],
-        driftByCategory: [],
-        recommendations: hasData ? [
-          `${realData.driftRunsCount} drift scans recorded`,
-          `${realData.driftDetectedCount} scans detected drift`,
-        ] : [
-          'No drift detection data available',
-          'Configure drift detection for connected tenants',
+        runs: realData.driftDetails.map(d => ({
+          started_at: d.completedAt,
+          status: d.status,
+          total_tenants: 1,
+          drift_detected: (d.addedCount + d.removedCount + d.modifiedCount) > 0,
+          total_differences: d.addedCount + d.removedCount + d.modifiedCount,
+          added: d.addedCount,
+          removed: d.removedCount,
+          modified: d.modifiedCount,
+        })),
+        recommendations: [
+          ...realData.driftDetectedCount > 0 ? [`Drift detected in ${realData.driftDetectedCount} of ${realData.driftRunsCount} scans — review changes`] : [],
+          ...realData.driftRunsCount === 0 ? ['Configure scheduled drift detection for your tenants'] : [],
         ],
         generatedAt: now,
       };
@@ -446,23 +513,27 @@ function generateTemplateData(templateId: string, templateCategory: string, real
     case 'tenant_health': {
       return {
         summary: {
-          overallHealth: 0,
-          servicesHealthy: 0,
-          servicesTotal: 0,
-          activeIncidents: 0,
-          plannedMaintenance: 0,
-          lastChecked: now,
+          totalTenants: realData.tenantCount,
+          healthyTenants: realData.tenantList.filter(t => t.healthStatus === 'healthy').length,
+          warningTenants: realData.tenantList.filter(t => t.healthStatus === 'warning').length,
+          criticalTenants: realData.tenantList.filter(t => t.healthStatus === 'critical').length,
+          unknownTenants: realData.tenantList.filter(t => t.healthStatus === 'unknown').length,
+          connectedTenants: realData.tenantList.filter(t => t.status === 'connected').length,
+          avgSecureScore: realData.avgSecureScorePercent,
+          avgComplianceScore: realData.avgComplianceScore,
           customerCount: realData.customerCount,
-          tenantCount: realData.tenantCount,
         },
-        serviceStatus: [],
-        recentIncidents: [],
-        recommendations: hasData ? [
-          `${realData.tenantCount} tenants connected`,
-          'Run health checks on connected tenants',
-        ] : [
-          'No tenant health data available',
-          'Add customer tenants to monitor health',
+        tenants: realData.tenantList.map(t => {
+          const score = realData.secureScores.find(s => s.tenantName === t.displayName);
+          return {
+            ...t,
+            secureScorePercent: score?.percentage || 0,
+          };
+        }),
+        recommendations: [
+          ...realData.tenantList.filter(t => t.healthStatus === 'critical').length > 0 ? ['Address critical health issues on affected tenants'] : [],
+          ...realData.tenantList.filter(t => t.status !== 'connected').length > 0 ? [`${realData.tenantList.filter(t => t.status !== 'connected').length} tenant(s) not connected — verify credentials`] : [],
+          ...realData.avgSecureScorePercent < 60 && realData.avgSecureScorePercent > 0 ? ['Improve Secure Score by addressing recommended actions'] : [],
         ],
         generatedAt: now,
       };
@@ -472,24 +543,17 @@ function generateTemplateData(templateId: string, templateCategory: string, real
       return {
         summary: {
           totalSpend: `$${realData.totalBillableAmount.toLocaleString()}`,
-          previousPeriod: '$0',
-          changePercent: 0,
-          topCostCenter: 'N/A',
-          projectedAnnual: `$${(realData.totalBillableAmount * 12).toLocaleString()}`,
-          customerCount: realData.customerCount,
-          tenantCount: realData.tenantCount,
+          totalResources: Object.values(realData.exportedResourceCounts).reduce((sum, c) => sum + c, 0),
           totalUsers: realData.totalUsers,
           totalDevices: realData.totalDevices,
+          totalBillable: realData.totalBillableAmount,
+          periodCount: realData.billingUsageCount,
+          customerCount: realData.customerCount,
+          tenantCount: realData.tenantCount,
         },
-        spendBreakdown: [],
-        trendData: [],
-        costOptimization: [],
-        recommendations: hasData ? [
-          `$${realData.totalBillableAmount.toLocaleString()} total billable amount`,
-          `${realData.billingUsageCount} billing records found`,
-        ] : [
-          'No billing data available',
-          'Track resource usage to generate billing reports',
+        recommendations: [
+          ...realData.totalBillableAmount > 0 ? [`$${realData.totalBillableAmount.toLocaleString()} total billable across ${realData.billingUsageCount} periods`] : [],
+          ...!hasData ? ['Track resource usage to generate billing reports'] : [],
         ],
         generatedAt: now,
       };
@@ -498,22 +562,18 @@ function generateTemplateData(templateId: string, templateCategory: string, real
     default:
       return {
         summary: {
-          reportGenerated: true,
-          templateId,
-          templateCategory,
           customerCount: realData.customerCount,
           tenantCount: realData.tenantCount,
         },
-        message: hasData 
-          ? 'Report data generated - connect to Microsoft APIs for detailed metrics'
-          : 'No customers or tenants configured. Add tenants to generate meaningful reports.',
+        recommendations: hasData 
+          ? ['Report data generated from available database records']
+          : ['Add customer tenants to generate meaningful reports'],
         generatedAt: now,
       };
   }
 }
 
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -523,7 +583,6 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Verify authentication
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       return new Response(
@@ -545,169 +604,37 @@ serve(async (req) => {
     const body: ReportRequest = await req.json();
     console.log('Generating report:', body);
 
-    // Update report status to generating
     await supabase
       .from('reports')
       .update({ status: 'generating' })
       .eq('id', body.reportId)
       .eq('user_id', user.id);
 
-    // Gather data based on report type
     let reportData: Record<string, unknown> = {};
 
     try {
-      // If we have a template ID and category, use template-specific generation with real data
+      // Always fetch real data
+      const realData = await fetchRealData(
+        supabase, user.id, body.customerId, body.dateRangeStart, body.dateRangeEnd
+      );
+      console.log('Real data fetched:', {
+        customers: realData.customerCount,
+        tenants: realData.tenantCount,
+        secureScores: realData.secureScores.length,
+        complianceChecks: realData.complianceChecksCount,
+        driftRuns: realData.driftRunsCount,
+        psaTickets: realData.psaTicketsCount,
+        hasGovernance: !!realData.governanceMetrics,
+        hasCopilot: !!realData.copilotMetrics,
+      });
+
       if (body.templateId && body.templateCategory) {
-        // Fetch real data from the database
-        const realData = await fetchRealData(
-          supabase, 
-          user.id, 
-          body.customerId,
-          body.dateRangeStart,
-          body.dateRangeEnd
-        );
-        console.log('Real data fetched:', realData);
         reportData = generateTemplateData(body.templateId, body.templateCategory, realData);
       } else {
-        // Fall back to standard report type generation
-        switch (body.reportType) {
-          case 'executive_summary': {
-            const realData = await fetchRealData(supabase, user.id, body.customerId, body.dateRangeStart, body.dateRangeEnd);
-
-            reportData = {
-              summary: {
-                totalCustomers: realData.customerCount,
-                totalTenants: realData.tenantCount,
-                totalExports: realData.exportJobsCount,
-                completedExports: realData.completedExportsCount,
-                exportSuccessRate: realData.exportJobsCount > 0 ? Math.round((realData.completedExportsCount / realData.exportJobsCount) * 100) : 0,
-                avgComplianceScore: realData.avgComplianceScore,
-                driftDetectionRuns: realData.driftRunsCount,
-                driftDetectedCount: realData.driftDetectedCount,
-                totalUsers: realData.totalUsers,
-                totalDevices: realData.totalDevices,
-              },
-              recommendations: [
-                realData.avgComplianceScore < 80 && realData.avgComplianceScore > 0 ? 'Review compliance policies to improve score' : null,
-                realData.driftDetectedCount > 0 ? 'Address detected configuration drift' : null,
-                realData.customerCount === 0 ? 'Add customer tenants to manage' : null,
-                realData.tenantCount === 0 ? 'Connect tenant credentials to enable monitoring' : null,
-              ].filter(Boolean),
-              generatedAt: new Date().toISOString(),
-            };
-            break;
-          }
-
-          case 'compliance': {
-            const realData = await fetchRealData(supabase, user.id, body.customerId, body.dateRangeStart, body.dateRangeEnd);
-
-            reportData = {
-              summary: {
-                totalChecks: realData.complianceChecksCount,
-                averageScore: realData.avgComplianceScore,
-                customerCount: realData.customerCount,
-                tenantCount: realData.tenantCount,
-              },
-              history: [],
-              generatedAt: new Date().toISOString(),
-            };
-            break;
-          }
-
-          case 'drift': {
-            const realData = await fetchRealData(supabase, user.id, body.customerId, body.dateRangeStart, body.dateRangeEnd);
-
-            reportData = {
-              summary: {
-                totalRuns: realData.driftRunsCount,
-                runsWithDrift: realData.driftDetectedCount,
-                driftRate: realData.driftRunsCount > 0 ? Math.round((realData.driftDetectedCount / realData.driftRunsCount) * 100) : 0,
-                customerCount: realData.customerCount,
-                tenantCount: realData.tenantCount,
-              },
-              runs: [],
-              generatedAt: new Date().toISOString(),
-            };
-            break;
-          }
-
-          case 'billing': {
-            const realData = await fetchRealData(supabase, user.id, body.customerId, body.dateRangeStart, body.dateRangeEnd);
-
-            reportData = {
-              summary: {
-                totalResources: 0,
-                totalUsers: realData.totalUsers,
-                totalDevices: realData.totalDevices,
-                totalBillable: realData.totalBillableAmount,
-                periodCount: realData.billingUsageCount,
-                customerCount: realData.customerCount,
-                tenantCount: realData.tenantCount,
-              },
-              usage: [],
-              generatedAt: new Date().toISOString(),
-            };
-            break;
-          }
-
-          case 'security': {
-            const realData = await fetchRealData(supabase, user.id, body.customerId, body.dateRangeStart, body.dateRangeEnd);
-
-            reportData = {
-              summary: {
-                complianceScore: realData.avgComplianceScore,
-                checksRun: realData.complianceChecksCount,
-                customerCount: realData.customerCount,
-                tenantCount: realData.tenantCount,
-              },
-              details: [],
-              recommendations: realData.customerCount === 0 ? ['Add customer tenants to run security assessments'] : [],
-              generatedAt: new Date().toISOString(),
-            };
-            break;
-          }
-
-          case 'tenant_summary': {
-            const realData = await fetchRealData(supabase, user.id, body.customerId, body.dateRangeStart, body.dateRangeEnd);
-
-            reportData = {
-              summary: {
-                totalCustomers: realData.customerCount,
-                totalTenants: realData.tenantCount,
-                totalUsers: realData.totalUsers,
-                totalDevices: realData.totalDevices,
-                complianceScore: realData.avgComplianceScore,
-              },
-              tenants: [],
-              generatedAt: new Date().toISOString(),
-            };
-            break;
-          }
-
-          case 'psa_tickets': {
-            const realData = await fetchRealData(supabase, user.id, body.customerId, body.dateRangeStart, body.dateRangeEnd);
-
-            reportData = {
-              summary: {
-                totalTickets: realData.psaTicketsCount,
-                customerCount: realData.customerCount,
-                tenantCount: realData.tenantCount,
-              },
-              tickets: [],
-              generatedAt: new Date().toISOString(),
-            };
-            break;
-          }
-
-          default:
-            reportData = {
-              message: 'Unknown report type',
-              generatedAt: new Date().toISOString(),
-            };
-        }
+        // Use reportType as category for standard reports
+        reportData = generateTemplateData('standard', body.reportType || 'security', realData);
       }
 
-      // Update report with generated data
       await supabase
         .from('reports')
         .update({
@@ -730,10 +657,7 @@ serve(async (req) => {
       
       await supabase
         .from('reports')
-        .update({
-          status: 'failed',
-          data: { error: errorMessage },
-        })
+        .update({ status: 'failed', data: { error: errorMessage } })
         .eq('id', body.reportId)
         .eq('user_id', user.id);
 
@@ -744,9 +668,8 @@ serve(async (req) => {
     }
   } catch (error) {
     console.error('Error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return new Response(
-      JSON.stringify({ error: errorMessage }),
+      JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
