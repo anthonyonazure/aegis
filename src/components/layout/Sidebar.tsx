@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { 
   LayoutDashboard, 
+  Monitor,
   FolderTree, 
   Download, 
   Settings, 
@@ -78,6 +79,12 @@ const navGroups: NavGroup[] = [
       { id: 'ai-chat', label: 'AI Chat', icon: MessageCircle, isAI: true },
       { id: 'cross-tenant-insights', label: 'Cross-Tenant Insights', icon: GitPullRequestDraft, isAI: true },
       { id: 'customers', label: 'Customers', icon: Building2 },
+    ],
+  },
+  {
+    title: 'Intune',
+    items: [
+      { id: 'intune', label: 'Intune Manager', icon: Monitor },
     ],
   },
   {

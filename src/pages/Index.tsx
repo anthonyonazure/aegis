@@ -54,6 +54,7 @@ import ConfigOptimizerView from '@/components/views/ConfigOptimizerView';
 import AIChatView from '@/components/views/AIChatView';
 import CrossTenantInsightsView from '@/components/views/CrossTenantInsightsView';
 import { AISchedulesView } from '@/components/views/AISchedulesView';
+import { IntuneView } from '@/components/views/IntuneView';
 import { SettingsView } from '@/components/views/SettingsView';
 import { PreflightCheckDialog } from '@/components/PreflightCheckDialog';
 import { ALL_RESOURCE_CATEGORIES, ExportFormat } from '@/types/tenant';
@@ -268,6 +269,8 @@ const Index = () => {
         );
       case 'customers':
         return <CustomersView />;
+      case 'intune':
+        return <IntuneView />;
       case 'nl-query':
         return <NaturalLanguageQueryView />;
       case 'ai-chat':
