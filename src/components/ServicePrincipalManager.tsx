@@ -4,6 +4,8 @@ import {
   Key,
   Save,
   Trash2,
+  Eye,
+  EyeOff,
   Edit2,
   Check,
   X,
@@ -44,6 +46,7 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { storeEncryptedCredential } from '@/lib/database';
 
 export interface ServicePrincipalConfig {
   id: string;
@@ -83,6 +86,8 @@ export const ServicePrincipalManager = ({
   const [formDescription, setFormDescription] = useState('');
   const [formTenantId, setFormTenantId] = useState('');
   const [formClientId, setFormClientId] = useState('');
+  const [formClientSecret, setFormClientSecret] = useState('');
+  const [showSecret, setShowSecret] = useState(false);
   const [formConnectionTypes, setFormConnectionTypes] = useState<string[]>(['graph']);
 
   useEffect(() => {
@@ -121,13 +126,23 @@ export const ServicePrincipalManager = ({
       return;
     }
 
+    // Require client secret for new configs
+    if (!editingConfig && !formClientSecret) {
+      toast({
+        title: 'Validation Error',
+        description: 'Client Secret is required for new configurations',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setIsSaving(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
       if (editingConfig) {
-        // Update existing
+        // Update existing service principal config
         const { error } = await supabase
           .from('service_principal_configs')
           .update({
@@ -141,13 +156,39 @@ export const ServicePrincipalManager = ({
 
         if (error) throw error;
 
-        toast({
-          title: 'Configuration Updated',
-          description: 'Service principal configuration has been updated',
-        });
+        // If a new client secret was provided, update the associated tenant connection credentials
+        if (formClientSecret) {
+          // Find associated tenant connection
+          const { data: tenantConn } = await supabase
+            .from('tenant_connections')
+            .select('id')
+            .eq('user_id', user.id)
+            .eq('tenant_id', formTenantId)
+            .eq('client_id', formClientId)
+            .limit(1)
+            .maybeSingle();
+
+          if (tenantConn) {
+            await storeEncryptedCredential(tenantConn.id, formClientId, formClientSecret);
+            toast({
+              title: 'Configuration Updated',
+              description: 'Service principal and credentials have been updated',
+            });
+          } else {
+            toast({
+              title: 'Configuration Updated',
+              description: 'Service principal configuration updated. No matching tenant connection found to update credentials.',
+            });
+          }
+        } else {
+          toast({
+            title: 'Configuration Updated',
+            description: 'Service principal configuration has been updated',
+          });
+        }
       } else {
-        // Create new
-        const { error } = await supabase.from('service_principal_configs').insert([{
+        // Create new service principal config
+        const { error: spError } = await supabase.from('service_principal_configs').insert([{
           user_id: user.id,
           name: formName,
           description: formDescription || null,
@@ -156,11 +197,37 @@ export const ServicePrincipalManager = ({
           connection_types: formConnectionTypes,
         }]);
 
-        if (error) throw error;
+        if (spError) throw spError;
+
+        // Also create a tenant connection and store credentials
+        const { data: newTenant, error: tcError } = await supabase
+          .from('tenant_connections')
+          .insert({
+            user_id: user.id,
+            tenant_id: formTenantId,
+            tenant_name: formName,
+            display_name: formName,
+            auth_method: 'app',
+            client_id: formClientId,
+            status: 'disconnected',
+          })
+          .select()
+          .single();
+
+        if (tcError) throw tcError;
+
+        // Store encrypted credentials
+        await storeEncryptedCredential(newTenant.id, formClientId, formClientSecret);
+
+        // Update status to connected
+        await supabase
+          .from('tenant_connections')
+          .update({ status: 'connected' })
+          .eq('id', newTenant.id);
 
         toast({
           title: 'Configuration Saved',
-          description: 'Service principal configuration has been saved',
+          description: 'Service principal saved and tenant connected successfully',
         });
       }
 
@@ -171,7 +238,7 @@ export const ServicePrincipalManager = ({
       console.error('Failed to save config:', error);
       toast({
         title: 'Error',
-        description: 'Failed to save configuration',
+        description: error instanceof Error ? error.message : 'Failed to save configuration',
         variant: 'destructive',
       });
     } finally {
@@ -213,6 +280,8 @@ export const ServicePrincipalManager = ({
     setFormDescription('');
     setFormTenantId('');
     setFormClientId('');
+    setFormClientSecret('');
+    setShowSecret(false);
     setFormConnectionTypes(['graph']);
     setEditingConfig(null);
   };
@@ -460,6 +529,34 @@ export const ServicePrincipalManager = ({
             </div>
 
             <div className="space-y-2">
+              <Label htmlFor="config-secret">
+                Client Secret {!editingConfig ? '*' : '(leave blank to keep existing)'}
+              </Label>
+              <div className="relative">
+                <Input
+                  id="config-secret"
+                  type={showSecret ? 'text' : 'password'}
+                  placeholder={editingConfig ? '••••••••••••••••' : 'Enter client secret'}
+                  value={formClientSecret}
+                  onChange={(e) => setFormClientSecret(e.target.value)}
+                  className="font-mono pr-10"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                  onClick={() => setShowSecret(!showSecret)}
+                >
+                  {showSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Your client secret is encrypted and stored securely.
+              </p>
+            </div>
+
+            <div className="space-y-2">
               <Label>Connection Types</Label>
               <div className="flex gap-2">
                 {[
@@ -483,9 +580,6 @@ export const ServicePrincipalManager = ({
                   );
                 })}
               </div>
-              <p className="text-xs text-muted-foreground">
-                Note: Client secret is not stored. You'll enter it when connecting.
-              </p>
             </div>
           </div>
 
