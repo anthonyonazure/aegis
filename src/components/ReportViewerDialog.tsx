@@ -667,6 +667,196 @@ export function ReportViewerDialog({ report, customerName, open, onOpenChange }:
     return 'Review this configuration in the Microsoft 365 admin center or Entra ID portal. Consider enabling additional security controls and monitoring.';
   };
 
+  const renderTenantSummary = () => {
+    if (!summary) return <p className="text-muted-foreground">No data available</p>;
+    
+    const tenants = data.tenants as Record<string, unknown>[] | undefined;
+    const recommendations = data.recommendations as string[] | undefined;
+    
+    return (
+      <div className="space-y-6">
+        <Card className="bg-muted/30 border-primary/20">
+          <CardContent className="p-4">
+            <p className="text-sm text-muted-foreground">
+              Overview of all connected M365 tenants, their health status, connectivity, and security posture.
+            </p>
+          </CardContent>
+        </Card>
+
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <MetricCard label="Total Tenants" value={summary.totalTenants as number ?? summary.tenantCount as number ?? 0} icon={<Monitor className="w-4 h-4" />} description="Managed tenant connections" />
+          <MetricCard label="Connected" value={summary.connectedTenants as number ?? 0} icon={<CheckCircle2 className="w-4 h-4" />} valueClassName="text-green-500" description="Actively connected tenants" />
+          <MetricCard label="Healthy" value={summary.healthyTenants as number ?? 0} icon={<CheckCircle2 className="w-4 h-4" />} valueClassName="text-green-500" />
+          <MetricCard label="Warning" value={summary.warningTenants as number ?? 0} icon={<AlertTriangle className="w-4 h-4" />} valueClassName={(summary.warningTenants as number ?? 0) > 0 ? 'text-yellow-500' : ''} />
+          <MetricCard label="Critical" value={summary.criticalTenants as number ?? 0} icon={<XCircle className="w-4 h-4" />} valueClassName={(summary.criticalTenants as number ?? 0) > 0 ? 'text-red-500' : ''} />
+          <MetricCard label="Avg Secure Score" value={`${summary.avgSecureScore ?? 0}%`} icon={<Shield className="w-4 h-4" />} valueClassName={getScoreColor(summary.avgSecureScore as number ?? 0)} />
+        </div>
+
+        {tenants && tenants.length > 0 && (
+          <>
+            <Separator />
+            <div>
+              <h4 className="font-semibold mb-3">Tenant Details</h4>
+              <div className="space-y-2">
+                {tenants.map((t, idx) => (
+                  <div key={idx} className="p-3 rounded-lg border bg-muted/20">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">{t.displayName as string ?? t.tenantName as string ?? 'Unknown'}</span>
+                      <div className="flex gap-2">
+                        <Badge variant="outline">{t.status as string ?? 'unknown'}</Badge>
+                        <Badge variant="outline" className={
+                          (t.healthStatus as string) === 'healthy' ? 'text-green-500 border-green-500/30' :
+                          (t.healthStatus as string) === 'warning' ? 'text-yellow-500 border-yellow-500/30' :
+                          (t.healthStatus as string) === 'critical' ? 'text-red-500 border-red-500/30' : ''
+                        }>{t.healthStatus as string ?? 'unknown'}</Badge>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+                      <span>Environment: {t.environment as string ?? 'production'}</span>
+                      <span>Secure Score: {t.secureScorePercent as number ?? 0}%</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+
+        {recommendations && recommendations.length > 0 && (
+          <>
+            <Separator />
+            <div>
+              <h4 className="font-semibold mb-3">Recommendations</h4>
+              <ul className="space-y-2">
+                {recommendations.map((rec, idx) => (
+                  <li key={idx} className="flex items-start gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+                    <span className="text-sm">{rec}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </>
+        )}
+      </div>
+    );
+  };
+
+  const renderPsaTickets = () => {
+    if (!summary) return <p className="text-muted-foreground">No data available</p>;
+    
+    const tickets = (data.tickets ?? data.psaTicketDetails) as Record<string, unknown>[] | undefined;
+    const recommendations = data.recommendations as string[] | undefined;
+    
+    return (
+      <div className="space-y-6">
+        <Card className="bg-muted/30 border-primary/20">
+          <CardContent className="p-4">
+            <p className="text-sm text-muted-foreground">
+              Summary of PSA tickets created from drift detection, compliance failures, and other automated events.
+            </p>
+          </CardContent>
+        </Card>
+
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <MetricCard label="Total Tickets" value={summary.totalTickets as number ?? 0} icon={<FileText className="w-4 h-4" />} />
+          <MetricCard label="Customers" value={summary.customerCount as number ?? 0} icon={<Users className="w-4 h-4" />} />
+          <MetricCard label="Tenants" value={summary.tenantCount as number ?? 0} icon={<Monitor className="w-4 h-4" />} />
+        </div>
+
+        {tickets && tickets.length > 0 && (
+          <>
+            <Separator />
+            <div>
+              <h4 className="font-semibold mb-3">Recent Tickets</h4>
+              <div className="space-y-2">
+                {tickets.slice(0, 10).map((t, idx) => (
+                  <div key={idx} className="p-3 rounded-lg border bg-muted/20">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">{t.title as string ?? 'Untitled'}</span>
+                      <div className="flex gap-2">
+                        <Badge variant="outline">{t.status as string ?? ''}</Badge>
+                        <Badge variant={
+                          (t.priority as string) === 'critical' ? 'destructive' : 'outline'
+                        } className={
+                          (t.priority as string) === 'high' ? 'text-orange-500 border-orange-500/30' : ''
+                        }>{t.priority as string ?? ''}</Badge>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+                      <span>Type: {(t.ticketType ?? t.ticket_type) as string ?? ''}</span>
+                      {(t.createdAt ?? t.created_at) && (
+                        <span>Created: {format(new Date(String(t.createdAt ?? t.created_at)), 'MMM d, yyyy')}</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+
+        {recommendations && recommendations.length > 0 && (
+          <>
+            <Separator />
+            <div>
+              <h4 className="font-semibold mb-3">Recommendations</h4>
+              <ul className="space-y-2">
+                {recommendations.map((rec, idx) => (
+                  <li key={idx} className="flex items-start gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+                    <span className="text-sm">{rec}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </>
+        )}
+      </div>
+    );
+  };
+
+  const renderGenericReport = () => {
+    const recommendations = data.recommendations as string[] | undefined;
+    
+    return (
+      <div className="space-y-6">
+        {summary && (
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            {Object.entries(summary)
+              .filter(([, v]) => v !== null && v !== undefined)
+              .slice(0, 9)
+              .map(([key, value], idx) => (
+                <MetricCard 
+                  key={idx}
+                  label={key.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase())}
+                  value={typeof value === 'number' ? value : String(value)}
+                  icon={<FileText className="w-4 h-4" />}
+                />
+              ))}
+          </div>
+        )}
+
+        {recommendations && recommendations.length > 0 && (
+          <>
+            <Separator />
+            <div>
+              <h4 className="font-semibold mb-3">Recommendations</h4>
+              <ul className="space-y-2">
+                {recommendations.map((rec, idx) => (
+                  <li key={idx} className="flex items-start gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+                    <span className="text-sm">{rec}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </>
+        )}
+      </div>
+    );
+  };
+
   const renderContent = () => {
     switch (report.report_type) {
       case 'executive_summary':
@@ -679,8 +869,12 @@ export function ReportViewerDialog({ report, customerName, open, onOpenChange }:
         return renderBillingReport();
       case 'security':
         return renderSecurityReport();
+      case 'tenant_summary':
+        return renderTenantSummary();
+      case 'psa_tickets':
+        return renderPsaTickets();
       default:
-        return <p className="text-muted-foreground">Unknown report type</p>;
+        return renderGenericReport();
     }
   };
 
