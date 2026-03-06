@@ -8,6 +8,8 @@ import {
   RefreshCw,
   AlertCircle,
   Loader2,
+  Unplug,
+  Zap,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -46,8 +48,12 @@ export const TenantSelector = ({
     selectedCustomerId,
     selectedTenantId,
     tenantName,
+    activeConnections,
+    focusedConnectionId,
+    isConnectionActive,
     selectCustomer,
     selectTenant,
+    disconnectTenant,
     loadCustomersAndTenants,
     getTenantsForCustomer,
   } = useTenant();
@@ -63,12 +69,17 @@ export const TenantSelector = ({
   
   const handleSelectCustomer = (customerId: string) => {
     selectCustomer(customerId);
-    // Don't close - let user select a tenant
   };
 
   const handleSelectTenant = async (tenantId: string) => {
     await selectTenant(tenantId);
     setOpen(false);
+  };
+
+  const handleDisconnectTenant = async (e: React.MouseEvent, connectionId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    await disconnectTenant(connectionId);
   };
 
   const handleClearSelection = () => {
@@ -89,7 +100,7 @@ export const TenantSelector = ({
 
   const getConnectionStatus = () => {
     if (!selectedTenantId) return null;
-    if (isConnected) {
+    if (isConnectionActive(selectedTenantId)) {
       return <Badge variant="default" className="bg-success/20 text-success text-xs">Connected</Badge>;
     }
     if (selectedTenant?.status === 'connected') {
@@ -97,6 +108,8 @@ export const TenantSelector = ({
     }
     return <Badge variant="outline" className="text-xs">Not Configured</Badge>;
   };
+
+  const activeCount = activeConnections.length;
 
   if (collapsed) {
     return (
@@ -106,7 +119,7 @@ export const TenantSelector = ({
             variant="ghost" 
             size="icon"
             className={cn(
-              "h-10 w-10",
+              "h-10 w-10 relative",
               isConnected && "text-success"
             )}
           >
@@ -117,6 +130,11 @@ export const TenantSelector = ({
             ) : (
               <AlertCircle className="h-5 w-5 text-muted-foreground" />
             )}
+            {activeCount > 1 && (
+              <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-[10px] font-bold rounded-full h-4 w-4 flex items-center justify-center">
+                {activeCount}
+              </span>
+            )}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-72">
@@ -125,10 +143,13 @@ export const TenantSelector = ({
             tenants={tenants}
             selectedCustomerId={selectedCustomerId}
             selectedTenantId={selectedTenantId}
-            isConnected={isConnected}
+            focusedConnectionId={focusedConnectionId}
+            isConnectionActive={isConnectionActive}
+            activeCount={activeCount}
             getTenantsForCustomer={getTenantsForCustomer}
             onSelectCustomer={handleSelectCustomer}
             onSelectTenant={handleSelectTenant}
+            onDisconnectTenant={handleDisconnectTenant}
             onClearSelection={handleClearSelection}
             onNavigateToAuth={onNavigateToAuth}
             onNavigateToCustomers={onNavigateToCustomers}
@@ -160,7 +181,7 @@ export const TenantSelector = ({
             )}
             <div className="flex flex-col items-start min-w-0">
               <span className="text-xs text-muted-foreground">
-                {selectedCustomerId ? 'Active Tenant' : 'No Selection'}
+                {activeCount > 1 ? `${activeCount} Active Tenants` : selectedCustomerId ? 'Active Tenant' : 'No Selection'}
               </span>
               <span className="text-sm font-medium truncate max-w-full">
                 {getDisplayText()}
@@ -179,10 +200,13 @@ export const TenantSelector = ({
           tenants={tenants}
           selectedCustomerId={selectedCustomerId}
           selectedTenantId={selectedTenantId}
-          isConnected={isConnected}
+          focusedConnectionId={focusedConnectionId}
+          isConnectionActive={isConnectionActive}
+          activeCount={activeCount}
           getTenantsForCustomer={getTenantsForCustomer}
           onSelectCustomer={handleSelectCustomer}
           onSelectTenant={handleSelectTenant}
+          onDisconnectTenant={handleDisconnectTenant}
           onClearSelection={handleClearSelection}
           onNavigateToAuth={onNavigateToAuth}
           onNavigateToCustomers={onNavigateToCustomers}
@@ -208,10 +232,13 @@ interface TenantSelectorContentProps {
   tenants: TenantInfo[];
   selectedCustomerId: string | null;
   selectedTenantId: string | null;
-  isConnected: boolean;
+  focusedConnectionId: string | null;
+  isConnectionActive: (id: string) => boolean;
+  activeCount: number;
   getTenantsForCustomer: (customerId: string) => TenantInfo[];
   onSelectCustomer: (customerId: string) => void;
   onSelectTenant: (tenantId: string) => Promise<void>;
+  onDisconnectTenant: (e: React.MouseEvent, connectionId: string) => Promise<void>;
   onClearSelection: () => void;
   onNavigateToAuth?: () => void;
   onNavigateToCustomers?: () => void;
@@ -224,10 +251,13 @@ const TenantSelectorContent = ({
   tenants,
   selectedCustomerId,
   selectedTenantId,
-  isConnected,
+  focusedConnectionId,
+  isConnectionActive,
+  activeCount,
   getTenantsForCustomer,
   onSelectCustomer,
   onSelectTenant,
+  onDisconnectTenant,
   onClearSelection,
   onNavigateToAuth,
   onNavigateToCustomers,
@@ -237,7 +267,14 @@ const TenantSelectorContent = ({
   return (
     <>
       <DropdownMenuLabel className="flex items-center justify-between">
-        <span>Select Tenant</span>
+        <div className="flex items-center gap-2">
+          <span>Select Tenant</span>
+          {activeCount > 0 && (
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+              {activeCount} active
+            </Badge>
+          )}
+        </div>
         <Button
           variant="ghost"
           size="icon"
@@ -276,7 +313,6 @@ const TenantSelectorContent = ({
               const isSelected = selectedCustomerId === customer.id;
 
               if (customerTenants.length === 0) {
-                // Customer with no tenants - just show the customer
                 return (
                   <DropdownMenuItem 
                     key={customer.id}
@@ -295,7 +331,6 @@ const TenantSelectorContent = ({
                 );
               }
 
-              // Customer with tenants - show submenu
               return (
                 <DropdownMenuSub key={customer.id}>
                   <DropdownMenuSubTrigger className="gap-2">
@@ -309,7 +344,8 @@ const TenantSelectorContent = ({
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
                     {customerTenants.map((tenant) => {
-                      const isSelectedTenant = selectedTenantId === tenant.id;
+                      const isFocused = focusedConnectionId === tenant.id;
+                      const isActive = isConnectionActive(tenant.id);
                       const displayName = tenant.displayName || tenant.tenantName || 'Unnamed Tenant';
                       const isReady = tenant.status === 'connected' && tenant.hasCredentials;
 
@@ -317,21 +353,40 @@ const TenantSelectorContent = ({
                         <DropdownMenuItem
                           key={tenant.id}
                           onClick={() => onSelectTenant(tenant.id)}
-                          className="gap-2"
+                          className={cn("gap-2", isFocused && "bg-accent")}
                         >
-                          <Server className={cn(
-                            "h-4 w-4",
-                            isReady ? "text-success" : "text-muted-foreground"
-                          )} />
+                          <div className="relative">
+                            <Server className={cn(
+                              "h-4 w-4",
+                              isActive ? "text-success" : isReady ? "text-muted-foreground" : "text-muted-foreground/50"
+                            )} />
+                            {isActive && (
+                              <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-success" />
+                            )}
+                          </div>
                           <div className="flex-1 min-w-0">
-                            <span className="truncate block">{displayName}</span>
+                            <span className={cn("truncate block", isFocused && "font-semibold")}>
+                              {displayName}
+                            </span>
                             <span className="text-xs text-muted-foreground">
-                              {isReady ? 'Ready' : 'Not configured'}
+                              {isActive ? (isFocused ? 'Focused' : 'Active') : isReady ? 'Ready' : 'Not configured'}
                             </span>
                           </div>
-                          {isSelectedTenant && (
-                            <Check className="h-4 w-4 text-primary flex-shrink-0" />
-                          )}
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            {isActive && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-5 w-5 text-muted-foreground hover:text-destructive"
+                                onClick={(e) => onDisconnectTenant(e, tenant.id)}
+                              >
+                                <Unplug className="h-3 w-3" />
+                              </Button>
+                            )}
+                            {isFocused && (
+                              <Zap className="h-3.5 w-3.5 text-primary" />
+                            )}
+                          </div>
                         </DropdownMenuItem>
                       );
                     })}
