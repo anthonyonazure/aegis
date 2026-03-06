@@ -19,7 +19,7 @@ import { supabase } from '@/integrations/supabase/client';
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
 const LAST_SELECTION_KEY = 'msp_last_tenant_selection';
 
-interface TenantConnectionInfo {
+export interface TenantConnectionInfo {
   id: string;
   tenantId: string;
   tenantName: string | null;
@@ -36,8 +36,29 @@ interface CustomerInfo {
   tier: string;
 }
 
+export interface ActiveConnection {
+  connectionId: string;
+  tenantId: string;
+  tenantName: string | null;
+  accessToken: string;
+  tokenExpiry: Date;
+  hasStoredCredentials: boolean;
+}
+
 interface TenantState {
-  // Current active tenant
+  // Multi-tenant active connections
+  activeConnections: Map<string, ActiveConnection>;
+  focusedConnectionId: string | null;
+  
+  // Customer & tenant selection (UI)
+  selectedCustomerId: string | null;
+  selectedTenantId: string | null;
+  customers: CustomerInfo[];
+  tenants: TenantConnectionInfo[];
+}
+
+interface TenantContextValue {
+  // Backward-compatible single-tenant accessors (use focused tenant)
   isConnected: boolean;
   tenantId: string | null;
   tenantName: string | null;
@@ -46,14 +67,18 @@ interface TenantState {
   tokenExpiry: Date | null;
   hasStoredCredentials: boolean;
   
+  // Multi-tenant accessors
+  activeConnections: ActiveConnection[];
+  focusedConnectionId: string | null;
+  isConnectionActive: (connectionId: string) => boolean;
+  
   // Customer & tenant selection
   selectedCustomerId: string | null;
   selectedTenantId: string | null;
   customers: CustomerInfo[];
   tenants: TenantConnectionInfo[];
-}
-
-interface TenantContextValue extends TenantState {
+  
+  // Status
   isConnecting: boolean;
   isRefreshing: boolean;
   isLoading: boolean;
@@ -61,18 +86,17 @@ interface TenantContextValue extends TenantState {
   // Connection methods
   connect: (tenantId: string, clientId: string, clientSecret: string, customerId?: string) => Promise<TestConnectionResult>;
   disconnect: () => Promise<void>;
+  disconnectTenant: (connectionId: string) => Promise<void>;
   refreshToken: (connectionId?: string) => Promise<string | null>;
-  getValidToken: () => Promise<string | null>;
+  getValidToken: (connectionId?: string) => Promise<string | null>;
   
   // Selection methods
   selectCustomer: (customerId: string | null) => void;
   selectTenant: (tenantConnectionId: string | null) => Promise<void>;
   loadCustomersAndTenants: () => Promise<void>;
   
-  // Helper to get tenants for current customer
+  // Helpers
   getTenantsForCustomer: (customerId: string) => TenantConnectionInfo[];
-  
-  // Get all connected tenants (for cross-tenant features like backups)
   getAllConnectedTenants: () => TenantConnectionInfo[];
 }
 
@@ -105,13 +129,8 @@ function loadLastSelection(): LastSelection | null {
 
 export function TenantProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<TenantState>({
-    isConnected: false,
-    tenantId: null,
-    tenantName: null,
-    connectionId: null,
-    accessToken: null,
-    tokenExpiry: null,
-    hasStoredCredentials: false,
+    activeConnections: new Map(),
+    focusedConnectionId: null,
     selectedCustomerId: null,
     selectedTenantId: null,
     customers: [],
@@ -120,23 +139,22 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const refreshTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const refreshTimersRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
   const { toast } = useToast();
 
-  // Clear refresh timer on unmount
+  // Clear all refresh timers on unmount
   useEffect(() => {
     return () => {
-      if (refreshTimerRef.current) {
-        clearTimeout(refreshTimerRef.current);
-      }
+      refreshTimersRef.current.forEach(timer => clearTimeout(timer));
+      refreshTimersRef.current.clear();
     };
   }, []);
 
-  // Schedule automatic token refresh
+  // Schedule automatic token refresh for a specific connection
   const scheduleTokenRefresh = useCallback((expiryDate: Date, connectionId: string) => {
-    if (refreshTimerRef.current) {
-      clearTimeout(refreshTimerRef.current);
-    }
+    // Clear existing timer for this connection
+    const existing = refreshTimersRef.current.get(connectionId);
+    if (existing) clearTimeout(existing);
 
     const now = Date.now();
     const expiryTime = expiryDate.getTime();
@@ -144,17 +162,18 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     const delay = Math.max(refreshTime - now, 0);
 
     if (delay > 0) {
-      console.log(`Token refresh scheduled in ${Math.round(delay / 1000 / 60)} minutes`);
-      refreshTimerRef.current = setTimeout(async () => {
-        console.log('Auto-refreshing token...');
+      console.log(`Token refresh for ${connectionId} scheduled in ${Math.round(delay / 1000 / 60)} minutes`);
+      const timer = setTimeout(async () => {
+        console.log(`Auto-refreshing token for ${connectionId}...`);
         await refreshToken(connectionId);
       }, delay);
+      refreshTimersRef.current.set(connectionId, timer);
     }
   }, []);
 
   // Refresh token using stored credentials
   const refreshToken = useCallback(async (connectionId?: string): Promise<string | null> => {
-    const connId = connectionId || state.connectionId;
+    const connId = connectionId || state.focusedConnectionId;
     if (!connId) {
       console.error('No connection ID for token refresh');
       return null;
@@ -166,6 +185,12 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
       
       if (result.error || !result.accessToken) {
         console.error('Token refresh failed:', result.error);
+        // Remove this connection from active map
+        setState(prev => {
+          const newMap = new Map(prev.activeConnections);
+          newMap.delete(connId);
+          return { ...prev, activeConnections: newMap };
+        });
         toast({
           title: 'Session Expired',
           description: 'Please reconnect to continue.',
@@ -176,16 +201,21 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
 
       const newExpiry = new Date(Date.now() + (result.expiresIn || 3600) * 1000);
       
-      setState(prev => ({
-        ...prev,
-        accessToken: result.accessToken!,
-        tokenExpiry: newExpiry,
-      }));
+      setState(prev => {
+        const newMap = new Map(prev.activeConnections);
+        const existing = newMap.get(connId);
+        if (existing) {
+          newMap.set(connId, {
+            ...existing,
+            accessToken: result.accessToken!,
+            tokenExpiry: newExpiry,
+          });
+        }
+        return { ...prev, activeConnections: newMap };
+      });
 
-      // Schedule next refresh
       scheduleTokenRefresh(newExpiry, connId);
-
-      console.log('Token refreshed successfully');
+      console.log(`Token refreshed successfully for ${connId}`);
       return result.accessToken;
     } catch (error) {
       console.error('Token refresh exception:', error);
@@ -193,48 +223,107 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsRefreshing(false);
     }
-  }, [state.connectionId, scheduleTokenRefresh, toast]);
+  }, [state.focusedConnectionId, scheduleTokenRefresh, toast]);
 
   // Get a valid token, refreshing if needed
-  const getValidToken = useCallback(async (): Promise<string | null> => {
-    if (!state.connectionId) {
+  const getValidToken = useCallback(async (connectionId?: string): Promise<string | null> => {
+    const connId = connectionId || state.focusedConnectionId;
+    if (!connId) {
       console.log('getValidToken: No connection ID');
       return null;
     }
 
+    const active = state.activeConnections.get(connId);
+    
     // Check if current token is still valid
-    if (state.accessToken && state.tokenExpiry) {
+    if (active?.accessToken && active?.tokenExpiry) {
       const now = Date.now();
-      const expiryTime = state.tokenExpiry.getTime();
-      
-      // If token expires in more than 5 minutes, it's still valid
+      const expiryTime = active.tokenExpiry.getTime();
       if (expiryTime - now > TOKEN_REFRESH_BUFFER_MS) {
-        return state.accessToken;
+        return active.accessToken;
       }
     }
 
-    // Token is missing or about to expire, try to refresh it
-    if (state.hasStoredCredentials) {
-      console.log('getValidToken: Refreshing token with stored credentials...');
-      return await refreshToken();
+    // Token is missing or about to expire, try to refresh
+    if (active?.hasStoredCredentials) {
+      console.log(`getValidToken: Refreshing token for ${connId}...`);
+      return await refreshToken(connId);
     }
 
-    // No stored credentials - user needs to reconnect
-    console.warn('getValidToken: No stored credentials available, user must reconnect');
+    // Check if tenant info says it has credentials even if not in active map
+    const tenant = state.tenants.find(t => t.id === connId);
+    if (tenant?.hasCredentials) {
+      console.log(`getValidToken: Refreshing token for non-active connection ${connId}...`);
+      return await refreshToken(connId);
+    }
+
+    console.warn('getValidToken: No stored credentials available');
     toast({
       title: 'Credentials Required',
       description: 'Your session has expired. Please disconnect and reconnect with your credentials.',
       variant: 'destructive',
     });
     return null;
-  }, [state.accessToken, state.tokenExpiry, state.connectionId, state.hasStoredCredentials, refreshToken, toast]);
+  }, [state.activeConnections, state.focusedConnectionId, state.tenants, refreshToken, toast]);
+
+  // Activate a connection (add to active map)
+  const activateConnection = useCallback(async (
+    tenantInfo: TenantConnectionInfo,
+    setAsFocused: boolean = true
+  ): Promise<boolean> => {
+    if (tenantInfo.status !== 'connected' || !tenantInfo.hasCredentials) {
+      return false;
+    }
+
+    // Check if already active
+    if (state.activeConnections.has(tenantInfo.id)) {
+      if (setAsFocused) {
+        setState(prev => ({ ...prev, focusedConnectionId: tenantInfo.id }));
+      }
+      return true;
+    }
+
+    setIsRefreshing(true);
+    try {
+      const result = await refreshTokenFromStoredCredentials(tenantInfo.id);
+      
+      if (result.accessToken) {
+        const tokenExpiry = new Date(Date.now() + (result.expiresIn || 3600) * 1000);
+        
+        setState(prev => {
+          const newMap = new Map(prev.activeConnections);
+          newMap.set(tenantInfo.id, {
+            connectionId: tenantInfo.id,
+            tenantId: tenantInfo.tenantId,
+            tenantName: tenantInfo.displayName || tenantInfo.tenantName,
+            accessToken: result.accessToken!,
+            tokenExpiry,
+            hasStoredCredentials: true,
+          });
+          return {
+            ...prev,
+            activeConnections: newMap,
+            focusedConnectionId: setAsFocused ? tenantInfo.id : prev.focusedConnectionId,
+          };
+        });
+
+        scheduleTokenRefresh(tokenExpiry, tenantInfo.id);
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Failed to activate tenant:', error);
+      return false;
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [state.activeConnections, scheduleTokenRefresh]);
 
   // Load customers and tenants
   const loadCustomersAndTenants = useCallback(async () => {
     try {
       setIsLoading(true);
       
-      // Load customers
       const customersData = await getCustomers();
       const customers: CustomerInfo[] = customersData.map(c => ({
         id: c.id,
@@ -242,7 +331,6 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
         tier: c.tier,
       }));
       
-      // Load all tenant connections
       const tenantsData = await getTenantConnections();
       const tenants: TenantConnectionInfo[] = (tenantsData || []).map(t => ({
         id: t.id,
@@ -273,7 +361,6 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
       // Try to restore last selection
       const lastSelection = loadLastSelection();
       if (lastSelection) {
-        // Verify the selection is still valid
         const customerExists = !lastSelection.customerId || customers.some(c => c.id === lastSelection.customerId);
         const tenantExists = !lastSelection.tenantId || tenants.some(t => t.id === lastSelection.tenantId);
         
@@ -284,24 +371,29 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
             selectedTenantId: lastSelection.tenantId,
           }));
 
-          // Auto-connect if there's a selected tenant with credentials
+          // Auto-activate the last selected tenant
           if (lastSelection.tenantId) {
             const selectedTenant = tenants.find(t => t.id === lastSelection.tenantId);
             if (selectedTenant?.status === 'connected' && selectedTenant.hasCredentials) {
-              // Auto-activate this tenant
               const result = await refreshTokenFromStoredCredentials(selectedTenant.id);
               if (result.accessToken) {
                 const tokenExpiry = new Date(Date.now() + (result.expiresIn || 3600) * 1000);
-                setState(prev => ({
-                  ...prev,
-                  isConnected: true,
-                  tenantId: selectedTenant.tenantId,
-                  tenantName: selectedTenant.displayName || selectedTenant.tenantName,
-                  connectionId: selectedTenant.id,
-                  accessToken: result.accessToken!,
-                  tokenExpiry,
-                  hasStoredCredentials: true,
-                }));
+                setState(prev => {
+                  const newMap = new Map(prev.activeConnections);
+                  newMap.set(selectedTenant.id, {
+                    connectionId: selectedTenant.id,
+                    tenantId: selectedTenant.tenantId,
+                    tenantName: selectedTenant.displayName || selectedTenant.tenantName,
+                    accessToken: result.accessToken!,
+                    tokenExpiry,
+                    hasStoredCredentials: true,
+                  });
+                  return {
+                    ...prev,
+                    activeConnections: newMap,
+                    focusedConnectionId: selectedTenant.id,
+                  };
+                });
                 scheduleTokenRefresh(tokenExpiry, selectedTenant.id);
               }
             }
@@ -315,48 +407,25 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     }
   }, [scheduleTokenRefresh]);
 
-  // Select a customer
+  // Select a customer — no longer disconnects active tenants
   const selectCustomer = useCallback((customerId: string | null) => {
     setState(prev => ({
       ...prev,
       selectedCustomerId: customerId,
-      // Clear tenant selection if customer changes
       selectedTenantId: null,
-      // Reset active connection state when switching customers
-      isConnected: false,
-      connectionId: null,
-      accessToken: null,
-      tokenExpiry: null,
+      // Don't clear active connections — they stay alive
     }));
-    
-    // Clear refresh timer
-    if (refreshTimerRef.current) {
-      clearTimeout(refreshTimerRef.current);
-      refreshTimerRef.current = null;
-    }
-    
     saveLastSelection({ customerId, tenantId: null });
   }, []);
 
-  // Select and activate a tenant
+  // Select and activate a tenant (adds to active map, sets as focused)
   const selectTenant = useCallback(async (tenantConnectionId: string | null) => {
-    // Clear refresh timer
-    if (refreshTimerRef.current) {
-      clearTimeout(refreshTimerRef.current);
-      refreshTimerRef.current = null;
-    }
-
     if (!tenantConnectionId) {
       setState(prev => ({
         ...prev,
         selectedTenantId: null,
-        isConnected: false,
-        tenantId: null,
-        tenantName: null,
-        connectionId: null,
-        accessToken: null,
-        tokenExpiry: null,
-        hasStoredCredentials: false,
+        // Don't clear active connections, just unfocus
+        focusedConnectionId: null,
       }));
       saveLastSelection({ customerId: state.selectedCustomerId, tenantId: null });
       return;
@@ -374,68 +443,71 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
       selectedCustomerId: tenant.customerId || prev.selectedCustomerId,
     }));
 
-    // If tenant has stored credentials, try to get an access token
+    // If tenant has stored credentials, activate it
     if (tenant.status === 'connected' && tenant.hasCredentials) {
-      setIsRefreshing(true);
-      try {
-        const result = await refreshTokenFromStoredCredentials(tenantConnectionId);
-        
-        if (result.accessToken) {
-          const tokenExpiry = new Date(Date.now() + (result.expiresIn || 3600) * 1000);
-          
-          setState(prev => ({
-            ...prev,
-            isConnected: true,
-            tenantId: tenant.tenantId,
-            tenantName: tenant.displayName || tenant.tenantName,
-            connectionId: tenantConnectionId,
-            accessToken: result.accessToken!,
-            tokenExpiry,
-            hasStoredCredentials: true,
-          }));
-
-          scheduleTokenRefresh(tokenExpiry, tenantConnectionId);
-          
-          toast({
-            title: 'Tenant Activated',
-            description: `Connected to ${tenant.displayName || tenant.tenantName}`,
-          });
-        } else {
-          // Credentials exist but token refresh failed
-          setState(prev => ({
-            ...prev,
-            isConnected: false,
-            tenantId: tenant.tenantId,
-            tenantName: tenant.displayName || tenant.tenantName,
-            connectionId: tenantConnectionId,
-            hasStoredCredentials: true,
-          }));
-          
-          toast({
-            title: 'Connection Issue',
-            description: 'Could not refresh token. You may need to reconnect.',
-            variant: 'destructive',
-          });
-        }
-      } catch (error) {
-        console.error('Failed to activate tenant:', error);
-      } finally {
-        setIsRefreshing(false);
+      const activated = await activateConnection(tenant, true);
+      
+      if (activated) {
+        toast({
+          title: 'Tenant Activated',
+          description: `Connected to ${tenant.displayName || tenant.tenantName}`,
+        });
+      } else {
+        setState(prev => ({
+          ...prev,
+          focusedConnectionId: tenantConnectionId,
+        }));
+        toast({
+          title: 'Connection Issue',
+          description: 'Could not refresh token. You may need to reconnect.',
+          variant: 'destructive',
+        });
       }
     } else {
-      // Tenant exists but not connected or no credentials
+      // Not connected or no credentials — just set as focused
       setState(prev => ({
         ...prev,
-        isConnected: false,
-        tenantId: tenant.tenantId,
-        tenantName: tenant.displayName || tenant.tenantName,
-        connectionId: tenantConnectionId,
-        hasStoredCredentials: false,
+        focusedConnectionId: tenantConnectionId,
       }));
     }
 
     saveLastSelection({ customerId: tenant.customerId, tenantId: tenantConnectionId });
-  }, [state.tenants, state.selectedCustomerId, scheduleTokenRefresh, toast]);
+  }, [state.tenants, state.selectedCustomerId, activateConnection, toast]);
+
+  // Disconnect a specific tenant from the active map
+  const disconnectTenant = useCallback(async (connectionId: string) => {
+    // Clear refresh timer
+    const timer = refreshTimersRef.current.get(connectionId);
+    if (timer) {
+      clearTimeout(timer);
+      refreshTimersRef.current.delete(connectionId);
+    }
+
+    setState(prev => {
+      const newMap = new Map(prev.activeConnections);
+      newMap.delete(connectionId);
+      
+      // If we just disconnected the focused tenant, pick another or null
+      let newFocused = prev.focusedConnectionId;
+      if (newFocused === connectionId) {
+        const remaining = Array.from(newMap.keys());
+        newFocused = remaining.length > 0 ? remaining[0] : null;
+      }
+
+      return {
+        ...prev,
+        activeConnections: newMap,
+        focusedConnectionId: newFocused,
+        selectedTenantId: prev.selectedTenantId === connectionId ? newFocused : prev.selectedTenantId,
+      };
+    });
+
+    const tenant = state.tenants.find(t => t.id === connectionId);
+    toast({
+      title: 'Tenant Disconnected',
+      description: `Disconnected from ${tenant?.displayName || tenant?.tenantName || 'tenant'}`,
+    });
+  }, [state.tenants, toast]);
 
   // Get tenants for a specific customer
   const getTenantsForCustomer = useCallback((customerId: string): TenantConnectionInfo[] => {
@@ -469,18 +541,16 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
 
       // Check if this tenant already exists
       const existingTenant = state.tenants.find(t => t.tenantId === tenantId);
-      let connectionId: string;
+      let newConnectionId: string;
       
       if (existingTenant) {
-        // Update existing connection
         await updateTenantConnection(existingTenant.id, { 
           status: 'connected',
           tenantName: result.tenantName,
           lastSync: new Date(),
         });
-        connectionId = existingTenant.id;
+        newConnectionId = existingTenant.id;
       } else {
-        // Create new connection
         const connection = await createTenantConnection({
           tenantId: result.tenantId || tenantId,
           tenantName: result.tenantName,
@@ -490,12 +560,12 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
           lastSync: new Date(),
           customerId: customerId || state.selectedCustomerId || undefined,
         });
-        connectionId = connection.id;
+        newConnectionId = connection.id;
       }
 
       // Store encrypted credentials
       try {
-        await storeEncryptedCredential(connectionId, clientId, clientSecret);
+        await storeEncryptedCredential(newConnectionId, clientId, clientSecret);
       } catch (credError) {
         console.error('Failed to store credentials:', credError);
         toast({
@@ -507,24 +577,28 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
 
       const tokenExpiry = new Date(Date.now() + (result.expiresIn || 3600) * 1000);
       
-      setState(prev => ({
-        ...prev,
-        isConnected: true,
-        tenantId: result.tenantId || tenantId,
-        tenantName: result.tenantName || null,
-        connectionId,
-        accessToken: result.accessToken,
-        tokenExpiry,
-        hasStoredCredentials: true,
-        selectedTenantId: connectionId,
-        selectedCustomerId: customerId || prev.selectedCustomerId,
-      }));
+      // Add to active connections map
+      setState(prev => {
+        const newMap = new Map(prev.activeConnections);
+        newMap.set(newConnectionId, {
+          connectionId: newConnectionId,
+          tenantId: result.tenantId || tenantId,
+          tenantName: result.tenantName || null,
+          accessToken: result.accessToken!,
+          tokenExpiry,
+          hasStoredCredentials: true,
+        });
+        return {
+          ...prev,
+          activeConnections: newMap,
+          focusedConnectionId: newConnectionId,
+          selectedTenantId: newConnectionId,
+          selectedCustomerId: customerId || prev.selectedCustomerId,
+        };
+      });
 
-      // Reload tenants to get the updated list
       await loadCustomersAndTenants();
-
-      // Schedule automatic token refresh
-      scheduleTokenRefresh(tokenExpiry, connectionId);
+      scheduleTokenRefresh(tokenExpiry, newConnectionId);
 
       toast({
         title: 'Connected Successfully',
@@ -533,7 +607,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
 
       saveLastSelection({ 
         customerId: customerId || state.selectedCustomerId, 
-        tenantId: connectionId 
+        tenantId: newConnectionId 
       });
 
       return result;
@@ -550,52 +624,53 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     }
   }, [toast, scheduleTokenRefresh, state.tenants, state.selectedCustomerId, loadCustomersAndTenants]);
 
+  // Disconnect the focused tenant (backward compat)
   const disconnect = useCallback(async () => {
-    // Clear any scheduled refresh
-    if (refreshTimerRef.current) {
-      clearTimeout(refreshTimerRef.current);
-      refreshTimerRef.current = null;
+    if (state.focusedConnectionId) {
+      await disconnectTenant(state.focusedConnectionId);
     }
+  }, [state.focusedConnectionId, disconnectTenant]);
 
-    if (state.connectionId) {
-      try {
-        await updateTenantConnection(state.connectionId, { status: 'disconnected' });
-      } catch (error) {
-        console.error('Failed to update connection status:', error);
-      }
-    }
+  // Check if a specific connection is active
+  const isConnectionActive = useCallback((connectionId: string): boolean => {
+    return state.activeConnections.has(connectionId);
+  }, [state.activeConnections]);
 
-    setState(prev => ({
-      ...prev,
-      isConnected: false,
-      tenantId: null,
-      tenantName: null,
-      connectionId: null,
-      accessToken: null,
-      tokenExpiry: null,
-      hasStoredCredentials: false,
-      // Keep customer selection but clear tenant selection
-      selectedTenantId: null,
-    }));
-
-    // Reload tenants to reflect disconnected status
-    await loadCustomersAndTenants();
-
-    toast({
-      title: 'Disconnected',
-      description: 'Disconnected from tenant',
-    });
-
-    saveLastSelection({ customerId: state.selectedCustomerId, tenantId: null });
-  }, [state.connectionId, state.selectedCustomerId, toast, loadCustomersAndTenants]);
-
+  // Derived backward-compatible values from focused connection
+  const focused = state.focusedConnectionId 
+    ? state.activeConnections.get(state.focusedConnectionId) 
+    : undefined;
+  
   const value: TenantContextValue = {
-    ...state,
+    // Backward-compatible single-tenant accessors
+    isConnected: state.activeConnections.size > 0,
+    tenantId: focused?.tenantId || null,
+    tenantName: focused?.tenantName || null,
+    connectionId: state.focusedConnectionId,
+    accessToken: focused?.accessToken || null,
+    tokenExpiry: focused?.tokenExpiry || null,
+    hasStoredCredentials: focused?.hasStoredCredentials || false,
+    
+    // Multi-tenant accessors
+    activeConnections: Array.from(state.activeConnections.values()),
+    focusedConnectionId: state.focusedConnectionId,
+    isConnectionActive,
+    
+    // Selection
+    selectedCustomerId: state.selectedCustomerId,
+    selectedTenantId: state.selectedTenantId,
+    customers: state.customers,
+    tenants: state.tenants,
+    
+    // Status
     isConnecting,
     isRefreshing,
     isLoading,
+    
+    // Methods
     connect,
     disconnect,
+    disconnectTenant,
     refreshToken,
     getValidToken,
     selectCustomer,
