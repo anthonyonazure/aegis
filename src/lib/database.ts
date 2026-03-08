@@ -55,36 +55,20 @@ export async function updateTenantConnection(id: string, updates: Partial<Tenant
 export async function getTenantConnections() {
   const { data, error } = await supabase
     .from('tenant_connections')
-    .select('*')
+    .select('*, customers(name)')
     .order('created_at', { ascending: false });
 
   if (error) throw sanitizeDatabaseError(error, 'fetch tenant connections');
   return data;
 }
 
-export async function getActiveTenantConnection() {
-  const { data, error } = await supabase
+export async function deleteTenantConnection(id: string) {
+  const { error } = await supabase
     .from('tenant_connections')
-    .select('*')
-    .eq('status', 'connected')
-    .order('last_sync', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .delete()
+    .eq('id', id);
 
-  if (error) throw sanitizeDatabaseError(error, 'fetch active connection');
-  return data;
-}
-
-// Get tenant connections for a specific customer
-export async function getTenantConnectionsByCustomerId(customerId: string) {
-  const { data, error } = await supabase
-    .from('tenant_connections')
-    .select('*')
-    .eq('customer_id', customerId)
-    .order('created_at', { ascending: false });
-
-  if (error) throw sanitizeDatabaseError(error, 'fetch tenant connections for customer');
-  return data;
+  if (error) throw sanitizeDatabaseError(error, 'delete tenant connection');
 }
 
 // Store encrypted credentials server-side via edge function
@@ -129,6 +113,28 @@ export async function hasStoredCredentials(tenantConnectionId: string): Promise<
   return !!data;
 }
 
+// Batch check credentials for multiple connections at once (avoids N+1)
+export async function batchHasStoredCredentials(tenantConnectionIds: string[]): Promise<Map<string, boolean>> {
+  const result = new Map<string, boolean>();
+  if (tenantConnectionIds.length === 0) return result;
+
+  const { data, error } = await supabase
+    .from('tenant_credentials')
+    .select('tenant_connection_id')
+    .in('tenant_connection_id', tenantConnectionIds);
+
+  if (error) {
+    console.error('Error batch checking credentials:', error);
+    // Default all to false on error
+    tenantConnectionIds.forEach(id => result.set(id, false));
+    return result;
+  }
+
+  const credentialSet = new Set((data || []).map(d => d.tenant_connection_id));
+  tenantConnectionIds.forEach(id => result.set(id, credentialSet.has(id)));
+  return result;
+}
+
 // Export Jobs
 export async function createExportJob(job: {
   name: string;
@@ -147,7 +153,6 @@ export async function createExportJob(job: {
       categories: job.categories,
       formats: job.formats,
       status: 'pending',
-      progress: 0,
     })
     .select()
     .single();
@@ -156,17 +161,27 @@ export async function createExportJob(job: {
   return data;
 }
 
-export async function updateExportJob(id: string, updates: Partial<ExportJob>) {
-  const updateData: Record<string, unknown> = {};
-  if (updates.status) updateData.status = updates.status;
-  if (updates.progress !== undefined) updateData.progress = updates.progress;
-  if (updates.error) updateData.error = updates.error;
-  if (updates.completedAt) updateData.completed_at = updates.completedAt.toISOString();
-  if (updates.outputPath) updateData.output_path = updates.outputPath;
-
+export async function getExportJobs() {
   const { data, error } = await supabase
     .from('export_jobs')
-    .update(updateData)
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) throw sanitizeDatabaseError(error, 'fetch export jobs');
+  return data;
+}
+
+export async function updateExportJob(id: string, updates: Partial<ExportJob>) {
+  const { data, error } = await supabase
+    .from('export_jobs')
+    .update({
+      status: updates.status,
+      progress: updates.progress,
+      error: updates.error,
+      completed_at: updates.completedAt?.toISOString(),
+      output_path: updates.outputPath,
+      metadata: updates.metadata as Record<string, unknown>,
+    })
     .eq('id', id)
     .select()
     .single();
@@ -175,57 +190,63 @@ export async function updateExportJob(id: string, updates: Partial<ExportJob>) {
   return data;
 }
 
-export async function getExportJobs(tenantConnectionId?: string) {
+// Git Configs
+export async function getGitConfig(tenantConnectionId?: string) {
   let query = supabase
-    .from('export_jobs')
-    .select('*')
-    .order('created_at', { ascending: false });
+    .from('git_configs')
+    .select('*');
 
   if (tenantConnectionId) {
     query = query.eq('tenant_connection_id', tenantConnectionId);
   }
 
-  const { data, error } = await query;
+  const { data, error } = await query.maybeSingle();
 
-  if (error) throw sanitizeDatabaseError(error, 'fetch export jobs');
+  if (error) throw sanitizeDatabaseError(error, 'fetch git config');
   return data;
 }
 
-export async function getExportJob(id: string) {
-  const { data, error } = await supabase
-    .from('export_jobs')
-    .select('*')
-    .eq('id', id)
-    .single();
+export async function saveGitConfig(config: Partial<GitConfig> & { tenantConnectionId?: string }) {
+  const userId = await getCurrentUserId();
+  
+  const existing = await getGitConfig(config.tenantConnectionId);
 
-  if (error) throw sanitizeDatabaseError(error, 'fetch export job');
-  return data;
-}
+  if (existing) {
+    const { data, error } = await supabase
+      .from('git_configs')
+      .update({
+        provider: config.provider,
+        repo_url: config.repoUrl,
+        branch: config.branch,
+        auto_commit: config.autoCommit,
+        commit_message_template: config.commitMessageTemplate,
+        cicd_template: config.cicdTemplate,
+      })
+      .eq('id', existing.id)
+      .select()
+      .single();
 
-export async function deleteExportJob(id: string) {
-  const { error } = await supabase
-    .from('export_jobs')
-    .delete()
-    .eq('id', id);
+    if (error) throw sanitizeDatabaseError(error, 'update git config');
+    return data;
+  } else {
+    const { data, error } = await supabase
+      .from('git_configs')
+      .insert({
+        user_id: userId,
+        provider: config.provider || 'github',
+        repo_url: config.repoUrl,
+        branch: config.branch || 'main',
+        auto_commit: config.autoCommit ?? false,
+        commit_message_template: config.commitMessageTemplate,
+        cicd_template: config.cicdTemplate,
+        tenant_connection_id: config.tenantConnectionId,
+      })
+      .select()
+      .single();
 
-  if (error) throw sanitizeDatabaseError(error, 'delete export job');
-}
-
-export async function cancelExportJob(id: string) {
-  const { data, error } = await supabase
-    .from('export_jobs')
-    .update({
-      status: 'cancelled',
-      error: 'Export cancelled by user',
-      completed_at: new Date().toISOString(),
-    })
-    .eq('id', id)
-    .in('status', ['pending', 'running'])
-    .select()
-    .single();
-
-  if (error) throw sanitizeDatabaseError(error, 'cancel export job');
-  return data;
+    if (error) throw sanitizeDatabaseError(error, 'save git config');
+    return data;
+  }
 }
 
 // Exported Resources
@@ -234,67 +255,54 @@ export async function getExportedResources(exportJobId: string) {
     .from('exported_resources')
     .select('*')
     .eq('export_job_id', exportJobId)
-    .order('created_at', { ascending: true });
+    .order('category');
 
   if (error) throw sanitizeDatabaseError(error, 'fetch exported resources');
   return data;
 }
 
-// Git Config
-export async function saveGitConfig(config: Omit<GitConfig, 'id'> & { tenantConnectionId?: string }) {
-  const userId = await getCurrentUserId();
-  
+export async function saveExportedResource(resource: {
+  exportJobId: string;
+  category: string;
+  resourceType: string;
+  resourceId?: string;
+  resourceName?: string;
+  data: Record<string, unknown>;
+  terraformConfig?: string;
+  bicepConfig?: string;
+  powershellScript?: string;
+}) {
   const { data, error } = await supabase
-    .from('git_configs')
-    .upsert({
-      user_id: userId,
-      tenant_connection_id: config.tenantConnectionId,
-      provider: config.provider,
-      repo_url: config.repoUrl,
-      branch: config.branch,
-      auto_commit: config.autoCommit,
-      commit_message_template: config.commitMessage,
-      cicd_template: config.cicdTemplate,
+    .from('exported_resources')
+    .insert({
+      export_job_id: resource.exportJobId,
+      category: resource.category,
+      resource_type: resource.resourceType,
+      resource_id: resource.resourceId,
+      resource_name: resource.resourceName,
+      data: resource.data,
+      terraform_config: resource.terraformConfig,
+      bicep_config: resource.bicepConfig,
+      powershell_script: resource.powershellScript,
     })
     .select()
     .single();
 
-  if (error) throw sanitizeDatabaseError(error, 'save git config');
+  if (error) throw sanitizeDatabaseError(error, 'save exported resource');
   return data;
 }
 
-export async function getGitConfig(tenantConnectionId?: string) {
-  let query = supabase.from('git_configs').select('*');
-  
-  if (tenantConnectionId) {
-    query = query.eq('tenant_connection_id', tenantConnectionId);
-  }
-  
-  const { data, error } = await query.order('created_at', { ascending: false }).limit(1).maybeSingle();
+export async function deleteExportJob(id: string) {
+  // Delete resources first (cascade might handle this, but be explicit)
+  await supabase
+    .from('exported_resources')
+    .delete()
+    .eq('export_job_id', id);
 
-  if (error) throw sanitizeDatabaseError(error, 'fetch git config');
-  return data;
-}
+  const { error } = await supabase
+    .from('export_jobs')
+    .delete()
+    .eq('id', id);
 
-// Subscribe to export job updates
-export function subscribeToExportJob(jobId: string, callback: (job: unknown) => void) {
-  const channel = supabase
-    .channel(`export-job-${jobId}`)
-    .on(
-      'postgres_changes',
-      {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'export_jobs',
-        filter: `id=eq.${jobId}`,
-      },
-      (payload) => {
-        callback(payload.new);
-      }
-    )
-    .subscribe();
-
-  return () => {
-    supabase.removeChannel(channel);
-  };
+  if (error) throw sanitizeDatabaseError(error, 'delete export job');
 }
