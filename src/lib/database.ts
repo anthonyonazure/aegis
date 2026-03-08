@@ -338,17 +338,17 @@ export async function saveExportedResource(resource: {
 }) {
   const { data, error } = await supabase
     .from('exported_resources')
-    .insert({
+    .insert([{
       export_job_id: resource.exportJobId,
       category: resource.category,
       resource_type: resource.resourceType,
       resource_id: resource.resourceId,
       resource_name: resource.resourceName,
-      data: resource.data,
+      data: resource.data as import('@/integrations/supabase/types').Json,
       terraform_config: resource.terraformConfig,
       bicep_config: resource.bicepConfig,
       powershell_script: resource.powershellScript,
-    })
+    }])
     .select()
     .single();
 
