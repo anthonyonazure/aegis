@@ -7,7 +7,6 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -17,7 +16,6 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
 
-    // Create client with user's auth token to verify identity
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       return new Response(
@@ -49,7 +47,7 @@ serve(async (req) => {
       );
     }
 
-    // Create admin client with service role for vault operations
+    // Create admin client with service role
     const adminClient = createClient(supabaseUrl, supabaseServiceKey);
 
     // Verify user owns the tenant connection
@@ -76,39 +74,31 @@ serve(async (req) => {
 
     console.log(`Storing credentials for tenant connection ${tenantConnectionId}`);
 
-    // Check if there's an existing credential with vault secret
-    const { data: existingCred } = await adminClient
-      .from('tenant_credentials')
-      .select('vault_secret_id')
-      .eq('tenant_connection_id', tenantConnectionId)
-      .single();
+    // Use the existing RPC function which handles vault operations properly
+    try {
+      const { data: credId, error: rpcError } = await adminClient.rpc('store_encrypted_credential', {
+        p_tenant_connection_id: tenantConnectionId,
+        p_client_id: clientId,
+        p_client_secret: clientSecret,
+        p_user_id: user.id,
+      });
 
-    // Delete old vault secret if exists
-    if (existingCred?.vault_secret_id) {
-      await adminClient
-        .from('vault.secrets')
-        .delete()
-        .eq('id', existingCred.vault_secret_id);
-      console.log('Deleted old vault secret');
-    }
+      if (rpcError) {
+        console.error('RPC store_encrypted_credential error:', rpcError);
+        throw rpcError;
+      }
 
-    // Store secret in Vault using service role (has permission)
-    const { data: vaultSecret, error: vaultError } = await adminClient
-      .from('vault.secrets')
-      .insert({
-        secret: clientSecret,
-        name: `tenant_credential_${tenantConnectionId}`,
-        description: 'Service principal client secret for tenant connection',
-      })
-      .select('id')
-      .single();
+      console.log(`Successfully stored credentials via vault RPC for ${tenantConnectionId}`);
+      return new Response(
+        JSON.stringify({ success: true, credentialId: credId, method: 'vault' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    } catch (vaultError) {
+      console.error('Vault RPC failed, falling back to base64:', vaultError);
 
-    if (vaultError) {
-      console.error('Vault insert error:', vaultError);
-      
-      // Fallback: store as base64 encoded (version 1 encryption)
+      // Fallback: store as base64 encoded
       const encodedSecret = btoa(clientSecret);
-      
+
       const { data: credData, error: credError } = await adminClient
         .from('tenant_credentials')
         .upsert({
@@ -139,44 +129,6 @@ serve(async (req) => {
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-
-    // Insert/update credential with vault reference
-    const { data: credData, error: credError } = await adminClient
-      .from('tenant_credentials')
-      .upsert({
-        tenant_connection_id: tenantConnectionId,
-        user_id: user.id,
-        client_id: clientId,
-        encrypted_secret: null,
-        vault_secret_id: vaultSecret.id,
-        encryption_version: 2,
-        updated_at: new Date().toISOString(),
-      }, {
-        onConflict: 'tenant_connection_id',
-      })
-      .select('id')
-      .single();
-
-    if (credError) {
-      console.error('Credential upsert error:', credError);
-      // Clean up vault secret
-      await adminClient
-        .from('vault.secrets')
-        .delete()
-        .eq('id', vaultSecret.id);
-
-      return new Response(
-        JSON.stringify({ error: 'Failed to store credentials' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    console.log(`Successfully stored credentials for ${tenantConnectionId}`);
-
-    return new Response(
-      JSON.stringify({ success: true, credentialId: credData.id, method: 'vault' }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
   } catch (error) {
     console.error('Unexpected error:', error);
     return new Response(

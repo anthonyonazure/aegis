@@ -3078,7 +3078,7 @@ export type Database = {
         Row: {
           client_id: string
           created_at: string
-          encrypted_secret: string
+          encrypted_secret: string | null
           encryption_version: number
           id: string
           tenant_connection_id: string
@@ -3089,7 +3089,7 @@ export type Database = {
         Insert: {
           client_id: string
           created_at?: string
-          encrypted_secret: string
+          encrypted_secret?: string | null
           encryption_version?: number
           id?: string
           tenant_connection_id: string
@@ -3100,7 +3100,7 @@ export type Database = {
         Update: {
           client_id?: string
           created_at?: string
-          encrypted_secret?: string
+          encrypted_secret?: string | null
           encryption_version?: number
           id?: string
           tenant_connection_id?: string
@@ -3496,14 +3496,24 @@ export type Database = {
         Args: { p_api_key: string; p_provider: string }
         Returns: string
       }
-      store_encrypted_credential: {
-        Args: {
-          p_client_id: string
-          p_client_secret: string
-          p_tenant_connection_id: string
-        }
-        Returns: string
-      }
+      store_encrypted_credential:
+        | {
+            Args: {
+              p_client_id: string
+              p_client_secret: string
+              p_tenant_connection_id: string
+            }
+            Returns: string
+          }
+        | {
+            Args: {
+              p_client_id: string
+              p_client_secret: string
+              p_tenant_connection_id: string
+              p_user_id?: string
+            }
+            Returns: string
+          }
       store_psa_credential: {
         Args: {
           p_api_key: string
