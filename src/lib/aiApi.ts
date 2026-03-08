@@ -225,16 +225,18 @@ export async function runAIAnalysis(options: {
   model?: string;
 }): Promise<{ success: boolean; result?: Record<string, unknown>; error?: string }> {
   try {
-    const { data, error } = await supabase.functions.invoke('ai-analyze', {
-      body: options,
-    });
+    const result = await withRetry(
+      async () => {
+        const { data, error } = await supabase.functions.invoke('ai-analyze', {
+          body: options,
+        });
+        if (error) throw error;
+        return data;
+      },
+      { maxRetries: 2, baseDelay: 1500 }
+    );
 
-    if (error) {
-      console.error('Analysis error:', error);
-      return { success: false, error: error.message || 'Analysis failed' };
-    }
-
-    return { success: true, result: data?.result };
+    return { success: true, result: result?.result };
   } catch (err) {
     console.error('Analysis exception:', err);
     return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
