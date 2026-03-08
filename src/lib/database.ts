@@ -270,7 +270,7 @@ export async function getGitConfig(tenantConnectionId?: string) {
   return data;
 }
 
-export async function saveGitConfig(config: Partial<GitConfig> & { tenantConnectionId?: string }) {
+export async function saveGitConfig(config: Record<string, unknown> & { tenantConnectionId?: string }) {
   const userId = await getCurrentUserId();
   
   const existing = await getGitConfig(config.tenantConnectionId);
