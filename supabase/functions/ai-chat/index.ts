@@ -152,6 +152,23 @@ serve(async (req) => {
     }
 
     const userId = claimsData.claims.sub as string;
+
+    // Rate limit check
+    const rateCheck = checkRateLimit(userId);
+    if (!rateCheck.allowed) {
+      return new Response(
+        JSON.stringify({ error: 'Rate limit exceeded. Please wait a moment before trying again.' }),
+        { 
+          status: 429, 
+          headers: { 
+            ...corsHeaders, 
+            'Content-Type': 'application/json',
+            'Retry-After': '60',
+          } 
+        }
+      );
+    }
+
     const body: ChatRequest = await req.json();
     const { 
       messages, 
