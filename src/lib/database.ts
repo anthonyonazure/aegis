@@ -297,12 +297,12 @@ export async function saveGitConfig(config: Record<string, unknown> & { tenantCo
       .from('git_configs')
       .insert({
         user_id: userId,
-        provider: config.provider || 'github',
-        repo_url: config.repoUrl,
-        branch: config.branch || 'main',
-        auto_commit: config.autoCommit ?? false,
-        commit_message_template: config.commitMessageTemplate,
-        cicd_template: config.cicdTemplate,
+        provider: (config.provider as string) || 'github',
+        repo_url: config.repoUrl as string,
+        branch: (config.branch as string) || 'main',
+        auto_commit: (config.autoCommit as boolean) ?? false,
+        commit_message_template: (config.commitMessage || config.commitMessageTemplate) as string,
+        cicd_template: config.cicdTemplate as string,
         tenant_connection_id: config.tenantConnectionId,
       })
       .select()
