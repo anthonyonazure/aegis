@@ -64,6 +64,7 @@ import { useExport } from '@/hooks/useTenant';
 import { useTenant } from '@/contexts/TenantContext';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
+import { usePageTitle } from '@/hooks/usePageTitle';
 import { Button } from '@/components/ui/button';
 import { Loader2, LogOut } from 'lucide-react';
 import { TenantSelector } from '@/components/TenantSelector';
@@ -91,6 +92,7 @@ const Index = () => {
 
   const { isExporting, progress, exportMessage, startExport } = useExport();
   const { toast } = useToast();
+  usePageTitle(activeTab === 'dashboard' ? undefined : activeTab.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()));
 
   // Redirect to login if not authenticated
   useEffect(() => {
