@@ -30,6 +30,7 @@ export default function Login() {
   const [searchParams] = useSearchParams();
   const { signIn, signUp, isAuthenticated, loading: authLoading } = useAuth();
   const { toast } = useToast();
+  usePageTitle('Login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [inviteCode, setInviteCode] = useState(searchParams.get('invite') || '');
