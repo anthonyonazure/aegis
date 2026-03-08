@@ -9,7 +9,7 @@ import {
   updateTenantConnection,
   getTenantConnections,
   storeEncryptedCredential,
-  hasStoredCredentials
+  batchHasStoredCredentials
 } from '@/lib/database';
 import { getCustomers } from '@/lib/customerDatabase';
 import { useToast } from '@/hooks/use-toast';
