@@ -321,7 +321,8 @@ const Index = () => {
         open={showPreflightCheck}
         onOpenChange={(open) => { if (!open) { setShowPreflightCheck(false); setPreflightToken(null); setPreflightResources([]); } }}
         onProceed={handlePreflightProceed}
-        resourceIds={preflightResources}
+        onCancel={() => { setShowPreflightCheck(false); setPreflightToken(null); setPreflightResources([]); }}
+        selectedResources={preflightResources}
         accessToken={preflightToken}
       />
     </div>
