@@ -117,22 +117,31 @@ export async function streamAIChat(options: {
       return;
     }
 
-    const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session.access_token}`,
+    const response = await withRetry(
+      async () => {
+        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            messages,
+            featureType: featureType || 'general-chat',
+            provider: provider || 'lovable',
+            model,
+            stream: true,
+            tenantContext,
+            conversationId,
+          }),
+        });
+        if (!res.ok && [429, 500, 502, 503, 504].includes(res.status)) {
+          throw new FetchError(`AI API error: ${res.status}`, res.status);
+        }
+        return res;
       },
-      body: JSON.stringify({
-        messages,
-        featureType: featureType || 'general-chat',
-        provider: provider || 'lovable',
-        model,
-        stream: true,
-        tenantContext,
-        conversationId,
-      }),
-    });
+      { maxRetries: 2, baseDelay: 1000 }
+    );
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
