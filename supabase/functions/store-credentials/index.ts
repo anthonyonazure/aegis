@@ -80,6 +80,7 @@ serve(async (req) => {
         p_tenant_connection_id: tenantConnectionId,
         p_client_id: clientId,
         p_client_secret: clientSecret,
+        p_user_id: user.id,
       });
 
       if (rpcError) {
