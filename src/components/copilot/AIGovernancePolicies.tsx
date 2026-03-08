@@ -91,6 +91,7 @@ export const AIGovernancePolicies = ({ customerId }: AIGovernancePoliciesProps) 
       setPolicies(data);
     } catch (error) {
       console.error('Failed to load policies:', error);
+      toast({ title: 'Failed to load policies', description: 'Please try again', variant: 'destructive' });
     } finally {
       setIsLoading(false);
     }
