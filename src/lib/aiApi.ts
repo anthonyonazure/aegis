@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { withRetry, FetchError } from '@/lib/retry';
 
 export interface AIMessage {
   role: 'user' | 'assistant' | 'system';
