@@ -331,7 +331,7 @@ export async function saveExportedResource(resource: {
   resourceType: string;
   resourceId?: string;
   resourceName?: string;
-  data: Record<string, unknown>;
+  data: unknown;
   terraformConfig?: string;
   bicepConfig?: string;
   powershellScript?: string;
