@@ -217,12 +217,25 @@ serve(async (req) => {
       }
     }
 
+    // Retry helper for transient failures
+    async function fetchWithRetry(url: string, init: RequestInit, retries = 2): Promise<Response> {
+      for (let i = 0; i <= retries; i++) {
+        const res = await fetch(url, init);
+        if (res.ok || ![429, 500, 502, 503, 504].includes(res.status) || i === retries) {
+          return res;
+        }
+        const delay = Math.pow(2, i) * 1000 + Math.random() * 500;
+        console.warn(`AI API retry ${i + 1}/${retries} after ${Math.round(delay)}ms (status ${res.status})`);
+        await new Promise(r => setTimeout(r, delay));
+      }
+      throw new Error('Retry exhausted');
+    }
+
     // Make API request based on provider
     let response: Response;
 
     if (provider === 'anthropic') {
-      // Anthropic has different API format
-      response = await fetch(endpoint, {
+      response = await fetchWithRetry(endpoint, {
         method: 'POST',
         headers: {
           'x-api-key': apiKey,
@@ -241,8 +254,7 @@ serve(async (req) => {
         }),
       });
     } else {
-      // OpenAI-compatible API
-      response = await fetch(endpoint, {
+      response = await fetchWithRetry(endpoint, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${apiKey}`,

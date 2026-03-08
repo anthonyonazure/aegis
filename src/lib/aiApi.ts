@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { withRetry, FetchError } from '@/lib/retry';
 
 export interface AIMessage {
   role: 'user' | 'assistant' | 'system';
@@ -116,22 +117,31 @@ export async function streamAIChat(options: {
       return;
     }
 
-    const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session.access_token}`,
+    const response = await withRetry(
+      async () => {
+        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            messages,
+            featureType: featureType || 'general-chat',
+            provider: provider || 'lovable',
+            model,
+            stream: true,
+            tenantContext,
+            conversationId,
+          }),
+        });
+        if (!res.ok && [429, 500, 502, 503, 504].includes(res.status)) {
+          throw new FetchError(`AI API error: ${res.status}`, res.status);
+        }
+        return res;
       },
-      body: JSON.stringify({
-        messages,
-        featureType: featureType || 'general-chat',
-        provider: provider || 'lovable',
-        model,
-        stream: true,
-        tenantContext,
-        conversationId,
-      }),
-    });
+      { maxRetries: 2, baseDelay: 1000 }
+    );
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
@@ -215,16 +225,18 @@ export async function runAIAnalysis(options: {
   model?: string;
 }): Promise<{ success: boolean; result?: Record<string, unknown>; error?: string }> {
   try {
-    const { data, error } = await supabase.functions.invoke('ai-analyze', {
-      body: options,
-    });
+    const result = await withRetry(
+      async () => {
+        const { data, error } = await supabase.functions.invoke('ai-analyze', {
+          body: options,
+        });
+        if (error) throw error;
+        return data;
+      },
+      { maxRetries: 2, baseDelay: 1500 }
+    );
 
-    if (error) {
-      console.error('Analysis error:', error);
-      return { success: false, error: error.message || 'Analysis failed' };
-    }
-
-    return { success: true, result: data?.result };
+    return { success: true, result: result?.result };
   } catch (err) {
     console.error('Analysis exception:', err);
     return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };

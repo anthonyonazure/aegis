@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useToast } from '@/hooks/use-toast';
 import { format, formatDistanceToNow } from 'date-fns';
 import { History, ChevronRight, Clock, TrendingUp, TrendingDown, Minus, X, BarChart3, Eye } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
@@ -25,6 +26,7 @@ export function AIAnalysisHistoryPanel({
   scoreExtractor,
   titleExtractor,
 }: AIAnalysisHistoryPanelProps) {
+  const { toast } = useToast();
   const [isOpen, setIsOpen] = useState(false);
   const [history, setHistory] = useState<AIAnalysisResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -43,6 +45,7 @@ export function AIAnalysisHistoryPanel({
       setHistory(results);
     } catch (error) {
       console.error('Failed to load history:', error);
+      toast({ title: 'Failed to load analysis history', variant: 'destructive' });
     } finally {
       setIsLoading(false);
     }
