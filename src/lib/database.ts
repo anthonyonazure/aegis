@@ -234,17 +234,18 @@ export async function getExportJobs() {
   return data;
 }
 
-export async function updateExportJob(id: string, updates: Partial<ExportJob>) {
+export async function updateExportJob(id: string, updates: Record<string, unknown>) {
+  const updateData: Record<string, unknown> = {};
+  if (updates.status !== undefined) updateData.status = updates.status;
+  if (updates.progress !== undefined) updateData.progress = updates.progress;
+  if (updates.error !== undefined) updateData.error = updates.error;
+  if (updates.completedAt !== undefined) updateData.completed_at = (updates.completedAt as Date)?.toISOString();
+  if (updates.outputPath !== undefined) updateData.output_path = updates.outputPath;
+  if (updates.metadata !== undefined) updateData.metadata = updates.metadata;
+
   const { data, error } = await supabase
     .from('export_jobs')
-    .update({
-      status: updates.status,
-      progress: updates.progress,
-      error: updates.error,
-      completed_at: updates.completedAt?.toISOString(),
-      output_path: updates.outputPath,
-      metadata: updates.metadata as Record<string, unknown>,
-    })
+    .update(updateData)
     .eq('id', id)
     .select()
     .single();
