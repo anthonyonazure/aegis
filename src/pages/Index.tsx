@@ -92,6 +92,7 @@ const Index = () => {
 
   const { isExporting, progress, exportMessage, startExport } = useExport();
   const { toast } = useToast();
+  usePageTitle(activeTab === 'dashboard' ? undefined : activeTab.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()));
 
   // Redirect to login if not authenticated
   useEffect(() => {
