@@ -342,14 +342,12 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
         status: t.status,
       }));
 
-      // Check for stored credentials for connected tenants
+      // Batch check credentials for all connected tenants (avoids N+1)
       const connectedTenants = tenants.filter(t => t.status === 'connected');
+      const connectedIds = connectedTenants.map(t => t.id);
+      const credentialsMap = await batchHasStoredCredentials(connectedIds);
       for (const tenant of connectedTenants) {
-        try {
-          tenant.hasCredentials = await hasStoredCredentials(tenant.id);
-        } catch {
-          tenant.hasCredentials = false;
-        }
+        tenant.hasCredentials = credentialsMap.get(tenant.id) || false;
       }
 
       setState(prev => ({
