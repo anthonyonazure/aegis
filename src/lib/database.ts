@@ -279,12 +279,12 @@ export async function saveGitConfig(config: Record<string, unknown> & { tenantCo
     const { data, error } = await supabase
       .from('git_configs')
       .update({
-        provider: config.provider,
-        repo_url: config.repoUrl,
-        branch: config.branch,
-        auto_commit: config.autoCommit,
-        commit_message_template: config.commitMessageTemplate,
-        cicd_template: config.cicdTemplate,
+        provider: config.provider as string,
+        repo_url: config.repoUrl as string,
+        branch: config.branch as string,
+        auto_commit: config.autoCommit as boolean,
+        commit_message_template: (config.commitMessage || config.commitMessageTemplate) as string,
+        cicd_template: config.cicdTemplate as string,
       })
       .eq('id', existing.id)
       .select()
