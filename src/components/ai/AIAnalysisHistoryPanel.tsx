@@ -26,6 +26,7 @@ export function AIAnalysisHistoryPanel({
   scoreExtractor,
   titleExtractor,
 }: AIAnalysisHistoryPanelProps) {
+  const { toast } = useToast();
   const [isOpen, setIsOpen] = useState(false);
   const [history, setHistory] = useState<AIAnalysisResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -44,6 +45,7 @@ export function AIAnalysisHistoryPanel({
       setHistory(results);
     } catch (error) {
       console.error('Failed to load history:', error);
+      toast({ title: 'Failed to load analysis history', variant: 'destructive' });
     } finally {
       setIsLoading(false);
     }
