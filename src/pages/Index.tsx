@@ -17,7 +17,6 @@ import { ScheduledExportsView } from '@/components/views/ScheduledExportsView';
 import { WebhooksView } from '@/components/views/WebhooksView';
 import { CustomersView } from '@/components/views/CustomersView';
 import { ScheduledDriftView } from '@/components/views/ScheduledDriftView';
-import { PoliciesView } from '@/components/views/PoliciesView';
 import { PolicyTemplatesView } from '@/components/views/PolicyTemplatesView';
 import { PolicyDeploymentView } from '@/components/views/PolicyDeploymentView';
 import { PolicyBrowserView } from '@/components/views/PolicyBrowserView';
@@ -57,11 +56,11 @@ import { AISchedulesView } from '@/components/views/AISchedulesView';
 import { IntuneView } from '@/components/views/IntuneView';
 import { SettingsView } from '@/components/views/SettingsView';
 import { PreflightCheckDialog } from '@/components/PreflightCheckDialog';
-import { ALL_RESOURCE_CATEGORIES, ExportFormat } from '@/types/tenant';
 import { filterSupportedResourceIds } from '@/lib/resourceSupport';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useExport } from '@/hooks/useTenant';
 import { useTenant } from '@/contexts/TenantContext';
+import { useResourceSelection } from '@/hooks/useResourceSelection';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { usePageTitle } from '@/hooks/usePageTitle';
@@ -69,151 +68,115 @@ import { Button } from '@/components/ui/button';
 import { Loader2, LogOut } from 'lucide-react';
 import { TenantSelector } from '@/components/TenantSelector';
 
+// Simple views that require no parent state
+const SIMPLE_VIEWS: Record<string, React.ComponentType> = {
+  'customers': CustomersView,
+  'intune': IntuneView,
+  'nl-query': NaturalLanguageQueryView,
+  'ai-chat': AIChatView,
+  'cross-tenant-insights': CrossTenantInsightsView,
+  'ai-schedules': AISchedulesView,
+  'tenant-analyzer': TenantAnalyzerView,
+  'secure-score': SecureScoreDashboardView,
+  'security-predictor': SecurityPredictorView,
+  'security-benchmark': SecurityBenchmarkView,
+  'policy-generator': PolicyGeneratorView,
+  'remediation-scripts': RemediationScriptsView,
+  'scheduled-deployments': ScheduledDeploymentsView,
+  'change-impact': ChangeImpactView,
+  'policy-browser': PolicyBrowserView,
+  'migration-planner': MigrationPlannerView,
+  'jobs': JobsView,
+  'import': ImportView,
+  'validation': ValidationView,
+  'anomaly-detection': AnomalyDetectionView,
+  'incident-responder': IncidentResponderView,
+  'user-risk-profiler': UserRiskProfilerView,
+  'config-optimizer': ConfigOptimizerView,
+  'drift': DriftDetectionView,
+  'drift-explainer': DriftExplainerView,
+  'scheduled-drift': ScheduledDriftView,
+  'compliance': ComplianceView,
+  'compliance-advisor': ComplianceAdvisorView,
+  'compliance-dashboard': ComplianceDashboardView,
+  'audit': AuditView,
+  'permission-health': PermissionHealthView,
+  'copilot-agents': CopilotAgentsView,
+  'copilot-advisor': CopilotReadinessAdvisorView,
+  'permissions-reference': PermissionsReferenceView,
+  'schedules': ScheduledExportsView,
+  'automated-backups': AutomatedBackupsView,
+  'webhooks': WebhooksView,
+  'reports': ReportsView,
+  'executive-report': ExecutiveReportView,
+  'license-optimizer': LicenseOptimizerView,
+  'cost-predictor': CostPredictorView,
+  'billing': BillingView,
+  'git': GitView,
+  'documentation': DocumentationView,
+  'auth': AuthView,
+  'settings': SettingsView,
+};
+
+// Alias mappings for tabs that share a component
+const TAB_ALIASES: Record<string, string> = {
+  'health-dashboard': 'tenant-health',
+  'policies': 'policy-templates',
+  'policy-templates': 'policy-templates',
+  'psa': 'psa-integrations',
+  'psa-integrations': 'psa-integrations',
+};
+
 const Index = () => {
   const navigate = useNavigate();
   const { user, loading: authLoading, signOut, isAuthenticated } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [selectedResources, setSelectedResources] = useState<string[]>([]);
-  const [selectedFormats, setSelectedFormats] = useState<ExportFormat['id'][]>(['json']);
   const [showPreflightCheck, setShowPreflightCheck] = useState(false);
   const [preflightToken, setPreflightToken] = useState<string | null>(null);
   const [preflightResources, setPreflightResources] = useState<string[]>([]);
   const [selectedPolicyTemplateId, setSelectedPolicyTemplateId] = useState<string | null>(null);
   const [remediationContext, setRemediationContext] = useState<RemediationContext | null>(null);
-  
-  // Use shared tenant context
-  const { 
-    isConnected, 
-    connectionId,
-    loadCustomersAndTenants,
-    getValidToken,
-    refreshToken
-  } = useTenant();
 
+  const {
+    selectedResources, setSelectedResources, selectedFormats,
+    handleResourceSelect, handleSelectAll, handleSelectAllResources, handleFormatToggle,
+  } = useResourceSelection();
+
+  const { isConnected, connectionId, loadCustomersAndTenants, getValidToken } = useTenant();
   const { isExporting, progress, exportMessage, startExport } = useExport();
   const { toast } = useToast();
   usePageTitle(activeTab === 'dashboard' ? undefined : activeTab.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()));
 
-  // Redirect to login if not authenticated
   useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
-      navigate('/login');
-    }
+    if (!authLoading && !isAuthenticated) navigate('/login');
   }, [authLoading, isAuthenticated, navigate]);
 
-  // Load customers and tenants on mount
   useEffect(() => {
-    if (isAuthenticated) {
-      loadCustomersAndTenants();
-    }
+    if (isAuthenticated) loadCustomersAndTenants();
   }, [isAuthenticated, loadCustomersAndTenants]);
-
-  const handleResourceSelect = (resourceId: string) => {
-    setSelectedResources(prev => 
-      prev.includes(resourceId)
-        ? prev.filter(id => id !== resourceId)
-        : [...prev, resourceId]
-    );
-  };
-
-  const handleSelectAll = (categoryId: string) => {
-    const category = ALL_RESOURCE_CATEGORIES.find(c => c.id === categoryId);
-    if (!category) return;
-
-    // Only select supported resources
-    const supportedResources = category.subcategories
-      .filter(sub => {
-        if (sub.supported === false) return false;
-        if (sub.supported === true) return true;
-        return !!sub.graphEndpoint || !!sub.azureResourceType;
-      })
-      .map(sub => `${categoryId}/${sub.id}`);
-
-    if (supportedResources.length === 0) return;
-
-    const allSelected = supportedResources.every(r => selectedResources.includes(r));
-
-    if (allSelected) {
-      setSelectedResources(prev => prev.filter(r => !supportedResources.includes(r)));
-    } else {
-      setSelectedResources(prev => [...new Set([...prev, ...supportedResources])]);
-    }
-  };
-
-  const handleSelectAllResources = () => {
-    // Get all supported resource IDs across all categories
-    const allSupportedResources = ALL_RESOURCE_CATEGORIES.flatMap(category =>
-      category.subcategories
-        .filter(sub => {
-          if (sub.supported === false) return false;
-          if (sub.supported === true) return true;
-          return !!sub.graphEndpoint || !!sub.azureResourceType;
-        })
-        .map(sub => `${category.id}/${sub.id}`)
-    );
-
-    const allSelected = allSupportedResources.every(r => selectedResources.includes(r));
-
-    if (allSelected) {
-      setSelectedResources([]);
-    } else {
-      setSelectedResources(allSupportedResources);
-    }
-  };
-
-  const handleFormatToggle = (format: ExportFormat['id']) => {
-    setSelectedFormats(prev =>
-      prev.includes(format)
-        ? prev.filter(f => f !== format)
-        : [...prev, format]
-    );
-  };
 
   const handleStartExport = async () => {
     if (!isConnected) {
-      toast({
-        title: 'Not Connected',
-        description: 'Please connect to a tenant first',
-        variant: 'destructive',
-      });
+      toast({ title: 'Not Connected', description: 'Please connect to a tenant first', variant: 'destructive' });
       setActiveTab('auth');
       return;
     }
-
-    // Get a valid token (will refresh if needed)
     const validToken = await getValidToken();
     if (!validToken) {
-      toast({
-        title: 'Session Expired',
-        description: 'Please reconnect to the tenant',
-        variant: 'destructive',
-      });
+      toast({ title: 'Session Expired', description: 'Please reconnect to the tenant', variant: 'destructive' });
       setActiveTab('auth');
       return;
     }
-
     const { supported, unsupported } = filterSupportedResourceIds(selectedResources);
-
-    // If user had previously selected "Coming Soon" resources, remove them now so exports don't fail.
     if (unsupported.length > 0) {
       setSelectedResources(supported);
-      toast({
-        title: 'Some resources skipped',
-        description: `${unsupported.length} unsupported resources were removed from this export (Coming Soon).`,
-      });
+      toast({ title: 'Some resources skipped', description: `${unsupported.length} unsupported resources were removed from this export (Coming Soon).` });
     }
-
     if (supported.length === 0) {
-      toast({
-        title: 'No Supported Resources',
-        description: 'Please select at least one supported (Graph API) resource to export.',
-        variant: 'destructive',
-      });
+      toast({ title: 'No Supported Resources', description: 'Please select at least one supported (Graph API) resource to export.', variant: 'destructive' });
       setActiveTab('resources');
       return;
     }
-
-    // Show preflight check dialog (only supported resources)
     setPreflightResources(supported);
     setPreflightToken(validToken);
     setShowPreflightCheck(true);
@@ -222,37 +185,31 @@ const Index = () => {
   const handlePreflightProceed = () => {
     setShowPreflightCheck(false);
     if (preflightToken) {
-      // Start export in the background so the UI can immediately switch to Jobs
-      startExport(
-        preflightToken,
-        preflightResources,
-        selectedFormats,
-        connectionId || undefined
-      ).catch(() => {
-        // Errors/toasts are handled inside startExport
-      });
-
+      startExport(preflightToken, preflightResources, selectedFormats, connectionId || undefined).catch(() => {});
       setActiveTab('jobs');
     }
   };
 
-  const handlePreflightCancel = () => {
-    setShowPreflightCheck(false);
-    setPreflightToken(null);
-    setPreflightResources([]);
-  };
-
-  const handleSignOut = async () => {
-    await signOut();
-    navigate('/login');
-  };
-
   const renderContent = () => {
+    // Check aliases
+    const resolvedTab = TAB_ALIASES[activeTab] || activeTab;
+
+    // Simple views (no parent state needed)
+    const SimpleView = SIMPLE_VIEWS[resolvedTab];
+    if (SimpleView) {
+      // Special cases for aliased tabs
+      if (resolvedTab === 'tenant-health') return <TenantHealthDashboardView />;
+      if (resolvedTab === 'policy-templates') return <PolicyTemplatesView />;
+      if (resolvedTab === 'psa-integrations') return <PSAIntegrationsView />;
+      return <SimpleView />;
+    }
+
+    // Complex views requiring parent state
     switch (activeTab) {
       case 'dashboard':
         return (
-          <DashboardView 
-            onNavigate={setActiveTab} 
+          <DashboardView
+            onNavigate={setActiveTab}
             isConnected={isConnected}
             selectedResourcesCount={selectedResources.length}
             selectedFormatsCount={selectedFormats.length}
@@ -260,7 +217,7 @@ const Index = () => {
         );
       case 'governance':
         return (
-          <GovernanceCenterView 
+          <GovernanceCenterView
             onNavigate={setActiveTab}
             onDeployPolicy={(templateId, context) => {
               setSelectedPolicyTemplateId(templateId);
@@ -269,39 +226,9 @@ const Index = () => {
             }}
           />
         );
-      case 'customers':
-        return <CustomersView />;
-      case 'intune':
-        return <IntuneView />;
-      case 'nl-query':
-        return <NaturalLanguageQueryView />;
-      case 'ai-chat':
-        return <AIChatView />;
-      case 'cross-tenant-insights':
-        return <CrossTenantInsightsView />;
-      case 'ai-schedules':
-        return <AISchedulesView />;
-      case 'health-dashboard':
-      case 'tenant-health':
-        return <TenantHealthDashboardView />;
-      case 'tenant-analyzer':
-        return <TenantAnalyzerView />;
-      case 'secure-score':
-        return <SecureScoreDashboardView />;
-      case 'security-predictor':
-        return <SecurityPredictorView />;
-      case 'security-benchmark':
-        return <SecurityBenchmarkView />;
-      case 'policies':
-      case 'policy-templates':
-        return <PolicyTemplatesView />;
-      case 'policy-generator':
-        return <PolicyGeneratorView />;
-      case 'remediation-scripts':
-        return <RemediationScriptsView />;
       case 'policy-deployment':
         return (
-          <PolicyDeploymentView 
+          <PolicyDeploymentView
             templateId={selectedPolicyTemplateId || undefined}
             remediationContext={remediationContext || undefined}
             onBack={() => {
@@ -311,13 +238,9 @@ const Index = () => {
             }}
           />
         );
-      case 'scheduled-deployments':
-        return <ScheduledDeploymentsView />;
-      case 'change-impact':
-        return <ChangeImpactView />;
       case 'resources':
         return (
-          <ResourcesView 
+          <ResourcesView
             selectedResources={selectedResources}
             onResourceSelect={handleResourceSelect}
             onSelectAll={handleSelectAll}
@@ -326,13 +249,9 @@ const Index = () => {
             onSetResources={setSelectedResources}
           />
         );
-      case 'policy-browser':
-        return <PolicyBrowserView />;
-      case 'migration-planner':
-        return <MigrationPlannerView />;
       case 'export':
         return (
-          <ExportView 
+          <ExportView
             selectedResources={selectedResources}
             selectedFormats={selectedFormats}
             onFormatToggle={handleFormatToggle}
@@ -342,73 +261,10 @@ const Index = () => {
             exportMessage={exportMessage}
           />
         );
-      case 'jobs':
-        return <JobsView />;
-      case 'import':
-        return <ImportView />;
-      case 'validation':
-        return <ValidationView />;
-      case 'anomaly-detection':
-        return <AnomalyDetectionView />;
-      case 'incident-responder':
-        return <IncidentResponderView />;
-      case 'user-risk-profiler':
-        return <UserRiskProfilerView />;
-      case 'config-optimizer':
-        return <ConfigOptimizerView />;
-      case 'drift':
-        return <DriftDetectionView />;
-      case 'drift-explainer':
-        return <DriftExplainerView />;
-      case 'scheduled-drift':
-        return <ScheduledDriftView />;
-      case 'compliance':
-        return <ComplianceView />;
-      case 'compliance-advisor':
-        return <ComplianceAdvisorView />;
-      case 'compliance-dashboard':
-        return <ComplianceDashboardView />;
-      case 'audit':
-        return <AuditView />;
-      case 'permission-health':
-        return <PermissionHealthView />;
-      case 'copilot-agents':
-        return <CopilotAgentsView />;
-      case 'copilot-advisor':
-        return <CopilotReadinessAdvisorView />;
-      case 'permissions-reference':
-        return <PermissionsReferenceView />;
-      case 'schedules':
-        return <ScheduledExportsView />;
-      case 'automated-backups':
-        return <AutomatedBackupsView />;
-      case 'webhooks':
-        return <WebhooksView />;
-      case 'psa':
-      case 'psa-integrations':
-        return <PSAIntegrationsView />;
-      case 'reports':
-        return <ReportsView />;
-      case 'executive-report':
-        return <ExecutiveReportView />;
-      case 'license-optimizer':
-        return <LicenseOptimizerView />;
-      case 'cost-predictor':
-        return <CostPredictorView />;
-      case 'billing':
-        return <BillingView />;
-      case 'git':
-        return <GitView />;
-      case 'documentation':
-        return <DocumentationView />;
-      case 'auth':
-        return <AuthView />;
-      case 'settings':
-        return <SettingsView />;
       default:
         return (
-          <DashboardView 
-            onNavigate={setActiveTab} 
+          <DashboardView
+            onNavigate={setActiveTab}
             isConnected={isConnected}
             selectedResourcesCount={selectedResources.length}
             selectedFormatsCount={selectedFormats.length}
@@ -417,7 +273,6 @@ const Index = () => {
     }
   };
 
-  // Show loading while checking auth
   if (authLoading) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
@@ -426,18 +281,13 @@ const Index = () => {
     );
   }
 
-  // Don't render if not authenticated (will redirect)
-  if (!isAuthenticated) {
-    return null;
-  }
+  if (!isAuthenticated) return null;
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} isConnected={isConnected} />
-      
       <main className="flex-1 overflow-auto">
         <div className="p-6 lg:p-8 max-w-7xl mx-auto">
-          {/* Global header: tenant selection + user actions */}
           <div className="flex flex-col gap-3 mb-4 md:flex-row md:items-center md:justify-between">
             <div className="w-full md:max-w-md">
               <TenantSelector
@@ -446,16 +296,13 @@ const Index = () => {
               />
             </div>
             <div className="flex items-center gap-4 justify-end">
-              <span className="text-sm text-muted-foreground truncate max-w-[60vw] md:max-w-none">
-                {user?.email}
-              </span>
-              <Button variant="ghost" size="sm" onClick={handleSignOut}>
+              <span className="text-sm text-muted-foreground truncate max-w-[60vw] md:max-w-none">{user?.email}</span>
+              <Button variant="ghost" size="sm" onClick={async () => { await signOut(); navigate('/login'); }}>
                 <LogOut className="h-4 w-4 mr-2" />
                 Sign Out
               </Button>
             </div>
           </div>
-          
           <AnimatePresence mode="wait">
             <motion.div
               key={activeTab}
@@ -470,16 +317,12 @@ const Index = () => {
         </div>
       </main>
 
-      {/* Preflight Check Dialog */}
       <PreflightCheckDialog
         open={showPreflightCheck}
-        onOpenChange={setShowPreflightCheck}
-        accessToken={preflightToken}
-        selectedResources={preflightResources}
-        tenantConnectionId={connectionId}
+        onClose={() => { setShowPreflightCheck(false); setPreflightToken(null); setPreflightResources([]); }}
         onProceed={handlePreflightProceed}
-        onCancel={handlePreflightCancel}
-        onRefreshToken={refreshToken}
+        resourceIds={preflightResources}
+        accessToken={preflightToken}
       />
     </div>
   );

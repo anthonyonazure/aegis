@@ -157,9 +157,26 @@ Return a JSON object with this exact structure:
 
 Provide specific, actionable guidance based on M365 security best practices and incident response frameworks (NIST, SANS).`;
 
+// Rate limiting (in-memory per instance)
+const _rl = new Map<string, { count: number; resetAt: number }>();
+function _checkRate(key: string, max = 15, windowMs = 60000): boolean {
+  const now = Date.now();
+  const e = _rl.get(key);
+  if (!e || now > e.resetAt) { _rl.set(key, { count: 1, resetAt: now + windowMs }); return true; }
+  if (e.count >= max) return false;
+  e.count++;
+  return true;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  const _rlKey = req.headers.get('authorization')?.slice(-20) || 'anon';
+  if (!_checkRate(_rlKey)) {
+    return new Response(JSON.stringify({ error: 'Rate limit exceeded. Please try again later.' }),
+      { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Retry-After': '60' } });
   }
 
   try {
