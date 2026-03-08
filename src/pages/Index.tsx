@@ -319,7 +319,7 @@ const Index = () => {
 
       <PreflightCheckDialog
         open={showPreflightCheck}
-        onClose={() => { setShowPreflightCheck(false); setPreflightToken(null); setPreflightResources([]); }}
+        onOpenChange={(open) => { if (!open) { setShowPreflightCheck(false); setPreflightToken(null); setPreflightResources([]); } }}
         onProceed={handlePreflightProceed}
         resourceIds={preflightResources}
         accessToken={preflightToken}
