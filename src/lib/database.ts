@@ -113,6 +113,69 @@ export async function hasStoredCredentials(tenantConnectionId: string): Promise<
   return !!data;
 }
 
+// Get single export job
+export async function getExportJob(id: string) {
+  const { data, error } = await supabase
+    .from('export_jobs')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (error) throw sanitizeDatabaseError(error, 'fetch export job');
+  return data;
+}
+
+// Get active tenant connection (most recent connected)
+export async function getActiveTenantConnection() {
+  const { data, error } = await supabase
+    .from('tenant_connections')
+    .select('*')
+    .eq('status', 'connected')
+    .order('last_sync', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error('Error fetching active connection:', error);
+    return null;
+  }
+  return data;
+}
+
+// Subscribe to export job updates via realtime
+export function subscribeToExportJob(jobId: string, callback: (job: Record<string, unknown>) => void) {
+  const channel = supabase
+    .channel(`export-job-${jobId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'export_jobs',
+        filter: `id=eq.${jobId}`,
+      },
+      (payload) => callback(payload.new as Record<string, unknown>)
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+// Cancel an export job
+export async function cancelExportJob(id: string) {
+  const { data, error } = await supabase
+    .from('export_jobs')
+    .update({ status: 'cancelled' })
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) throw sanitizeDatabaseError(error, 'cancel export job');
+  return data;
+}
+
 // Batch check credentials for multiple connections at once (avoids N+1)
 export async function batchHasStoredCredentials(tenantConnectionIds: string[]): Promise<Map<string, boolean>> {
   const result = new Map<string, boolean>();
