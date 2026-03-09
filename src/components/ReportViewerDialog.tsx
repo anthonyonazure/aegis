@@ -870,9 +870,19 @@ export function ReportViewerDialog({ report, customerName, open, onOpenChange }:
       case 'security':
         return renderSecurityReport();
       case 'tenant_summary':
+      case 'tenant_health':
         return renderTenantSummary();
       case 'psa_tickets':
         return renderPsaTickets();
+      // Categories that produce specific data shapes from edge function
+      case 'identity':
+      case 'devices':
+      case 'exchange':
+      case 'sharepoint':
+      case 'teams':
+      case 'licensing':
+      case 'copilot':
+        return renderGenericReport();
       default:
         return renderGenericReport();
     }
