@@ -1,6 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 
-export type ReportType = 'executive_summary' | 'compliance' | 'drift' | 'billing' | 'security' | 'tenant_summary' | 'psa_tickets';
+export type ReportType = 'executive_summary' | 'compliance' | 'drift' | 'billing' | 'security' | 'tenant_summary' | 'psa_tickets' | 'identity' | 'devices' | 'exchange' | 'sharepoint' | 'teams' | 'licensing' | 'copilot';
 export type ReportStatus = 'pending' | 'generating' | 'completed' | 'failed';
 
 export interface Report {
