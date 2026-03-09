@@ -5,7 +5,6 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { 
   Table, 
   TableBody, 
@@ -14,6 +13,13 @@ import {
   TableHeader, 
   TableRow 
 } from '@/components/ui/table';
+import { 
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { 
   Shield, 
   RefreshCw, 
@@ -122,7 +128,7 @@ function ScoreGauge({ percentage, size = 120 }: { percentage: number; size?: num
 }
 
 export function SecureScoreDashboardView() {
-  const { selectedCustomerId, customers } = useTenant();
+  const { customers } = useTenant();
   const [allScores, setAllScores] = useState<TenantSecureScore[]>([]);
   const [scores, setScores] = useState<TenantSecureScore[]>([]);
   const [allHistory, setAllHistory] = useState<ScoreHistory[]>([]);
@@ -132,13 +138,16 @@ export function SecureScoreDashboardView() {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedTenant, setSelectedTenant] = useState<string | null>(null);
   const [tenantConnectionIds, setTenantConnectionIds] = useState<string[]>([]);
+  const [filterCustomerId, setFilterCustomerId] = useState<string | null>(null);
 
-  const selectedCustomerName = customers.find(c => c.id === selectedCustomerId)?.name;
+  const selectedCustomerName = filterCustomerId 
+    ? customers.find(c => c.id === filterCustomerId)?.name 
+    : null;
 
-  // Load tenant connection IDs for the selected customer
+  // Load tenant connection IDs for the local customer filter
   useEffect(() => {
     const loadTenantConnections = async () => {
-      if (!selectedCustomerId) {
+      if (!filterCustomerId) {
         setTenantConnectionIds([]);
         return;
       }
@@ -146,17 +155,17 @@ export function SecureScoreDashboardView() {
       const { data } = await supabase
         .from('tenant_connections')
         .select('id')
-        .eq('customer_id', selectedCustomerId);
+        .eq('customer_id', filterCustomerId);
       
       setTenantConnectionIds((data || []).map(t => t.id));
     };
     
     loadTenantConnections();
-  }, [selectedCustomerId]);
+  }, [filterCustomerId]);
 
-  // Filter scores and history when customer selection changes
+  // Filter scores and history when customer filter changes
   useEffect(() => {
-    if (selectedCustomerId && tenantConnectionIds.length > 0) {
+    if (filterCustomerId && tenantConnectionIds.length > 0) {
       const filteredScores = allScores.filter(s => 
         tenantConnectionIds.includes(s.tenantConnectionId)
       );
@@ -166,12 +175,12 @@ export function SecureScoreDashboardView() {
       setHistory(allHistory.filter(h => 
         tenantConnectionIds.includes(h.tenantConnectionId)
       ));
-    } else {
+    } else if (!filterCustomerId) {
       setScores(allScores);
       setStats(calculateAggregatedStats(allScores));
       setHistory(allHistory);
     }
-  }, [selectedCustomerId, tenantConnectionIds, allScores, allHistory]);
+  }, [filterCustomerId, tenantConnectionIds, allScores, allHistory]);
 
   useEffect(() => {
     loadData();
@@ -263,21 +272,28 @@ export function SecureScoreDashboardView() {
             Aggregated security posture across all connected tenants
           </p>
         </div>
-        <Button onClick={handleRefresh} disabled={refreshing}>
-          <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-          {refreshing ? 'Refreshing...' : 'Refresh All'}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Select 
+            value={filterCustomerId || 'all'} 
+            onValueChange={(val) => setFilterCustomerId(val === 'all' ? null : val)}
+          >
+            <SelectTrigger className="w-[200px]">
+              <Filter className="h-4 w-4 mr-2" />
+              <SelectValue placeholder="All Customers" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Customers</SelectItem>
+              {customers.map((c) => (
+                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button onClick={handleRefresh} disabled={refreshing}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+            {refreshing ? 'Refreshing...' : 'Refresh All'}
+          </Button>
+        </div>
       </div>
-
-      {/* Customer filter indicator */}
-      {selectedCustomerId && (
-        <Alert className="border-primary/50 bg-primary/5">
-          <Filter className="h-4 w-4" />
-          <AlertDescription>
-            Showing secure scores for customer: <strong>{selectedCustomerName || 'Selected Customer'}</strong>
-          </AlertDescription>
-        </Alert>
-      )}
 
       {scores.length === 0 ? (
         <Card>
