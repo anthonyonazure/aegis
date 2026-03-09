@@ -716,45 +716,101 @@ export function SecureScoreDashboardView() {
               </Card>
             </TabsContent>
 
-            <TabsContent value="actions">
+            <TabsContent value="actions" className="space-y-4">
               <Card>
                 <CardHeader>
-                  <CardTitle>Top Improvement Actions</CardTitle>
-                  <CardDescription>
-                    Most common improvement recommendations across all tenants
-                  </CardDescription>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle>Improvement Actions</CardTitle>
+                      <CardDescription>
+                        {selectedTenant 
+                          ? `Recommendations for ${scores.find(s => s.tenantConnectionId === selectedTenant)?.tenantName || 'selected tenant'}`
+                          : 'Most common improvement recommendations across all tenants'
+                        }
+                      </CardDescription>
+                    </div>
+                    <Select
+                      value={selectedTenant || 'all'}
+                      onValueChange={(val) => setSelectedTenant(val === 'all' ? null : val)}
+                    >
+                      <SelectTrigger className="w-[250px]">
+                        <Building2 className="h-4 w-4 mr-2" />
+                        <SelectValue placeholder="All Tenants" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Tenants (Aggregated)</SelectItem>
+                        {scores.map((s) => (
+                          <SelectItem key={s.tenantConnectionId} value={s.tenantConnectionId}>
+                            {s.tenantName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <ScrollArea className="h-[500px]">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Action</TableHead>
-                          <TableHead>Tenants Affected</TableHead>
-                          <TableHead>Avg Impact</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {(stats?.topImprovementActions || []).map((action, idx) => (
-                          <TableRow key={idx}>
-                            <TableCell className="font-medium max-w-md">
-                              <div className="flex items-start gap-2">
-                                <Lightbulb className="h-4 w-4 mt-1 text-yellow-500 flex-shrink-0" />
-                                <span>{action.action}</span>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant="secondary">{action.count} tenants</Badge>
-                            </TableCell>
-                            <TableCell>
-                              <span className="text-green-600 font-medium">
-                                +{action.avgImpact.toFixed(1)} pts
-                              </span>
-                            </TableCell>
+                    {selectedTenant && selectedScore ? (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Control</TableHead>
+                            <TableHead>Category</TableHead>
+                            <TableHead>Score</TableHead>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                        </TableHeader>
+                        <TableBody>
+                          {selectedScore.controlScores
+                            .sort((a, b) => a.score - b.score)
+                            .map((control, idx) => (
+                              <TableRow key={idx}>
+                                <TableCell className="font-medium max-w-md">
+                                  <div className="flex items-start gap-2">
+                                    <Lightbulb className="h-4 w-4 mt-1 text-yellow-500 flex-shrink-0" />
+                                    <span>{control.controlName}</span>
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant="outline">{control.controlCategory}</Badge>
+                                </TableCell>
+                                <TableCell>
+                                  <span className="font-medium">{control.score.toFixed(1)}</span>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                        </TableBody>
+                      </Table>
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Action</TableHead>
+                            <TableHead>Tenants Affected</TableHead>
+                            <TableHead>Avg Impact</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {(stats?.topImprovementActions || []).map((action, idx) => (
+                            <TableRow key={idx}>
+                              <TableCell className="font-medium max-w-md">
+                                <div className="flex items-start gap-2">
+                                  <Lightbulb className="h-4 w-4 mt-1 text-yellow-500 flex-shrink-0" />
+                                  <span>{action.action}</span>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="secondary">{action.count} tenants</Badge>
+                              </TableCell>
+                              <TableCell>
+                                <span className="text-green-600 font-medium">
+                                  +{action.avgImpact.toFixed(1)} pts
+                                </span>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    )}
                   </ScrollArea>
                 </CardContent>
               </Card>
