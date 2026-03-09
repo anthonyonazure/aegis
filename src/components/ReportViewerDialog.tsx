@@ -870,7 +870,6 @@ export function ReportViewerDialog({ report, customerName, open, onOpenChange }:
       case 'security':
         return renderSecurityReport();
       case 'tenant_summary':
-      case 'tenant_health':
         return renderTenantSummary();
       case 'psa_tickets':
         return renderPsaTickets();
