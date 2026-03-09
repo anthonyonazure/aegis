@@ -302,7 +302,22 @@ export function ReportViewerDialog({ report, customerName, open, onOpenChange }:
           </>
         )}
 
-        {renderRecommendations()}
+        {(data.recommendations as string[])?.length > 0 && (
+          <>
+            <Separator />
+            <div>
+              <h4 className="font-semibold mb-3">Recommendations</h4>
+              <div className="space-y-2">
+                {(data.recommendations as string[]).map((rec, idx) => (
+                  <div key={idx} className="flex items-start gap-2 p-2 rounded border bg-muted/20">
+                    <AlertTriangle className="w-4 h-4 mt-0.5 text-yellow-500 shrink-0" />
+                    <p className="text-sm">{rec}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
       </div>
     );
   };
