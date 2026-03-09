@@ -129,7 +129,7 @@ function ScoreGauge({ percentage, size = 120 }: { percentage: number; size?: num
 }
 
 export function SecureScoreDashboardView() {
-  const { selectedCustomerId, customers } = useTenant();
+  const { customers } = useTenant();
   const [allScores, setAllScores] = useState<TenantSecureScore[]>([]);
   const [scores, setScores] = useState<TenantSecureScore[]>([]);
   const [allHistory, setAllHistory] = useState<ScoreHistory[]>([]);
@@ -139,13 +139,16 @@ export function SecureScoreDashboardView() {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedTenant, setSelectedTenant] = useState<string | null>(null);
   const [tenantConnectionIds, setTenantConnectionIds] = useState<string[]>([]);
+  const [filterCustomerId, setFilterCustomerId] = useState<string | null>(null);
 
-  const selectedCustomerName = customers.find(c => c.id === selectedCustomerId)?.name;
+  const selectedCustomerName = filterCustomerId 
+    ? customers.find(c => c.id === filterCustomerId)?.name 
+    : null;
 
-  // Load tenant connection IDs for the selected customer
+  // Load tenant connection IDs for the local customer filter
   useEffect(() => {
     const loadTenantConnections = async () => {
-      if (!selectedCustomerId) {
+      if (!filterCustomerId) {
         setTenantConnectionIds([]);
         return;
       }
@@ -153,17 +156,17 @@ export function SecureScoreDashboardView() {
       const { data } = await supabase
         .from('tenant_connections')
         .select('id')
-        .eq('customer_id', selectedCustomerId);
+        .eq('customer_id', filterCustomerId);
       
       setTenantConnectionIds((data || []).map(t => t.id));
     };
     
     loadTenantConnections();
-  }, [selectedCustomerId]);
+  }, [filterCustomerId]);
 
-  // Filter scores and history when customer selection changes
+  // Filter scores and history when customer filter changes
   useEffect(() => {
-    if (selectedCustomerId && tenantConnectionIds.length > 0) {
+    if (filterCustomerId && tenantConnectionIds.length > 0) {
       const filteredScores = allScores.filter(s => 
         tenantConnectionIds.includes(s.tenantConnectionId)
       );
@@ -173,12 +176,12 @@ export function SecureScoreDashboardView() {
       setHistory(allHistory.filter(h => 
         tenantConnectionIds.includes(h.tenantConnectionId)
       ));
-    } else {
+    } else if (!filterCustomerId) {
       setScores(allScores);
       setStats(calculateAggregatedStats(allScores));
       setHistory(allHistory);
     }
-  }, [selectedCustomerId, tenantConnectionIds, allScores, allHistory]);
+  }, [filterCustomerId, tenantConnectionIds, allScores, allHistory]);
 
   useEffect(() => {
     loadData();
