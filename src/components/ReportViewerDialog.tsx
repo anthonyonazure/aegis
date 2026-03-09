@@ -1,4 +1,4 @@
-import { useState, forwardRef } from 'react';
+import { useState, forwardRef, forwardRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -32,10 +32,7 @@ interface ReportViewerDialogProps {
   report: Report | null;
   customerName?: string;
   open: boolean;
-  onOpenChange: (open: boolean) => void;
-}
-
-export function ReportViewerDialog({ report, customerName, open, onOpenChange }: ReportViewerDialogProps) {
+  onOpenChange: (open: boolean) => voidconst ReportViewerDialog = forwardRef<HTMLDivElement, ReportViewerDialogProps>(function ReportViewerDialog({ report, customerName, open, onOpenChange }, refrDialogProps) {
   const [downloading, setDownloading] = useState(false);
 
   if (!report) return null;
