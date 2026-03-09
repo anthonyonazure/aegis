@@ -915,7 +915,7 @@ interface ReportViewerDialogProps {
       </DialogContent>
     </Dialog>
   );
-}
+});
 
 function MetricCard({ 
   label, 
