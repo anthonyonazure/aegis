@@ -205,10 +205,10 @@ export const JobsView = () => {
         clearInterval(pollRef.current);
         pollRef.current = null;
       }
-      return;
+      return undefined;
     }
 
-    if (pollRef.current) return;
+    if (pollRef.current) return undefined;
 
     pollRef.current = setInterval(() => {
       fetchJobs();
