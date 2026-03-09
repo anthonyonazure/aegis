@@ -205,7 +205,7 @@ export const ReportsView = () => {
         `${REPORT_TYPES.find(t => t.id === formData.report_type)?.name} - ${format(new Date(), 'MMM d, yyyy')}`);
       
       const reportType = selectedTemplate ? 
-        (selectedTemplate.category as ReportType) : formData.report_type;
+        (selectedTemplate.category === 'tenant_health' ? 'tenant_summary' : selectedTemplate.category) as ReportType : formData.report_type;
 
       // Create the report record
       const report = await createReport({
