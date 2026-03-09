@@ -273,21 +273,28 @@ export function SecureScoreDashboardView() {
             Aggregated security posture across all connected tenants
           </p>
         </div>
-        <Button onClick={handleRefresh} disabled={refreshing}>
-          <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-          {refreshing ? 'Refreshing...' : 'Refresh All'}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Select 
+            value={filterCustomerId || 'all'} 
+            onValueChange={(val) => setFilterCustomerId(val === 'all' ? null : val)}
+          >
+            <SelectTrigger className="w-[200px]">
+              <Filter className="h-4 w-4 mr-2" />
+              <SelectValue placeholder="All Customers" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Customers</SelectItem>
+              {customers.map((c) => (
+                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button onClick={handleRefresh} disabled={refreshing}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+            {refreshing ? 'Refreshing...' : 'Refresh All'}
+          </Button>
+        </div>
       </div>
-
-      {/* Customer filter indicator */}
-      {selectedCustomerId && (
-        <Alert className="border-primary/50 bg-primary/5">
-          <Filter className="h-4 w-4" />
-          <AlertDescription>
-            Showing secure scores for customer: <strong>{selectedCustomerName || 'Selected Customer'}</strong>
-          </AlertDescription>
-        </Alert>
-      )}
 
       {scores.length === 0 ? (
         <Card>
