@@ -322,6 +322,131 @@ function generateTemplateData(templateId: string, templateCategory: string, real
         ? Math.min(...realData.complianceDetails.map(c => c.score)) : 0;
       const highestScore = realData.complianceDetails.length > 0 
         ? Math.max(...realData.complianceDetails.map(c => c.score)) : 0;
+
+      // CMMC Level 1 specific reports
+      if (templateId.startsWith('comp-cmmc-level1')) {
+        const cmmcDomains = [
+          {
+            id: 'AC',
+            name: 'Access Control',
+            practices: [
+              { id: 'AC.L1-3.1.1', name: 'Authorized Access Control', description: 'Limit system access to authorized users, processes acting on behalf of authorized users, and devices.', m365Controls: ['Conditional Access Policies', 'Azure AD User Management'], status: mfaCoverage > 80 && (gov?.conditionalAccessPolicies || 0) > 0 ? 'pass' : 'fail' },
+              { id: 'AC.L1-3.1.2', name: 'Transaction & Function Control', description: 'Limit system access to the types of transactions and functions that authorized users are permitted to execute.', m365Controls: ['RBAC', 'Azure AD Roles', 'App Permissions'], status: (gov?.adminUsers || 0) < (gov?.totalUsers || 1) * 0.1 ? 'pass' : 'partial' },
+              { id: 'AC.L1-3.1.20', name: 'External Connections', description: 'Verify and control/limit connections to and use of external systems.', m365Controls: ['Conditional Access - Named Locations', 'B2B Settings'], status: (gov?.conditionalAccessPolicies || 0) > 2 ? 'pass' : 'fail' },
+              { id: 'AC.L1-3.1.22', name: 'Public Information Control', description: 'Control information posted or processed on publicly accessible systems.', m365Controls: ['SharePoint External Sharing', 'Teams External Access'], status: 'review' },
+            ]
+          },
+          {
+            id: 'IA',
+            name: 'Identification & Authentication',
+            practices: [
+              { id: 'IA.L1-3.5.1', name: 'Identification', description: 'Identify system users, processes acting on behalf of users, and devices.', m365Controls: ['Azure AD', 'Intune Device Registration'], status: (gov?.totalUsers || 0) > 0 ? 'pass' : 'fail' },
+              { id: 'IA.L1-3.5.2', name: 'Authentication', description: 'Authenticate (or verify) the identities of users, processes, or devices, as a prerequisite to allowing access.', m365Controls: ['MFA', 'Conditional Access', 'Password Policies'], status: mfaCoverage >= 95 ? 'pass' : mfaCoverage >= 50 ? 'partial' : 'fail' },
+            ]
+          },
+          {
+            id: 'MP',
+            name: 'Media Protection',
+            practices: [
+              { id: 'MP.L1-3.8.3', name: 'Media Disposal', description: 'Sanitize or destroy information system media containing FCI before disposal or release for reuse.', m365Controls: ['Intune Device Wipe', 'BitLocker Policies'], status: 'review' },
+            ]
+          },
+          {
+            id: 'PE',
+            name: 'Physical Protection',
+            practices: [
+              { id: 'PE.L1-3.10.1', name: 'Limit Physical Access', description: 'Limit physical access to organizational systems, equipment, and the respective operating environments to authorized individuals.', m365Controls: ['N/A - Physical Security'], status: 'review' },
+              { id: 'PE.L1-3.10.3', name: 'Escort Visitors', description: 'Escort visitors and monitor visitor activity.', m365Controls: ['N/A - Physical Security'], status: 'review' },
+              { id: 'PE.L1-3.10.4', name: 'Physical Access Logs', description: 'Maintain audit logs of physical access.', m365Controls: ['N/A - Physical Security'], status: 'review' },
+              { id: 'PE.L1-3.10.5', name: 'Manage Physical Access', description: 'Control and manage physical access devices.', m365Controls: ['N/A - Physical Security'], status: 'review' },
+            ]
+          },
+          {
+            id: 'SC',
+            name: 'System & Communications Protection',
+            practices: [
+              { id: 'SC.L1-3.13.1', name: 'Boundary Protection', description: 'Monitor, control, and protect communications at the external boundaries and key internal boundaries of information systems.', m365Controls: ['Microsoft Defender', 'Network Security Groups', 'Conditional Access'], status: realData.avgSecureScorePercent > 60 ? 'pass' : 'partial' },
+              { id: 'SC.L1-3.13.5', name: 'Public-Access System Separation', description: 'Implement subnetworks for publicly accessible system components that are physically or logically separated from internal networks.', m365Controls: ['Azure Virtual Networks', 'Conditional Access - Named Locations'], status: 'review' },
+            ]
+          },
+          {
+            id: 'SI',
+            name: 'System & Information Integrity',
+            practices: [
+              { id: 'SI.L1-3.14.1', name: 'Flaw Remediation', description: 'Identify, report, and correct system flaws in a timely manner.', m365Controls: ['Windows Update for Business', 'Intune Compliance', 'Defender Vulnerability Management'], status: realData.avgSecureScorePercent > 50 ? 'pass' : 'fail' },
+              { id: 'SI.L1-3.14.2', name: 'Malicious Code Protection', description: 'Provide protection from malicious code at designated locations within organizational systems.', m365Controls: ['Microsoft Defender for Endpoint', 'Microsoft Defender for Office 365'], status: realData.avgSecureScorePercent > 40 ? 'pass' : 'fail' },
+              { id: 'SI.L1-3.14.4', name: 'Update Malicious Code Protection', description: 'Update malicious code protection mechanisms when new releases are available.', m365Controls: ['Defender Auto-Update', 'Intune Update Rings'], status: 'pass' },
+              { id: 'SI.L1-3.14.5', name: 'System & File Scanning', description: 'Perform periodic scans of the information system and real-time scans of files from external sources.', m365Controls: ['Defender Scheduled Scans', 'Safe Attachments', 'Safe Links'], status: realData.avgSecureScorePercent > 50 ? 'pass' : 'partial' },
+            ]
+          },
+        ];
+
+        const allPractices = cmmcDomains.flatMap(d => d.practices);
+        const passedCount = allPractices.filter(p => p.status === 'pass').length;
+        const failedCount = allPractices.filter(p => p.status === 'fail').length;
+        const partialCount = allPractices.filter(p => p.status === 'partial').length;
+        const reviewCount = allPractices.filter(p => p.status === 'review').length;
+        const totalPractices = allPractices.length;
+        const autoScore = totalPractices > 0 ? Math.round(((passedCount + partialCount * 0.5) / totalPractices) * 100) : 0;
+
+        const failedPractices = allPractices.filter(p => p.status === 'fail' || p.status === 'partial');
+        const remediationSteps = failedPractices.map(p => ({
+          practiceId: p.id,
+          name: p.name,
+          status: p.status,
+          remediation: p.status === 'fail' 
+            ? `Enable and configure ${p.m365Controls.join(', ')} to meet this requirement`
+            : `Review and strengthen ${p.m365Controls.join(', ')} configuration`,
+          effort: p.m365Controls.some(c => c.includes('N/A')) ? 'manual' : 'medium',
+        }));
+
+        return {
+          reportFramework: 'CMMC Level 1',
+          reportSubtype: templateId === 'comp-cmmc-level1-gap' ? 'Gap Analysis' 
+            : templateId === 'comp-cmmc-level1-evidence' ? 'Evidence Package' 
+            : 'Full Audit',
+          summary: {
+            framework: 'CMMC Level 1 (17 Practices)',
+            overallScore: autoScore,
+            totalPractices,
+            passedPractices: passedCount,
+            failedPractices: failedCount,
+            partialPractices: partialCount,
+            reviewRequired: reviewCount,
+            assessmentStatus: passedCount === totalPractices ? 'READY FOR ASSESSMENT' 
+              : failedCount === 0 ? 'NEAR READY — Review Required' 
+              : 'GAPS IDENTIFIED — Remediation Needed',
+            mfaCoverage,
+            secureScorePercent: realData.avgSecureScorePercent,
+            conditionalAccessPolicies: gov?.conditionalAccessPolicies || 0,
+            adminUsers: gov?.adminUsers || 0,
+            totalUsers: gov?.totalUsers || realData.totalUsers || 0,
+            customerCount: realData.customerCount,
+            tenantCount: realData.tenantCount,
+          },
+          domains: cmmcDomains.map(d => ({
+            id: d.id,
+            name: d.name,
+            practiceCount: d.practices.length,
+            passed: d.practices.filter(p => p.status === 'pass').length,
+            failed: d.practices.filter(p => p.status === 'fail').length,
+            partial: d.practices.filter(p => p.status === 'partial').length,
+            review: d.practices.filter(p => p.status === 'review').length,
+            score: d.practices.length > 0 ? Math.round(((d.practices.filter(p => p.status === 'pass').length + d.practices.filter(p => p.status === 'partial').length * 0.5) / d.practices.length) * 100) : 0,
+            practices: d.practices,
+          })),
+          gapAnalysis: remediationSteps,
+          recommendations: [
+            ...failedCount > 0 ? [`${failedCount} practice(s) failed — address these before CMMC assessment`] : [],
+            ...partialCount > 0 ? [`${partialCount} practice(s) partially met — strengthen controls`] : [],
+            ...reviewCount > 0 ? [`${reviewCount} practice(s) require manual review (e.g., physical security)`] : [],
+            ...mfaCoverage < 100 ? [`Increase MFA coverage from ${mfaCoverage}% to 100% (IA.L1-3.5.2)`] : [],
+            ...(gov?.conditionalAccessPolicies || 0) < 3 ? ['Create additional Conditional Access policies for AC domain'] : [],
+            ...passedCount === totalPractices ? ['All 17 practices met — you are ready for CMMC Level 1 assessment!'] : [],
+          ],
+          generatedAt: now,
+        };
+      }
       
       return {
         summary: {
