@@ -42,6 +42,13 @@ export const REPORT_TYPES = [
   { id: 'security' as const, name: 'Security Report', description: 'Security posture assessment' },
   { id: 'psa_tickets' as const, name: 'PSA Tickets Report', description: 'Summary of PSA tickets created' },
   { id: 'billing' as const, name: 'Billing Report', description: 'Resource usage and billing summary' },
+  { id: 'identity' as const, name: 'Identity & Access Report', description: 'User accounts and access management' },
+  { id: 'devices' as const, name: 'Devices Report', description: 'Device compliance and management' },
+  { id: 'exchange' as const, name: 'Exchange Report', description: 'Email and mail flow analytics' },
+  { id: 'sharepoint' as const, name: 'SharePoint Report', description: 'Document and sharing analytics' },
+  { id: 'teams' as const, name: 'Teams Report', description: 'Teams usage and collaboration' },
+  { id: 'licensing' as const, name: 'Licensing Report', description: 'License usage and optimization' },
+  { id: 'copilot' as const, name: 'Copilot Report', description: 'Microsoft Copilot adoption and usage' },
 ] as const;
 
 // Reports CRUD
