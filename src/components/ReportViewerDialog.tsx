@@ -307,7 +307,7 @@ export function ReportViewerDialog({ report, customerName, open, onOpenChange }:
     );
   };
 
-
+  const renderComplianceReport = () => {
     // Check if this is a CMMC report
     if (data.reportFramework === 'CMMC Level 1') {
       return renderCMMCReport();
