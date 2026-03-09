@@ -407,6 +407,13 @@ export const ReportsView = () => {
       case 'billing': return <DollarSign className="w-4 h-4" />;
       case 'security': return <Shield className="w-4 h-4" />;
       case 'psa_tickets': return <Clock className="w-4 h-4" />;
+      case 'identity': return <Users className="w-4 h-4" />;
+      case 'devices': return <Laptop className="w-4 h-4" />;
+      case 'exchange': return <Mail className="w-4 h-4" />;
+      case 'sharepoint': return <HardDrive className="w-4 h-4" />;
+      case 'teams': return <MessageSquare className="w-4 h-4" />;
+      case 'licensing': return <CreditCard className="w-4 h-4" />;
+      case 'copilot': return <Sparkles className="w-4 h-4" />;
       default: return <FileText className="w-4 h-4" />;
     }
   };
