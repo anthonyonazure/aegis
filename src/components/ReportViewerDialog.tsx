@@ -32,7 +32,10 @@ interface ReportViewerDialogProps {
   report: Report | null;
   customerName?: string;
   open: boolean;
-  onOpenChange: (open: boolean) => voidconst ReportViewerDialog = forwardRef<HTMLDivElement, ReportViewerDialogProps>(function ReportViewerDialog({ report, customerName, open, onOpenChange }, refrDialogProps) {
+  onOpenChange: (open: boolean) => void;
+}
+
+export const ReportViewerDialog = forwardRef<HTMLDivElement, ReportViewerDialogProps>(function ReportViewerDialog({ report, customerName, open, onOpenChange }, ref) {
   const [downloading, setDownloading] = useState(false);
 
   if (!report) return null;
