@@ -1,28 +1,21 @@
 
 
-## Problem Identified
+# Fix: Secure Score Dashboard shows only 1 tenant due to customer filter
 
-The secure score fetch **is working** -- it successfully retrieves data from Microsoft Graph. However, it **fails to save** for one tenant ("Tesoro XP, Inc.") because of a database column overflow.
+## Problem
+The Secure Score Dashboard inherits the global `selectedCustomerId` from the tenant selector in the sidebar. When a specific customer is selected (currently "ATL"), the dashboard filters scores to only that customer's tenants (1 of 5). There is no way to view all tenants at once from within the dashboard.
 
-**Root cause:** The `current_score` and `max_score` columns in both `tenant_secure_scores` and `secure_score_history` are defined as `NUMERIC(5,2)`, which caps at **999.99**. Microsoft Graph returned `currentScore: 574.75` and `maxScore: 1170` for this tenant -- the `max_score` of 1170 exceeds the limit.
+## Solution
+Add a local customer filter dropdown directly on the Secure Score Dashboard with an "All Customers" default option. This overrides the global sidebar selection for this view only, so users can see all tenants or filter by customer without changing their global context.
 
-The other two tenants (scores ~88 and ~122) saved fine because their values fit within 999.99.
+## Changes
 
-Edge function log confirms:
-```
-numeric field overflow
-A field with precision 5, scale 2 must round to an absolute value less than 10^3.
-```
+### 1. `src/components/views/SecureScoreDashboardView.tsx`
+- Add a local `filterCustomerId` state, defaulting to `null` (all customers)
+- Replace usage of `selectedCustomerId` from context with the local filter state
+- Add a `<Select>` dropdown in the dashboard header (next to the Refresh button) with options: "All Customers" + each customer name
+- When "All Customers" is selected, show all scores unfiltered
+- Keep the existing filter logic but drive it from the local state instead of global context
 
-## Fix
-
-**Database migration** -- widen the numeric columns to `NUMERIC(10,2)` (supports up to 99,999,999.99):
-
-1. `tenant_secure_scores.current_score` -- ALTER to `NUMERIC(10,2)`
-2. `tenant_secure_scores.max_score` -- ALTER to `NUMERIC(10,2)`
-3. `tenant_secure_scores.score_percentage` -- keep or widen to `NUMERIC(7,2)` (percentage could theoretically exceed 999 in edge cases with bad data)
-4. `secure_score_history.score` -- ALTER to `NUMERIC(10,2)`
-5. `secure_score_history.max_score` -- ALTER to `NUMERIC(10,2)`
-
-No code changes needed -- the edge function and client code are correct. Only the column precision is too small.
+The rest of the component (charts, tabs, tenant list, trend data) remains unchanged -- it already handles both filtered and unfiltered states correctly.
 
