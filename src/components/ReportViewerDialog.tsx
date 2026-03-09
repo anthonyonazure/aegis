@@ -918,7 +918,7 @@ export function ReportViewerDialog({ report, customerName, open, onOpenChange }:
       </DialogContent>
     </Dialog>
   );
-});
+}
 
 function MetricCard({ 
   label, 
