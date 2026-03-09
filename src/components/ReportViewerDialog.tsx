@@ -192,7 +192,122 @@ export function ReportViewerDialog({ report, customerName, open, onOpenChange }:
     );
   };
 
-  const renderComplianceReport = () => {
+  const renderCMMCReport = () => {
+    if (!summary) return <p className="text-muted-foreground">No data available</p>;
+    const domains = data.domains as Array<{
+      id: string; name: string; practiceCount: number; passed: number; failed: number; partial: number; review: number; score: number;
+      practices: Array<{ id: string; name: string; description: string; m365Controls: string[]; status: string }>;
+    }> | undefined;
+    const gapAnalysis = data.gapAnalysis as Array<{ practiceId: string; name: string; status: string; remediation: string; effort: string }> | undefined;
+    const overallScore = summary.overallScore as number ?? 0;
+    const assessmentStatus = summary.assessmentStatus as string ?? '';
+    const reportSubtype = data.reportSubtype as string ?? 'Full Audit';
+
+    const getStatusBadge = (status: string) => {
+      switch (status) {
+        case 'pass': return <Badge className="bg-green-500/10 text-green-600 border-green-500/20">Pass</Badge>;
+        case 'fail': return <Badge variant="destructive">Fail</Badge>;
+        case 'partial': return <Badge className="bg-yellow-500/10 text-yellow-600 border-yellow-500/20">Partial</Badge>;
+        case 'review': return <Badge variant="outline">Manual Review</Badge>;
+        default: return <Badge variant="outline">{status}</Badge>;
+      }
+    };
+
+    return (
+      <div className="space-y-6">
+        <Card className="bg-muted/30 border-primary/20">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-bold text-lg">CMMC Level 1 — {reportSubtype}</h3>
+              <Badge className={assessmentStatus.includes('READY') ? 'bg-green-500/10 text-green-600' : assessmentStatus.includes('NEAR') ? 'bg-yellow-500/10 text-yellow-600' : 'bg-red-500/10 text-red-600'}>
+                {assessmentStatus}
+              </Badge>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Assessment of all 17 CMMC Level 1 practices across 6 domains, mapped to your Microsoft 365 environment.
+            </p>
+          </CardContent>
+        </Card>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <MetricCard label="Overall Score" value={`${overallScore}%`} icon={<Shield className="w-4 h-4" />} valueClassName={getScoreColor(overallScore)} description="Across all 17 practices" />
+          <MetricCard label="Passed" value={summary.passedPractices as number ?? 0} icon={<CheckCircle2 className="w-4 h-4" />} description="Fully met practices" />
+          <MetricCard label="Failed" value={summary.failedPractices as number ?? 0} icon={<XCircle className="w-4 h-4" />} description="Practices not met" />
+          <MetricCard label="Manual Review" value={summary.reviewRequired as number ?? 0} icon={<AlertTriangle className="w-4 h-4" />} description="Requires manual verification" />
+        </div>
+
+        {domains && domains.length > 0 && (
+          <>
+            <Separator />
+            <div>
+              <h4 className="font-semibold mb-3">Domain Breakdown</h4>
+              <div className="space-y-4">
+                {domains.map((domain) => (
+                  <Card key={domain.id}>
+                    <CardHeader className="py-3 px-4">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-sm">{domain.id} — {domain.name}</CardTitle>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-sm font-bold ${getScoreColor(domain.score)}`}>{domain.score}%</span>
+                          <span className="text-xs text-muted-foreground">({domain.passed}/{domain.practiceCount} passed)</span>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="px-4 pb-3">
+                      <div className="space-y-2">
+                        {domain.practices.map((practice) => (
+                          <div key={practice.id} className="flex items-start justify-between p-2 rounded border bg-muted/20">
+                            <div className="flex-1 mr-3">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-mono text-muted-foreground">{practice.id}</span>
+                                {getStatusBadge(practice.status)}
+                              </div>
+                              <p className="text-sm font-medium mt-1">{practice.name}</p>
+                              <p className="text-xs text-muted-foreground mt-0.5">{practice.description}</p>
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {practice.m365Controls.map((ctrl, i) => (
+                                  <Badge key={i} variant="outline" className="text-[10px] px-1.5 py-0">{ctrl}</Badge>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+
+        {gapAnalysis && gapAnalysis.length > 0 && (
+          <>
+            <Separator />
+            <div>
+              <h4 className="font-semibold mb-3">Gap Analysis & Remediation</h4>
+              <div className="space-y-2">
+                {gapAnalysis.map((gap, idx) => (
+                  <div key={idx} className="p-3 rounded-lg border bg-muted/20">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs font-mono">{gap.practiceId}</span>
+                      <Badge variant={gap.status === 'fail' ? 'destructive' : 'outline'}>{gap.status}</Badge>
+                    </div>
+                    <p className="text-sm font-medium">{gap.name}</p>
+                    <p className="text-xs text-muted-foreground mt-1">{gap.remediation}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+
+        {renderRecommendations()}
+      </div>
+    );
+  };
+
+
     // Check if this is a CMMC report
     if (data.reportFramework === 'CMMC Level 1') {
       return renderCMMCReport();
