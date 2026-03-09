@@ -344,13 +344,9 @@ export const ReportsView = () => {
       
       await Promise.all(batch.map(async (template) => {
         try {
-          const reportType = 
-            template.category === 'compliance' ? 'compliance' :
-            template.category === 'security' ? 'security' :
-            template.category === 'drift' ? 'drift' :
-            template.category === 'billing' ? 'billing' :
-            template.category === 'tenant_health' ? 'tenant_summary' :
-            'executive_summary';
+          const reportType = template.category === 'tenant_health' 
+            ? 'tenant_summary' 
+            : template.category as ReportType;
 
           const report = await createReport({
             name: `${template.name} - ${format(new Date(), 'MMM d, yyyy')}`,
