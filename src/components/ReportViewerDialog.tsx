@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, forwardRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -35,7 +35,7 @@ interface ReportViewerDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-export function ReportViewerDialog({ report, customerName, open, onOpenChange }: ReportViewerDialogProps) {
+export const ReportViewerDialog = forwardRef<HTMLDivElement, ReportViewerDialogProps>(function ReportViewerDialog({ report, customerName, open, onOpenChange }, ref) {
   const [downloading, setDownloading] = useState(false);
 
   if (!report) return null;
@@ -873,6 +873,15 @@ export function ReportViewerDialog({ report, customerName, open, onOpenChange }:
         return renderTenantSummary();
       case 'psa_tickets':
         return renderPsaTickets();
+      // Categories that produce specific data shapes from edge function
+      case 'identity':
+      case 'devices':
+      case 'exchange':
+      case 'sharepoint':
+      case 'teams':
+      case 'licensing':
+      case 'copilot':
+        return renderGenericReport();
       default:
         return renderGenericReport();
     }
@@ -909,7 +918,7 @@ export function ReportViewerDialog({ report, customerName, open, onOpenChange }:
       </DialogContent>
     </Dialog>
   );
-}
+});
 
 function MetricCard({ 
   label, 

@@ -205,12 +205,7 @@ export const ReportsView = () => {
         `${REPORT_TYPES.find(t => t.id === formData.report_type)?.name} - ${format(new Date(), 'MMM d, yyyy')}`);
       
       const reportType = selectedTemplate ? 
-        (selectedTemplate.category === 'compliance' ? 'compliance' :
-         selectedTemplate.category === 'security' ? 'security' :
-         selectedTemplate.category === 'drift' ? 'drift' :
-         selectedTemplate.category === 'billing' ? 'billing' :
-         selectedTemplate.category === 'tenant_health' ? 'tenant_summary' :
-         'executive_summary') as ReportType : formData.report_type;
+        (selectedTemplate.category === 'tenant_health' ? 'tenant_summary' : selectedTemplate.category) as ReportType : formData.report_type;
 
       // Create the report record
       const report = await createReport({
@@ -349,13 +344,9 @@ export const ReportsView = () => {
       
       await Promise.all(batch.map(async (template) => {
         try {
-          const reportType = 
-            template.category === 'compliance' ? 'compliance' :
-            template.category === 'security' ? 'security' :
-            template.category === 'drift' ? 'drift' :
-            template.category === 'billing' ? 'billing' :
-            template.category === 'tenant_health' ? 'tenant_summary' :
-            'executive_summary';
+          const reportType = template.category === 'tenant_health' 
+            ? 'tenant_summary' 
+            : template.category as ReportType;
 
           const report = await createReport({
             name: `${template.name} - ${format(new Date(), 'MMM d, yyyy')}`,
@@ -416,6 +407,13 @@ export const ReportsView = () => {
       case 'billing': return <DollarSign className="w-4 h-4" />;
       case 'security': return <Shield className="w-4 h-4" />;
       case 'psa_tickets': return <Clock className="w-4 h-4" />;
+      case 'identity': return <Users className="w-4 h-4" />;
+      case 'devices': return <Laptop className="w-4 h-4" />;
+      case 'exchange': return <Mail className="w-4 h-4" />;
+      case 'sharepoint': return <HardDrive className="w-4 h-4" />;
+      case 'teams': return <MessageSquare className="w-4 h-4" />;
+      case 'licensing': return <CreditCard className="w-4 h-4" />;
+      case 'copilot': return <Sparkles className="w-4 h-4" />;
       default: return <FileText className="w-4 h-4" />;
     }
   };
