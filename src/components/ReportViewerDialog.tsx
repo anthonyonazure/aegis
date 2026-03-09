@@ -193,6 +193,10 @@ export function ReportViewerDialog({ report, customerName, open, onOpenChange }:
   };
 
   const renderComplianceReport = () => {
+    // Check if this is a CMMC report
+    if (data.reportFramework === 'CMMC Level 1') {
+      return renderCMMCReport();
+    }
     if (!summary) return <p className="text-muted-foreground">No data available</p>;
     
     const history = data.history as Record<string, unknown>[] | undefined;
