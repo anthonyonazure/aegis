@@ -35,7 +35,7 @@ interface ReportViewerDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-export const ReportViewerDialog = forwardRef<HTMLDivElement, ReportViewerDialogProps>(function ReportViewerDialog({ report, customerName, open, onOpenChange }, ref) {
+export function ReportViewerDialog({ report, customerName, open, onOpenChange }: ReportViewerDialogProps) {
   const [downloading, setDownloading] = useState(false);
 
   if (!report) return null;
