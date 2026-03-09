@@ -395,6 +395,51 @@ export const REPORT_TEMPLATES: ReportTemplate[] = [
     estimatedTime: '1-2 min',
   },
 
+  // ============ CMMC REPORTS ============
+  {
+    id: 'comp-cmmc-level1',
+    name: 'CMMC Level 1 Audit Report',
+    category: 'compliance',
+    description: 'Full audit against all 17 CMMC Level 1 practices across 6 domains: Access Control (AC), Identification & Authentication (IA), Media Protection (MP), Physical Protection (PE), System & Communications Protection (SC), and System & Information Integrity (SI)',
+    dataSources: ['complianceResults', 'conditionalAccessPolicies', 'users', 'authenticationMethods', 'deviceCompliance', 'secureScore', 'auditLogs', 'dlpPolicies'],
+    metrics: [
+      'overallCMMCScore',
+      'domainScores',
+      'practiceStatus',
+      'ac_l1_practices',
+      'ia_l1_practices',
+      'mp_l1_practices',
+      'pe_l1_practices',
+      'sc_l1_practices',
+      'si_l1_practices',
+      'gapAnalysis',
+      'remediationPlan',
+      'auditReadiness'
+    ],
+    filters: ['customer', 'tenant', 'dateRange'],
+    estimatedTime: '2-3 min',
+  },
+  {
+    id: 'comp-cmmc-level1-gap',
+    name: 'CMMC Level 1 Gap Analysis',
+    category: 'compliance',
+    description: 'Detailed gap analysis for CMMC Level 1 with specific remediation steps for each failed practice in your M365 environment',
+    dataSources: ['complianceResults', 'conditionalAccessPolicies', 'users', 'authenticationMethods', 'secureScore'],
+    metrics: ['failedPractices', 'gapsByDomain', 'remediationEffort', 'prioritizedActions', 'estimatedTimeToCompliance'],
+    filters: ['customer', 'tenant', 'dateRange'],
+    estimatedTime: '2-3 min',
+  },
+  {
+    id: 'comp-cmmc-level1-evidence',
+    name: 'CMMC Level 1 Evidence Package',
+    category: 'compliance',
+    description: 'Evidence collection report for CMMC Level 1 assessment, mapping M365 configurations to each of the 17 practices with proof of implementation',
+    dataSources: ['complianceResults', 'conditionalAccessPolicies', 'users', 'authenticationMethods', 'deviceCompliance', 'auditLogs'],
+    metrics: ['evidenceByPractice', 'documentationStatus', 'configurationProof', 'policyMappings'],
+    filters: ['customer', 'tenant', 'dateRange'],
+    estimatedTime: '3-5 min',
+  },
+
   // ============ IDENTITY & ACCESS REPORTS (15+) ============
   {
     id: 'ident-privileged-users',
