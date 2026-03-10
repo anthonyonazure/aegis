@@ -9,6 +9,8 @@ import {
   ChevronDown,
   ChevronUp,
   RefreshCw,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -207,6 +209,13 @@ export const PermissionHealthIndicator = ({ connectionId, accessToken }: Permiss
   const [hasChecked, setHasChecked] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<string[]>(['missing']);
   const [readOnlyMode, setReadOnlyMode] = useState(true);
+  const [copiedPerm, setCopiedPerm] = useState<string | null>(null);
+
+  const copyPermission = (perm: string) => {
+    navigator.clipboard.writeText(perm);
+    setCopiedPerm(perm);
+    setTimeout(() => setCopiedPerm(null), 1500);
+  };
 
   // Filter results based on read-only toggle
   const isReadWritePerm = (perm: string) => perm.includes('.ReadWrite.');
@@ -402,9 +411,20 @@ export const PermissionHealthIndicator = ({ connectionId, accessToken }: Permiss
                         key={item.permission}
                         className="p-3 rounded-lg bg-muted/30 border border-border/50 space-y-2"
                       >
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
                           <code className="text-sm font-mono text-destructive">{item.permission}</code>
-                          <Badge className={sevConfig.className} variant="outline">
+                          <button
+                            onClick={() => copyPermission(item.permission)}
+                            className="p-1 rounded hover:bg-muted/50 transition-colors shrink-0"
+                            title="Copy permission name"
+                          >
+                            {copiedPerm === item.permission ? (
+                              <Check className="w-3.5 h-3.5 text-green-400" />
+                            ) : (
+                              <Copy className="w-3.5 h-3.5 text-muted-foreground" />
+                            )}
+                          </button>
+                          <Badge className={cn("ml-auto", sevConfig.className)} variant="outline">
                             {sevConfig.label}
                           </Badge>
                         </div>
