@@ -127,6 +127,8 @@ export const AuthView = () => {
     isConnected, 
     tenantName, 
     tenantId: connectedTenantId,
+    accessToken,
+    connectionId: activeConnectionId,
     isConnecting, 
     connect, 
     disconnect 
