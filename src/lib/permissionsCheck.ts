@@ -248,6 +248,68 @@ export const PERMISSION_REQUIREMENTS: PermissionRequirement[] = [
     requiredPermissions: ['TeamSettings.Read.All'],
     alternativePermissions: ['TeamSettings.ReadWrite.All'],
   },
+
+  // Copilot Readiness
+  {
+    resourceId: 'copilot/licensing',
+    resourceName: 'Copilot Licensing & SKUs',
+    requiredPermissions: ['Organization.Read.All'],
+  },
+  {
+    resourceId: 'copilot/organization-info',
+    resourceName: 'Organization & Tenant Info',
+    requiredPermissions: ['Organization.Read.All'],
+  },
+  {
+    resourceId: 'copilot/mfa-registration',
+    resourceName: 'MFA Registration Reports',
+    requiredPermissions: ['AuditLog.Read.All'],
+    alternativePermissions: ['Reports.Read.All'],
+  },
+  {
+    resourceId: 'copilot/auth-methods',
+    resourceName: 'Authentication Methods',
+    requiredPermissions: ['UserAuthenticationMethod.Read.All'],
+  },
+  {
+    resourceId: 'copilot/sensitivity-labels',
+    resourceName: 'Purview Sensitivity Labels (Copilot)',
+    requiredPermissions: ['InformationProtection.Read.All'],
+    alternativePermissions: ['InformationProtectionPolicy.Read.All'],
+  },
+  {
+    resourceId: 'copilot/sharepoint-sharing',
+    resourceName: 'SharePoint Sharing Settings',
+    requiredPermissions: ['Sites.Read.All'],
+    alternativePermissions: ['Sites.ReadWrite.All'],
+  },
+  {
+    resourceId: 'copilot/onedrive-provisioning',
+    resourceName: 'OneDrive Provisioning Status',
+    requiredPermissions: ['User.Read.All'],
+  },
+  {
+    resourceId: 'copilot/exchange-mailbox',
+    resourceName: 'Exchange Online Mailbox Status',
+    requiredPermissions: ['User.Read.All'],
+    alternativePermissions: ['MailboxSettings.Read'],
+  },
+  {
+    resourceId: 'copilot/teams-settings',
+    resourceName: 'Teams App Settings (Transcription)',
+    requiredPermissions: ['TeamworkAppSettings.Read.All'],
+  },
+  {
+    resourceId: 'copilot/conditional-access',
+    resourceName: 'Conditional Access (Copilot)',
+    requiredPermissions: ['Policy.Read.All'],
+    alternativePermissions: ['Policy.ReadWrite.ConditionalAccess'],
+  },
+  {
+    resourceId: 'copilot/usage-reports',
+    resourceName: 'Copilot Usage Reports',
+    requiredPermissions: ['Reports.Read.All'],
+  },
 ];
 
 // Azure ARM permission requirements
