@@ -183,7 +183,9 @@ Provide a detailed analysis in this JSON structure:
         "risk": "string",
         "likelihood": "low" | "medium" | "high",
         "impact": "low" | "medium" | "high",
-        "mitigation": "string"
+        "mitigation": "string",
+        "explanation": "string (2-3 sentence description of what this risk means)",
+        "referenceUrl": "string (Microsoft Learn URL)"
       }
     ]
   },
