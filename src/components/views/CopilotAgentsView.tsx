@@ -126,6 +126,9 @@ export const CopilotAgentsView = () => {
   const [showAgentDetails, setShowAgentDetails] = useState(false);
   const [deploymentFilter, setDeploymentFilter] = useState<'all' | 'organization' | 'sideloaded'>('all');
   const [activeTab, setActiveTab] = useState('agents');
+  const [selectedReadinessTenants, setSelectedReadinessTenants] = useState<SelectedTenantInfo[]>([]);
+  const [selectedAnalyticsTenants, setSelectedAnalyticsTenants] = useState<SelectedTenantInfo[]>([]);
+  const [selectedLicensingTenants, setSelectedLicensingTenants] = useState<SelectedTenantInfo[]>([]);
 
   const selectedTenant = tenants.find(t => t.id === selectedTenantId);
   const tenantDisplayName = selectedTenant?.displayName || selectedTenant?.tenantName || 'All Tenants';
