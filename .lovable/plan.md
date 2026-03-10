@@ -1,28 +1,46 @@
 
 
-## Problem Identified
+# Add Multi-Tenant Selection to Copilot Readiness Features
 
-The secure score fetch **is working** -- it successfully retrieves data from Microsoft Graph. However, it **fails to save** for one tenant ("Tesoro XP, Inc.") because of a database column overflow.
+## Problem
+Currently, all Copilot features (Readiness Card, Usage Chart, Licensing Table, and Readiness Advisor) only run against the single focused tenant from `useTenant()`. There's no way to pick specific tenants or run against multiple tenants simultaneously.
 
-**Root cause:** The `current_score` and `max_score` columns in both `tenant_secure_scores` and `secure_score_history` are defined as `NUMERIC(5,2)`, which caps at **999.99**. Microsoft Graph returned `currentScore: 574.75` and `maxScore: 1170` for this tenant -- the `max_score` of 1170 exceeds the limit.
+## Approach
+Create a reusable **TenantMultiSelector** component and integrate it into both the `CopilotReadinessAdvisorView` and `CopilotAgentsView`. Each Copilot feature tab will allow selecting one or more tenants with credentials, then run assessments in parallel showing per-tenant results.
 
-The other two tenants (scores ~88 and ~122) saved fine because their values fit within 999.99.
+## Files to Create/Modify
 
-Edge function log confirms:
-```
-numeric field overflow
-A field with precision 5, scale 2 must round to an absolute value less than 10^3.
-```
+### 1. Create `src/components/copilot/TenantMultiSelector.tsx` (new)
+A reusable component that:
+- Queries `tenant_connections` with `hasCredentials` status (optionally filtered by selected customer)
+- Shows checkboxes for each tenant with status indicators
+- Has "Select All" / "Clear" actions
+- Emits selected tenant IDs via callback
+- Can operate in single-select or multi-select mode
 
-## Fix
+### 2. Update `src/components/views/CopilotAgentsView.tsx`
+- Replace the current single-tenant gating (`connectionId ? ...`) in each tab (readiness, analytics, licensing) with the `TenantMultiSelector`
+- When multiple tenants selected, render a `CopilotReadinessCard` / `CopilotUsageChart` / `CopilotLicensingTable` for each selected tenant
+- When single tenant selected, render as today
 
-**Database migration** -- widen the numeric columns to `NUMERIC(10,2)` (supports up to 99,999,999.99):
+### 3. Update `src/components/views/CopilotReadinessAdvisorView.tsx`
+- Add `TenantMultiSelector` above the `CopilotReadinessAdvisor`
+- Pass selected tenants into the advisor so AI analysis covers chosen tenants
+- Show per-tenant results when multiple tenants are assessed
 
-1. `tenant_secure_scores.current_score` -- ALTER to `NUMERIC(10,2)`
-2. `tenant_secure_scores.max_score` -- ALTER to `NUMERIC(10,2)`
-3. `tenant_secure_scores.score_percentage` -- keep or widen to `NUMERIC(7,2)` (percentage could theoretically exceed 999 in edge cases with bad data)
-4. `secure_score_history.score` -- ALTER to `NUMERIC(10,2)`
-5. `secure_score_history.max_score` -- ALTER to `NUMERIC(10,2)`
+### 4. Update `src/components/ai/CopilotReadinessAdvisor.tsx`
+- Accept optional `selectedTenants` prop (array of `{id, name, customerId}`)
+- When tenants provided, run analysis per-tenant using their actual `tenantConnectionId` instead of mock data
+- Call `fetchReadinessAssessment()` per tenant and aggregate results
+- Show a comparison/summary view when multiple tenants are assessed
 
-No code changes needed -- the edge function and client code are correct. Only the column precision is too small.
+### 5. Update `src/components/copilot/CopilotReadinessCard.tsx`
+- No structural changes needed — already accepts `tenantConnectionId` as a prop
+- Works correctly when rendered multiple times
+
+## Key Design Decisions
+- Reuse existing `tenant_connections` query pattern from `CrossTenantBenchmark`
+- Only show tenants with stored credentials (prevents failed assessments)
+- Run assessments in parallel with `Promise.allSettled` for multi-tenant
+- Show individual results per tenant, not a single merged view
 
