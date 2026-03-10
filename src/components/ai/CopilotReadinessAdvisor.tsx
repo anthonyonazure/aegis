@@ -531,7 +531,7 @@ export const CopilotReadinessAdvisor = ({ selectedTenants }: CopilotReadinessAdv
                       <FileText className="w-4 h-4 text-primary" />
                       <h5 className="font-medium text-foreground">Data Governance</h5>
                     </div>
-                    <div className="space-y-2 text-sm">
+                    <div className="space-y-2 text-sm mb-3">
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Sensitivity Labels</span>
                         <span className="text-foreground">{analysis.dataGovernance.sensitivityLabelsStatus}</span>
@@ -551,6 +551,31 @@ export const CopilotReadinessAdvisor = ({ selectedTenants }: CopilotReadinessAdv
                         </Badge>
                       </div>
                     </div>
+                    {analysis.dataGovernance.recommendations.length > 0 && (
+                      <div className="border-t border-border/30 pt-3 space-y-2">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Recommendations</p>
+                        {analysis.dataGovernance.recommendations.map((rec, i) => {
+                          const detail = getItemDetail(rec);
+                          const govKey = `dg-${i}`;
+                          return (
+                            <Collapsible key={i} open={expandedGovItems.has(govKey)}>
+                              <CollapsibleTrigger
+                                onClick={() => toggleSet(setExpandedGovItems, govKey)}
+                                className="w-full flex items-center justify-between text-left cursor-pointer hover:bg-muted/30 rounded p-1.5 -mx-1.5 transition-colors"
+                              >
+                                <span className="text-xs text-foreground">{getItemTitle(rec)}</span>
+                                {detail && (expandedGovItems.has(govKey) ? <ChevronUp className="w-3 h-3 text-muted-foreground shrink-0" /> : <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />)}
+                              </CollapsibleTrigger>
+                              {detail && (
+                                <CollapsibleContent className="pl-1.5">
+                                  <ExpandableDetail detail={detail.explanation} referenceUrl={detail.referenceUrl} />
+                                </CollapsibleContent>
+                              )}
+                            </Collapsible>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
 
                   <div className="p-4 rounded-lg bg-muted/30 border border-border/50">
@@ -558,7 +583,7 @@ export const CopilotReadinessAdvisor = ({ selectedTenants }: CopilotReadinessAdv
                       <Lock className="w-4 h-4 text-primary" />
                       <h5 className="font-medium text-foreground">Security Status</h5>
                     </div>
-                    <div className="space-y-2 text-sm">
+                    <div className="space-y-2 text-sm mb-3">
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">MFA Status</span>
                         <span className="text-foreground">{analysis.securityRequirements.mfaStatus}</span>
@@ -572,6 +597,56 @@ export const CopilotReadinessAdvisor = ({ selectedTenants }: CopilotReadinessAdv
                         <span className="text-foreground">{analysis.securityRequirements.identityProtectionStatus}</span>
                       </div>
                     </div>
+                    {analysis.securityRequirements.gaps.length > 0 && (
+                      <div className="border-t border-border/30 pt-3 space-y-2 mb-3">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Security Gaps</p>
+                        {analysis.securityRequirements.gaps.map((gap, i) => {
+                          const detail = getItemDetail(gap);
+                          const govKey = `sg-${i}`;
+                          return (
+                            <Collapsible key={i} open={expandedGovItems.has(govKey)}>
+                              <CollapsibleTrigger
+                                onClick={() => toggleSet(setExpandedGovItems, govKey)}
+                                className="w-full flex items-center justify-between text-left cursor-pointer hover:bg-muted/30 rounded p-1.5 -mx-1.5 transition-colors"
+                              >
+                                <span className="text-xs text-red-400">{getItemTitle(gap)}</span>
+                                {detail && (expandedGovItems.has(govKey) ? <ChevronUp className="w-3 h-3 text-muted-foreground shrink-0" /> : <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />)}
+                              </CollapsibleTrigger>
+                              {detail && (
+                                <CollapsibleContent className="pl-1.5">
+                                  <ExpandableDetail detail={detail.explanation} referenceUrl={detail.referenceUrl} />
+                                </CollapsibleContent>
+                              )}
+                            </Collapsible>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {analysis.securityRequirements.recommendations.length > 0 && (
+                      <div className="border-t border-border/30 pt-3 space-y-2">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Recommendations</p>
+                        {analysis.securityRequirements.recommendations.map((rec, i) => {
+                          const detail = getItemDetail(rec);
+                          const govKey = `sr-${i}`;
+                          return (
+                            <Collapsible key={i} open={expandedGovItems.has(govKey)}>
+                              <CollapsibleTrigger
+                                onClick={() => toggleSet(setExpandedGovItems, govKey)}
+                                className="w-full flex items-center justify-between text-left cursor-pointer hover:bg-muted/30 rounded p-1.5 -mx-1.5 transition-colors"
+                              >
+                                <span className="text-xs text-foreground">{getItemTitle(rec)}</span>
+                                {detail && (expandedGovItems.has(govKey) ? <ChevronUp className="w-3 h-3 text-muted-foreground shrink-0" /> : <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />)}
+                              </CollapsibleTrigger>
+                              {detail && (
+                                <CollapsibleContent className="pl-1.5">
+                                  <ExpandableDetail detail={detail.explanation} referenceUrl={detail.referenceUrl} />
+                                </CollapsibleContent>
+                              )}
+                            </Collapsible>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -594,7 +669,32 @@ export const CopilotReadinessAdvisor = ({ selectedTenants }: CopilotReadinessAdv
                       <div className="text-xs text-muted-foreground">Optimizations</div>
                     </div>
                   </div>
-                  <p className="text-sm text-muted-foreground">{analysis.licensingAnalysis.currentState}</p>
+                  <p className="text-sm text-muted-foreground mb-3">{analysis.licensingAnalysis.currentState}</p>
+                  {(analysis.licensingAnalysis.optimizationOpportunities.length > 0 || analysis.licensingAnalysis.licensingRecommendations.length > 0) && (
+                    <div className="border-t border-border/30 pt-3 space-y-2">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Recommendations</p>
+                      {[...analysis.licensingAnalysis.optimizationOpportunities, ...analysis.licensingAnalysis.licensingRecommendations].map((rec, i) => {
+                        const detail = getItemDetail(rec);
+                        const govKey = `lic-${i}`;
+                        return (
+                          <Collapsible key={i} open={expandedGovItems.has(govKey)}>
+                            <CollapsibleTrigger
+                              onClick={() => toggleSet(setExpandedGovItems, govKey)}
+                              className="w-full flex items-center justify-between text-left cursor-pointer hover:bg-muted/30 rounded p-1.5 -mx-1.5 transition-colors"
+                            >
+                              <span className="text-xs text-foreground">{getItemTitle(rec)}</span>
+                              {detail && (expandedGovItems.has(govKey) ? <ChevronUp className="w-3 h-3 text-muted-foreground shrink-0" /> : <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />)}
+                            </CollapsibleTrigger>
+                            {detail && (
+                              <CollapsibleContent className="pl-1.5">
+                                <ExpandableDetail detail={detail.explanation} referenceUrl={detail.referenceUrl} />
+                              </CollapsibleContent>
+                            )}
+                          </Collapsible>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </TabsContent>
 
