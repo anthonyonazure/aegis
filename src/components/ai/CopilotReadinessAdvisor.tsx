@@ -306,11 +306,6 @@ export const CopilotReadinessAdvisor = ({ selectedTenants }: CopilotReadinessAdv
             console.warn('No tenant data available for', tenant.name, '— using empty baseline');
           }
 
-          // Look up customer info for better context
-          const customer = customers?.find(c =>
-            c.id === tenant.customerId
-          );
-
           const tenantContext = {
             tenantName: tenant.name,
             tenantConnectionId: tenant.id,
