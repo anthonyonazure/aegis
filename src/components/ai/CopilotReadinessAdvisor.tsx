@@ -33,6 +33,12 @@ import { useToast } from '@/hooks/use-toast';
 import { useTenant } from '@/contexts/TenantContext';
 import { cn } from '@/lib/utils';
 
+interface DetailedItem {
+  title: string;
+  explanation: string;
+  referenceUrl: string;
+}
+
 interface CopilotAdvisorAnalysis {
   overallAssessment: {
     readinessScore: number;
@@ -51,22 +57,22 @@ interface CopilotAdvisorAnalysis {
     currentState: string;
     requiredLicenses: number;
     estimatedMonthlyCost: number;
-    optimizationOpportunities: string[];
-    licensingRecommendations: string[];
+    optimizationOpportunities: (string | DetailedItem)[];
+    licensingRecommendations: (string | DetailedItem)[];
   };
   dataGovernance: {
     sensitivityLabelsStatus: string;
     dlpPoliciesStatus: string;
     retentionPoliciesStatus: string;
     oversharedContentRisk: string;
-    recommendations: string[];
+    recommendations: (string | DetailedItem)[];
   };
   securityRequirements: {
     mfaStatus: string;
     conditionalAccessStatus: string;
     identityProtectionStatus: string;
-    gaps: string[];
-    recommendations: string[];
+    gaps: (string | DetailedItem)[];
+    recommendations: (string | DetailedItem)[];
   };
   adoptionStrategy: {
     targetUserGroups: Array<{
@@ -99,6 +105,8 @@ interface CopilotAdvisorAnalysis {
       likelihood: string;
       impact: string;
       mitigation: string;
+      explanation?: string;
+      referenceUrl?: string;
     }>;
   };
   prioritizedActions: Array<{
@@ -108,6 +116,9 @@ interface CopilotAdvisorAnalysis {
     effort: string;
     impact: string;
     timeline: string;
+    explanation?: string;
+    goal?: string;
+    referenceUrl?: string;
   }>;
   expectedBenefits: {
     productivityGains: string;
@@ -117,6 +128,10 @@ interface CopilotAdvisorAnalysis {
   };
 }
 
+const getItemTitle = (item: string | DetailedItem): string =>
+  typeof item === 'string' ? item : item.title;
+const getItemDetail = (item: string | DetailedItem): DetailedItem | null =>
+  typeof item === 'object' ? item : null;
 interface CopilotReadinessAdvisorProps {
   selectedTenants?: Array<{ id: string; name: string; customerId: string | null }>;
 }
