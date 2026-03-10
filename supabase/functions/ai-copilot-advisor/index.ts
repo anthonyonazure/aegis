@@ -81,6 +81,11 @@ IMPORTANT — base your analysis on these Microsoft Learn requirements:
 
 Provide actionable, specific recommendations based on the tenant's current state.
 
+CRITICAL RULES FOR RECOMMENDATIONS AND ACTIONS:
+- Every recommendation, action, gap, risk, and optimization MUST include an "explanation" field with a 2-3 sentence plain-English description of what it means and why it matters.
+- Every recommendation, action, gap, risk, and optimization MUST include a "referenceUrl" field with a direct Microsoft Learn URL (https://learn.microsoft.com/...) backing the requirement.
+- Every prioritized action MUST also include a "goal" field describing the specific objective/outcome.
+
 IMPORTANT: Respond with valid JSON only, no markdown formatting.`;
 
     const userPrompt = `Analyze Copilot readiness for this tenant and provide comprehensive deployment recommendations:
