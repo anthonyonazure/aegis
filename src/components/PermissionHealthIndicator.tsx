@@ -209,6 +209,13 @@ export const PermissionHealthIndicator = ({ connectionId, accessToken }: Permiss
   const [hasChecked, setHasChecked] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<string[]>(['missing']);
   const [readOnlyMode, setReadOnlyMode] = useState(true);
+  const [copiedPerm, setCopiedPerm] = useState<string | null>(null);
+
+  const copyPermission = (perm: string) => {
+    navigator.clipboard.writeText(perm);
+    setCopiedPerm(perm);
+    setTimeout(() => setCopiedPerm(null), 1500);
+  };
 
   // Filter results based on read-only toggle
   const isReadWritePerm = (perm: string) => perm.includes('.ReadWrite.');
