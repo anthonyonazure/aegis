@@ -163,7 +163,7 @@ export const PermissionHealthIndicator = ({ connectionId, accessToken }: Permiss
 
       toast({
         title: 'Permission Check Complete',
-        description: `${passed}/${total} permissions verified`,
+        description: `${passedCount}/${total} permissions verified`,
       });
     } catch (error) {
       console.error('Permission check failed:', error);
