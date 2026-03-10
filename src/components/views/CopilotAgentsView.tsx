@@ -66,6 +66,7 @@ import { CopilotReadinessCard } from '@/components/copilot/CopilotReadinessCard'
 import { CopilotUsageChart } from '@/components/copilot/CopilotUsageChart';
 import { CopilotLicensingTable } from '@/components/copilot/CopilotLicensingTable';
 import { PromptLibraryManager } from '@/components/copilot/PromptLibraryManager';
+import { TenantMultiSelector, SelectedTenantInfo } from '@/components/copilot/TenantMultiSelector';
 import { AIGovernancePolicies } from '@/components/copilot/AIGovernancePolicies';
 
 // Import AI components
