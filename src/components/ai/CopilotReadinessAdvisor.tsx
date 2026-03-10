@@ -116,7 +116,11 @@ interface CopilotAdvisorAnalysis {
   };
 }
 
-export const CopilotReadinessAdvisor = () => {
+interface CopilotReadinessAdvisorProps {
+  selectedTenants?: Array<{ id: string; name: string; customerId: string | null }>;
+}
+
+export const CopilotReadinessAdvisor = ({ selectedTenants }: CopilotReadinessAdvisorProps) => {
   const { toast } = useToast();
   const { connectionId, customers } = useTenant();
   const [analysis, setAnalysis] = useState<CopilotAdvisorAnalysis | null>(null);
