@@ -155,11 +155,11 @@ export const PermissionHealthIndicator = ({ connectionId, accessToken }: Permiss
         testedEndpoint: r.resourceId,
       }));
 
-      setResults(data?.results || []);
+      setResults(mapped);
       setHasChecked(true);
 
-      const passed = (data?.results || []).filter((r: PermissionResult) => r.hasPermission).length;
-      const total = (data?.results || []).length;
+      const passedCount = mapped.filter((r: PermissionResult) => r.hasPermission).length;
+      const total = mapped.length;
 
       toast({
         title: 'Permission Check Complete',
