@@ -633,16 +633,26 @@ export const CopilotAgentsView = () => {
 
         {/* Licensing Tab */}
         <TabsContent value="licensing" className="space-y-4">
-          {connectionId ? (
-            <CopilotLicensingTable 
-              tenantConnectionId={connectionId}
-              tenantName={tenantDisplayName}
-            />
+          <TenantMultiSelector
+            selectedTenantIds={selectedLicensingTenants.map(t => t.id)}
+            onSelectionChange={setSelectedLicensingTenants}
+            label="Select tenants for licensing review"
+          />
+          {selectedLicensingTenants.length > 0 ? (
+            <div className="space-y-4">
+              {selectedLicensingTenants.map(tenant => (
+                <CopilotLicensingTable
+                  key={tenant.id}
+                  tenantConnectionId={tenant.id}
+                  tenantName={tenant.name}
+                />
+              ))}
+            </div>
           ) : (
             <Card className="glass-panel border-border/50">
               <CardContent className="py-12 text-center text-muted-foreground">
                 <CreditCard className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p>Connect to a tenant to view licensing status</p>
+                <p>Select one or more tenants above to view licensing status</p>
               </CardContent>
             </Card>
           )}
