@@ -30,6 +30,7 @@ import { testAzureConnection } from '@/lib/azureApi';
 import { AzureSubscription } from '@/types/tenant';
 import { useToast } from '@/hooks/use-toast';
 import { ServicePrincipalManager, ServicePrincipalConfig } from '@/components/ServicePrincipalManager';
+import { PermissionHealthIndicator } from '@/components/PermissionHealthIndicator';
 import { AzureAutomationManager } from '@/components/AzureAutomationManager';
 import { loginWithPopup, acquireToken, logout, getCurrentAccount, GRAPH_SCOPES } from '@/lib/msalAuth';
 import type { AccountInfo } from '@azure/msal-browser';
@@ -126,6 +127,8 @@ export const AuthView = () => {
     isConnected, 
     tenantName, 
     tenantId: connectedTenantId,
+    accessToken,
+    connectionId: activeConnectionId,
     isConnecting, 
     connect, 
     disconnect 
@@ -364,6 +367,19 @@ export const AuthView = () => {
         </motion.div>
       )}
 
+      {/* Permission Health Indicator - shown when connected */}
+      {isConnected && activeConnectionId && accessToken && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+        >
+          <PermissionHealthIndicator
+            connectionId={activeConnectionId}
+            accessToken={accessToken}
+          />
+        </motion.div>
+      )}
       {/* Connection Type Selector */}
       <Card className="glass-panel">
         <CardHeader>
