@@ -411,9 +411,20 @@ export const PermissionHealthIndicator = ({ connectionId, accessToken }: Permiss
                         key={item.permission}
                         className="p-3 rounded-lg bg-muted/30 border border-border/50 space-y-2"
                       >
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
                           <code className="text-sm font-mono text-destructive">{item.permission}</code>
-                          <Badge className={sevConfig.className} variant="outline">
+                          <button
+                            onClick={() => copyPermission(item.permission)}
+                            className="p-1 rounded hover:bg-muted/50 transition-colors shrink-0"
+                            title="Copy permission name"
+                          >
+                            {copiedPerm === item.permission ? (
+                              <Check className="w-3.5 h-3.5 text-green-400" />
+                            ) : (
+                              <Copy className="w-3.5 h-3.5 text-muted-foreground" />
+                            )}
+                          </button>
+                          <Badge className={cn("ml-auto", sevConfig.className)} variant="outline">
                             {sevConfig.label}
                           </Badge>
                         </div>
