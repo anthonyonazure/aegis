@@ -380,6 +380,7 @@ export const AuthView = () => {
           />
         </motion.div>
       )}
+      {/* Connection Type Selector */}
       <Card className="glass-panel">
         <CardHeader>
           <CardTitle className="text-lg">Connection Type</CardTitle>
