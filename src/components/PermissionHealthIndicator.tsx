@@ -246,13 +246,6 @@ export const PermissionHealthIndicator = ({ connectionId, accessToken }: Permiss
 
       const passedCount = mapped.filter(r => r.hasPermission).length;
       const total = mapped.length;
-      }));
-
-      setResults(mapped);
-      setHasChecked(true);
-
-      const passedCount = mapped.filter((r: PermissionResult) => r.hasPermission).length;
-      const total = mapped.length;
 
       toast({
         title: 'Permission Check Complete',
