@@ -314,7 +314,7 @@ export const CopilotReadinessAdvisor = ({ selectedTenants }: CopilotReadinessAdv
           const tenantContext = {
             tenantName: tenant.name,
             tenantConnectionId: tenant.id,
-            industry: customer?.industry || "Unknown",
+            industry: "Unknown",
             size: (readinessData.licensing as Record<string, unknown>)?.totalUsers
               ? `${(readinessData.licensing as Record<string, unknown>).totalUsers} users`
               : "Unknown",
