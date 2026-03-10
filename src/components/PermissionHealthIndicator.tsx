@@ -135,8 +135,8 @@ const REQUIRED_PERMISSIONS: Record<string, { permissions: Record<string, { displ
       },
       'InformationProtectionPolicy.Read.All': {
         displayName: 'Info Protection Policy (Read)',
-        features: ['Sensitivity labels governance', 'DLP policy review'],
-        severity: 'medium',
+        features: ['Sensitivity labels', 'Data governance readiness', 'DLP policy review'],
+        severity: 'high',
       },
     },
   },
