@@ -224,6 +224,39 @@ export const CopilotReadinessAdvisor = ({ selectedTenants }: CopilotReadinessAdv
     );
   };
 
+  const toggleSet = <T,>(setter: React.Dispatch<React.SetStateAction<Set<T>>>, key: T) => {
+    setter(prev => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  };
+
+  const ExpandableDetail = ({ detail, referenceUrl, goal }: { detail?: string; referenceUrl?: string; goal?: string }) => (
+    <div className="mt-3 pt-3 border-t border-border/30 space-y-2">
+      {goal && (
+        <div>
+          <span className="text-xs font-semibold text-foreground">Goal: </span>
+          <span className="text-xs text-muted-foreground">{goal}</span>
+        </div>
+      )}
+      {detail && (
+        <p className="text-xs text-muted-foreground leading-relaxed">{detail}</p>
+      )}
+      {referenceUrl && (
+        <a
+          href={referenceUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+        >
+          <ExternalLink className="w-3 h-3" />
+          Learn more on Microsoft Learn
+        </a>
+      )}
+    </div>
+  );
+
   const getReadinessColor = (level: string) => {
     switch (level) {
       case 'ready': return 'text-green-400';
