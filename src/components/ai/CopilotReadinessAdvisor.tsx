@@ -772,23 +772,41 @@ export const CopilotReadinessAdvisor = ({ selectedTenants }: CopilotReadinessAdv
                 </div>
                 <div className="space-y-3">
                   {analysis.riskAssessment.risks.map((risk, index) => (
-                    <div key={index} className="p-4 rounded-lg bg-muted/30 border border-border/50">
-                      <div className="flex items-start justify-between mb-2">
-                        <p className="font-medium text-foreground">{risk.risk}</p>
-                        <div className="flex gap-2">
-                          <Badge className={getRiskBadge(risk.likelihood)}>
-                            {risk.likelihood} likelihood
-                          </Badge>
-                          <Badge className={getRiskBadge(risk.impact)}>
-                            {risk.impact} impact
-                          </Badge>
-                        </div>
+                    <Collapsible key={index} open={expandedRisks.has(index)}>
+                      <div className="rounded-lg bg-muted/30 border border-border/50 overflow-hidden">
+                        <CollapsibleTrigger
+                          onClick={() => toggleSet(setExpandedRisks, index)}
+                          className="w-full p-4 hover:bg-muted/50 transition-colors cursor-pointer"
+                        >
+                          <div className="flex items-start justify-between mb-2">
+                            <p className="font-medium text-foreground text-left">{risk.risk}</p>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <Badge className={getRiskBadge(risk.likelihood)}>
+                                {risk.likelihood} likelihood
+                              </Badge>
+                              <Badge className={getRiskBadge(risk.impact)}>
+                                {risk.impact} impact
+                              </Badge>
+                              {expandedRisks.has(index) ? (
+                                <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                              ) : (
+                                <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-start gap-2 mt-2">
+                            <Shield className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
+                            <p className="text-sm text-muted-foreground text-left">{risk.mitigation}</p>
+                          </div>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="px-4 pb-4">
+                          <ExpandableDetail
+                            detail={risk.explanation}
+                            referenceUrl={risk.referenceUrl}
+                          />
+                        </CollapsibleContent>
                       </div>
-                      <div className="flex items-start gap-2 mt-2">
-                        <Shield className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
-                        <p className="text-sm text-muted-foreground">{risk.mitigation}</p>
-                      </div>
-                    </div>
+                    </Collapsible>
                   ))}
                 </div>
               </TabsContent>
