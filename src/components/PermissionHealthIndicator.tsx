@@ -345,6 +345,15 @@ export const PermissionHealthIndicator = ({ connectionId, accessToken }: Permiss
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        {hasChecked && missing.length > 0 && (
+          <div className="flex items-center gap-2 p-2.5 rounded-lg bg-muted/30 border border-border/40">
+            <AlertTriangle className="w-4 h-4 text-yellow-400 shrink-0" />
+            <p className="text-xs text-muted-foreground">
+              If you've added permissions in Azure, disconnect and reconnect the tenant to refresh the access token.
+            </p>
+          </div>
+        )}
+
         {!hasChecked && !isChecking && (
           <div className="text-center py-6 text-muted-foreground">
             <Shield className="w-10 h-10 mx-auto mb-3 opacity-40" />
