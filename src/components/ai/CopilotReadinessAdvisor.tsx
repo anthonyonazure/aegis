@@ -398,28 +398,49 @@ export const CopilotReadinessAdvisor = ({ selectedTenants }: CopilotReadinessAdv
                   Prioritized Actions
                 </h4>
                 {analysis.prioritizedActions.map((action, index) => (
-                  <div key={index} className="p-4 rounded-lg bg-muted/30 border border-border/50">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-start gap-3">
-                        <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm">
-                          {action.priority}
-                        </div>
-                        <div>
-                          <p className="font-medium text-foreground">{action.action}</p>
-                          <div className="flex items-center gap-2 mt-2">
-                            <Badge variant="outline">{action.category}</Badge>
-                            <Badge className={getEffortBadge(action.effort)}>
-                              {action.effort} effort
-                            </Badge>
-                            <Badge className={getRiskBadge(action.impact === 'high' ? 'low' : action.impact === 'low' ? 'high' : 'medium')}>
-                              {action.impact} impact
-                            </Badge>
+                  <Collapsible key={index} open={expandedActions.has(index)}>
+                    <div className="rounded-lg bg-muted/30 border border-border/50 overflow-hidden">
+                      <CollapsibleTrigger
+                        onClick={() => toggleSet(setExpandedActions, index)}
+                        className="w-full p-4 hover:bg-muted/50 transition-colors cursor-pointer"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-start gap-3">
+                            <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm">
+                              {action.priority}
+                            </div>
+                            <div className="text-left">
+                              <p className="font-medium text-foreground">{action.action}</p>
+                              <div className="flex items-center gap-2 mt-2">
+                                <Badge variant="outline">{action.category}</Badge>
+                                <Badge className={getEffortBadge(action.effort)}>
+                                  {action.effort} effort
+                                </Badge>
+                                <Badge className={getRiskBadge(action.impact === 'high' ? 'low' : action.impact === 'low' ? 'high' : 'medium')}>
+                                  {action.impact} impact
+                                </Badge>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-muted-foreground">{action.timeline}</span>
+                            {expandedActions.has(index) ? (
+                              <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                            ) : (
+                              <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                            )}
                           </div>
                         </div>
-                      </div>
-                      <span className="text-sm text-muted-foreground">{action.timeline}</span>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="px-4 pb-4">
+                        <ExpandableDetail
+                          goal={action.goal}
+                          detail={action.explanation}
+                          referenceUrl={action.referenceUrl}
+                        />
+                      </CollapsibleContent>
                     </div>
-                  </div>
+                  </Collapsible>
                 ))}
               </TabsContent>
 
