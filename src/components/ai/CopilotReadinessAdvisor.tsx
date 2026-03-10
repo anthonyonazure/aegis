@@ -255,13 +255,14 @@ export const CopilotReadinessAdvisor = ({ selectedTenants }: CopilotReadinessAdv
               </CardDescription>
             </div>
           </div>
-          <Button onClick={runAnalysis} disabled={isLoading}>
+          <Button onClick={runAnalysis} disabled={isLoading || tenantsToAnalyze.length === 0}>
             {isLoading ? (
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
             ) : (
               <Sparkles className="w-4 h-4 mr-2" />
             )}
             {analysis ? 'Re-analyze' : 'Analyze Readiness'}
+            {tenantsToAnalyze.length > 1 && ` (${tenantsToAnalyze.length})`}
           </Button>
         </div>
       </CardHeader>
