@@ -20,88 +20,172 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
 interface PermissionResult {
-  resource: string;
-  resourceName: string;
+  permission: string;
+  displayName: string;
   hasPermission: boolean;
-  requiredPermissions: string[];
-  testedEndpoint?: string;
+  features: string[];
+  severity: 'critical' | 'high' | 'medium';
+  category: string;
 }
 
-// Map permissions to the features they unlock
-const PERMISSION_FEATURE_MAP: Record<string, { features: string[]; severity: 'critical' | 'high' | 'medium' }> = {
-  'DeviceManagementConfiguration.Read.All': {
-    features: ['Export device configs', 'Compliance policies', 'Update rings', 'Drift detection for Intune'],
-    severity: 'critical',
+// All required permissions grouped by category, with features they unlock
+const REQUIRED_PERMISSIONS: Record<string, { permissions: Record<string, { displayName: string; features: string[]; severity: 'critical' | 'high' | 'medium' }> }> = {
+  'Intune / Endpoint Management': {
+    permissions: {
+      'DeviceManagementConfiguration.Read.All': {
+        displayName: 'Device Management Config (Read)',
+        features: ['Export device configs', 'Compliance policies', 'Update rings', 'Drift detection'],
+        severity: 'critical',
+      },
+      'DeviceManagementConfiguration.ReadWrite.All': {
+        displayName: 'Device Management Config (Read/Write)',
+        features: ['Deploy device configs', 'Import compliance policies', 'Policy deployment'],
+        severity: 'high',
+      },
+      'DeviceManagementApps.Read.All': {
+        displayName: 'Device Management Apps (Read)',
+        features: ['Export apps & scripts', 'App configuration policies', 'Win32 app backup'],
+        severity: 'high',
+      },
+      'DeviceManagementApps.ReadWrite.All': {
+        displayName: 'Device Management Apps (Read/Write)',
+        features: ['Deploy apps', 'Import app configs', 'Restore app assignments'],
+        severity: 'high',
+      },
+      'DeviceManagementManagedDevices.Read.All': {
+        displayName: 'Managed Devices (Read)',
+        features: ['Device inventory', 'Managed device reports'],
+        severity: 'medium',
+      },
+      'DeviceManagementServiceConfig.Read.All': {
+        displayName: 'Service Config (Read)',
+        features: ['Autopilot profiles', 'Enrollment restrictions'],
+        severity: 'high',
+      },
+    },
   },
-  'DeviceManagementConfiguration.ReadWrite.All': {
-    features: ['Deploy device configs', 'Import compliance policies', 'Policy deployment'],
-    severity: 'high',
+  'Entra ID / Directory': {
+    permissions: {
+      'Directory.Read.All': {
+        displayName: 'Directory (Read)',
+        features: ['Users & groups', 'Role assignments', 'Directory settings', 'Governance metrics'],
+        severity: 'critical',
+      },
+      'Application.Read.All': {
+        displayName: 'Applications (Read)',
+        features: ['App registrations export', 'Service principal audit'],
+        severity: 'medium',
+      },
+      'RoleManagement.Read.Directory': {
+        displayName: 'Role Management (Read)',
+        features: ['Role assignments', 'Admin role audit'],
+        severity: 'medium',
+      },
+      'Domain.Read.All': {
+        displayName: 'Domains (Read)',
+        features: ['Domain configuration export'],
+        severity: 'medium',
+      },
+      'AdministrativeUnit.Read.All': {
+        displayName: 'Administrative Units (Read)',
+        features: ['Admin unit export', 'Scoped role assignments'],
+        severity: 'medium',
+      },
+    },
   },
-  'DeviceManagementApps.Read.All': {
-    features: ['Export apps & scripts', 'App configuration policies', 'Win32 app backup'],
-    severity: 'high',
+  'Security & Compliance': {
+    permissions: {
+      'Policy.Read.All': {
+        displayName: 'Policies (Read)',
+        features: ['Conditional Access policies', 'Named locations', 'Auth strengths'],
+        severity: 'critical',
+      },
+      'SecurityEvents.Read.All': {
+        displayName: 'Security Events (Read)',
+        features: ['Defender configurations', 'Security alerts', 'Secure Score'],
+        severity: 'high',
+      },
+      'InformationProtection.Read.All': {
+        displayName: 'Information Protection (Read)',
+        features: ['Sensitivity labels', 'Data governance readiness'],
+        severity: 'high',
+      },
+    },
   },
-  'DeviceManagementApps.ReadWrite.All': {
-    features: ['Deploy apps', 'Import app configs', 'Restore app assignments'],
-    severity: 'high',
+  'Copilot Readiness': {
+    permissions: {
+      'Organization.Read.All': {
+        displayName: 'Organization (Read)',
+        features: ['Copilot licensing check', 'Organization info', 'Subscribed SKUs'],
+        severity: 'high',
+      },
+      'AuditLog.Read.All': {
+        displayName: 'Audit Logs (Read)',
+        features: ['MFA assessment', 'Authentication methods report', 'Sign-in audit'],
+        severity: 'high',
+      },
+      'UserAuthenticationMethod.Read.All': {
+        displayName: 'User Auth Methods (Read)',
+        features: ['MFA coverage check', 'Per-user auth method audit'],
+        severity: 'medium',
+      },
+      'Reports.Read.All': {
+        displayName: 'Reports (Read)',
+        features: ['Copilot usage reports', 'Adoption analytics'],
+        severity: 'high',
+      },
+      'InformationProtectionPolicy.Read.All': {
+        displayName: 'Info Protection Policy (Read)',
+        features: ['Sensitivity labels governance', 'DLP policy review'],
+        severity: 'medium',
+      },
+    },
   },
-  'DeviceManagementManagedDevices.Read.All': {
-    features: ['Device inventory', 'Managed device reports'],
-    severity: 'medium',
-  },
-  'DeviceManagementServiceConfig.Read.All': {
-    features: ['Autopilot profiles', 'Enrollment restrictions'],
-    severity: 'high',
-  },
-  'Policy.Read.All': {
-    features: ['Conditional Access policies', 'Named locations', 'Auth strengths', 'Copilot readiness checks'],
-    severity: 'critical',
-  },
-  'Directory.Read.All': {
-    features: ['Users & groups', 'Role assignments', 'Directory settings', 'Governance metrics'],
-    severity: 'critical',
-  },
-  'Application.Read.All': {
-    features: ['App registrations export', 'Service principal audit'],
-    severity: 'medium',
-  },
-  'RoleManagement.Read.Directory': {
-    features: ['Role assignments', 'Admin role audit'],
-    severity: 'medium',
-  },
-  'SecurityEvents.Read.All': {
-    features: ['Defender configurations', 'Security alerts', 'Secure Score'],
-    severity: 'high',
-  },
-  'Sites.Read.All': {
-    features: ['SharePoint settings', 'Copilot readiness (SharePoint)', 'Data governance checks'],
-    severity: 'medium',
-  },
-  'TeamSettings.Read.All': {
-    features: ['Teams policies', 'Teams app settings'],
-    severity: 'medium',
-  },
-  'Organization.Read.All': {
-    features: ['Copilot licensing check', 'Organization info', 'Subscribed SKUs'],
-    severity: 'high',
-  },
-  'AuditLog.Read.All': {
-    features: ['Copilot MFA assessment', 'Authentication methods report', 'Sign-in audit'],
-    severity: 'high',
-  },
-  'UserAuthenticationMethod.Read.All': {
-    features: ['Copilot MFA coverage check', 'Per-user auth method audit'],
-    severity: 'medium',
-  },
-  'InformationProtection.Read.All': {
-    features: ['Copilot sensitivity labels check', 'Data governance readiness'],
-    severity: 'high',
-  },
-  'TeamworkAppSettings.Read.All': {
-    features: ['Copilot Teams transcription check', 'Teams app governance'],
-    severity: 'medium',
+  'Collaboration': {
+    permissions: {
+      'Sites.Read.All': {
+        displayName: 'SharePoint Sites (Read)',
+        features: ['SharePoint settings', 'Copilot readiness (SharePoint)'],
+        severity: 'medium',
+      },
+      'TeamSettings.Read.All': {
+        displayName: 'Teams Settings (Read)',
+        features: ['Teams policies', 'Teams app settings'],
+        severity: 'medium',
+      },
+      'TeamworkAppSettings.Read.All': {
+        displayName: 'Teamwork App Settings (Read)',
+        features: ['Copilot Teams transcription check', 'Teams app governance'],
+        severity: 'medium',
+      },
+      'MailboxSettings.Read': {
+        displayName: 'Mailbox Settings (Read)',
+        features: ['Exchange mailbox status', 'Mail flow configuration'],
+        severity: 'medium',
+      },
+    },
   },
 };
+
+// Flatten for the feature map used in impact analysis
+const PERMISSION_FEATURE_MAP: Record<string, { features: string[]; severity: 'critical' | 'high' | 'medium' }> = {};
+Object.values(REQUIRED_PERMISSIONS).forEach(cat => {
+  Object.entries(cat.permissions).forEach(([perm, info]) => {
+    PERMISSION_FEATURE_MAP[perm] = { features: info.features, severity: info.severity };
+  });
+});
+
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const decoded = atob(payload);
+    return JSON.parse(decoded);
+  } catch {
+    return null;
+  }
+}
 
 const SEVERITY_CONFIG = {
   critical: { label: 'Critical', className: 'bg-destructive/20 text-destructive border-destructive/30' },
@@ -121,38 +205,47 @@ export const PermissionHealthIndicator = ({ connectionId, accessToken }: Permiss
   const [hasChecked, setHasChecked] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<string[]>(['missing']);
 
-  // All Graph resource IDs the edge function knows about
-  const ALL_GRAPH_RESOURCES = [
-    'intune/device-configurations', 'intune/compliance-policies', 'intune/app-configurations',
-    'intune/autopilot', 'intune/scripts', 'intune/win32-apps', 'intune/update-rings',
-    'intune/enrollment-restrictions', 'conditional-access/ca-policies', 'conditional-access/named-locations',
-    'conditional-access/auth-strengths', 'entra/users', 'entra/groups', 'entra/directory-roles',
-    'entra/applications', 'entra/domains', 'entra/admin-units', 'entra/directory-settings',
-    'defender/security-alerts', 'defender/secure-score', 'defender/antivirus-policies',
-    'defender/disk-encryption-policies', 'defender/firewall-policies',
-    'sharepoint/tenant-settings', 'teams/messaging-policies',
-    'copilot/licensing', 'copilot/organization-info', 'copilot/mfa-registration',
-    'copilot/auth-methods', 'copilot/sensitivity-labels', 'copilot/sharepoint-sharing',
-    'copilot/onedrive-provisioning', 'copilot/exchange-mailbox', 'copilot/teams-settings',
-    'copilot/conditional-access', 'copilot/usage-reports',
-  ];
-
   const runCheck = async () => {
     setIsChecking(true);
     try {
-      const { data, error } = await supabase.functions.invoke('validate-permissions', {
-        body: { graphToken: accessToken, resourceIds: ALL_GRAPH_RESOURCES },
+      // Decode the JWT to extract granted roles/permissions
+      const payload = decodeJwtPayload(accessToken);
+      if (!payload) throw new Error('Could not decode access token');
+
+      const grantedRoles = new Set<string>(
+        (payload.roles as string[] || [])
+      );
+
+      // Also check scp (delegated permissions) if present
+      if (typeof payload.scp === 'string') {
+        payload.scp.split(' ').forEach(s => grantedRoles.add(s));
+      }
+
+      // Check each required permission against granted roles
+      const mapped: PermissionResult[] = [];
+      Object.entries(REQUIRED_PERMISSIONS).forEach(([category, { permissions }]) => {
+        Object.entries(permissions).forEach(([perm, info]) => {
+          // Check exact match or ReadWrite satisfying Read
+          const hasIt = grantedRoles.has(perm) ||
+            // ReadWrite.All covers Read.All for the same scope prefix
+            (perm.endsWith('.Read.All') && grantedRoles.has(perm.replace('.Read.All', '.ReadWrite.All')));
+          
+          mapped.push({
+            permission: perm,
+            displayName: info.displayName,
+            hasPermission: hasIt,
+            features: info.features,
+            severity: info.severity,
+            category,
+          });
+        });
       });
 
-      if (error) throw error;
+      setResults(mapped);
+      setHasChecked(true);
 
-      // Map edge function results to component's PermissionResult format
-      const mapped: PermissionResult[] = (data?.results || []).map((r: any) => ({
-        resource: r.resourceId,
-        resourceName: r.resourceName,
-        hasPermission: r.success,
-        requiredPermissions: r.error ? [r.error] : [],
-        testedEndpoint: r.resourceId,
+      const passedCount = mapped.filter(r => r.hasPermission).length;
+      const total = mapped.length;
       }));
 
       setResults(mapped);
