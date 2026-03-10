@@ -117,8 +117,8 @@ Provide a detailed analysis in this JSON structure:
     "currentState": "string",
     "requiredLicenses": number,
     "estimatedMonthlyCost": number,
-    "optimizationOpportunities": ["string"],
-    "licensingRecommendations": ["string"]
+    "optimizationOpportunities": [{ "title": "string", "explanation": "string", "referenceUrl": "string (Microsoft Learn URL)" }],
+    "licensingRecommendations": [{ "title": "string", "explanation": "string", "referenceUrl": "string (Microsoft Learn URL)" }]
   },
   "dataGovernance": {
     "sensitivityLabelsStatus": "string",
