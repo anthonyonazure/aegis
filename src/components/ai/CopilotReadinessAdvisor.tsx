@@ -165,19 +165,160 @@ export const CopilotReadinessAdvisor = ({ selectedTenants }: CopilotReadinessAdv
     try {
       const results = await Promise.allSettled(
         tenantsToAnalyze.map(async (tenant) => {
-          const readinessData = {
-            licensing: { totalUsers: 500, copilotLicenses: 50, m365E5Licenses: 200, m365E3Licenses: 300 },
-            security: { mfaEnabled: true, mfaCoverage: 95, conditionalAccessPolicies: 12, identityProtection: true },
-            dataGovernance: { sensitivityLabels: true, dlpPolicies: 8, retentionPolicies: 5, informationBarriers: false },
-            infrastructure: { networkConnectivity: "good", sharePointModernization: 75, teamsAdoption: 85, oneDriveAdoption: 90 },
-          };
+          // 1. Try live Graph API call first
+          let readinessData: Record<string, unknown> | null = null;
+
+          try {
+            const { data: liveMetrics, error: liveError } = await supabase.functions.invoke('fetch-governance-metrics', {
+              body: { tenantConnectionId: tenant.id },
+            });
+            if (!liveError && liveMetrics?.metrics) {
+              const m = liveMetrics.metrics;
+              // Find Copilot licenses from product breakdown
+              const copilotProducts = (m.licensing?.licensesByProduct || []).filter(
+                (p: { productName: string }) => p.productName?.toLowerCase().includes('copilot')
+              );
+              const copilotLicenses = copilotProducts.reduce((sum: number, p: { assigned: number }) => sum + (p.assigned || 0), 0);
+              const e5Products = (m.licensing?.licensesByProduct || []).filter(
+                (p: { productName: string }) => p.productName?.toLowerCase().includes('e5')
+              );
+              const e3Products = (m.licensing?.licensesByProduct || []).filter(
+                (p: { productName: string }) => p.productName?.toLowerCase().includes('e3')
+              );
+
+              readinessData = {
+                licensing: {
+                  totalUsers: m.identity?.totalUsers || 0,
+                  copilotLicenses,
+                  m365E5Licenses: e5Products.reduce((s: number, p: { assigned: number }) => s + (p.assigned || 0), 0),
+                  m365E3Licenses: e3Products.reduce((s: number, p: { assigned: number }) => s + (p.assigned || 0), 0),
+                  totalLicenses: m.licensing?.totalLicenses || 0,
+                  assignedLicenses: m.licensing?.assignedLicenses || 0,
+                  unusedLicenses: m.licensing?.unusedLicenses || 0,
+                  licensesByProduct: m.licensing?.licensesByProduct || [],
+                },
+                security: {
+                  mfaEnabled: (m.compliance?.mfaCoverage || 0) > 50,
+                  mfaCoverage: m.compliance?.mfaCoverage || 0,
+                  conditionalAccessPolicies: m.security?.conditionalAccessPolicies || 0,
+                  identityProtection: (m.identity?.riskyUsers || 0) >= 0,
+                  secureScore: m.security?.secureScore || 0,
+                  maxSecureScore: m.security?.maxSecureScore || 0,
+                  riskyUsers: m.identity?.riskyUsers || 0,
+                  riskySignIns: m.security?.riskySignInsCount || 0,
+                  adminUsers: m.identity?.adminUsers || 0,
+                  legacyAuthBlocked: m.compliance?.legacyAuthBlocked || false,
+                },
+                dataGovernance: {
+                  sensitivityLabels: false, // Not available from governance metrics
+                  dlpPolicies: 0,
+                  retentionPolicies: 0,
+                  informationBarriers: false,
+                },
+                infrastructure: {
+                  networkConnectivity: "unknown",
+                  sharePointModernization: 0,
+                  teamsAdoption: 0,
+                  oneDriveAdoption: 0,
+                },
+                identity: {
+                  totalUsers: m.identity?.totalUsers || 0,
+                  adminUsers: m.identity?.adminUsers || 0,
+                  guestUsers: m.identity?.guestUsers || 0,
+                  mfaEnabledUsers: m.identity?.mfaEnabledUsers || 0,
+                  staleAccounts: (m.identity?.staleUserAccounts || 0) + (m.identity?.staleGuestAccounts || 0),
+                },
+              };
+              console.log('Using live Graph API data for tenant:', tenant.name);
+            }
+          } catch (liveErr) {
+            console.warn('Live metrics fetch failed for', tenant.name, liveErr);
+          }
+
+          // 2. Fallback: latest governance_metrics_history from database
+          if (!readinessData) {
+            try {
+              const { data: historyRows } = await supabase
+                .from('governance_metrics_history')
+                .select('*')
+                .eq('tenant_connection_id', tenant.id)
+                .order('recorded_at', { ascending: false })
+                .limit(1);
+
+              if (historyRows && historyRows.length > 0) {
+                const h = historyRows[0];
+                readinessData = {
+                  licensing: {
+                    totalUsers: h.total_users || 0,
+                    copilotLicenses: 0,
+                    m365E5Licenses: 0,
+                    m365E3Licenses: 0,
+                    totalLicenses: h.total_licenses || 0,
+                    assignedLicenses: h.assigned_licenses || 0,
+                    unusedLicenses: h.unused_licenses || 0,
+                  },
+                  security: {
+                    mfaEnabled: (h.mfa_enabled_users || 0) > 0,
+                    mfaCoverage: h.total_users ? Math.round(((h.mfa_enabled_users || 0) / h.total_users) * 100) : 0,
+                    conditionalAccessPolicies: h.conditional_access_policies || 0,
+                    identityProtection: true,
+                    secureScore: h.secure_score || 0,
+                    maxSecureScore: h.max_secure_score || 100,
+                    riskyUsers: h.risky_users || 0,
+                    riskySignIns: h.risky_sign_ins || 0,
+                    adminUsers: h.admin_users || 0,
+                  },
+                  dataGovernance: {
+                    sensitivityLabels: false,
+                    dlpPolicies: 0,
+                    retentionPolicies: 0,
+                    informationBarriers: false,
+                  },
+                  infrastructure: {
+                    networkConnectivity: "unknown",
+                    sharePointModernization: 0,
+                    teamsAdoption: 0,
+                    oneDriveAdoption: 0,
+                  },
+                  identity: {
+                    totalUsers: h.total_users || 0,
+                    adminUsers: h.admin_users || 0,
+                    guestUsers: h.guest_users || 0,
+                    mfaEnabledUsers: h.mfa_enabled_users || 0,
+                    staleAccounts: h.stale_accounts || 0,
+                  },
+                };
+                console.log('Using stored governance history for tenant:', tenant.name);
+              }
+            } catch (dbErr) {
+              console.warn('DB fallback failed for', tenant.name, dbErr);
+            }
+          }
+
+          // 3. If still no data, use minimal placeholder
+          if (!readinessData) {
+            readinessData = {
+              licensing: { totalUsers: 0, copilotLicenses: 0, m365E5Licenses: 0, m365E3Licenses: 0 },
+              security: { mfaEnabled: false, mfaCoverage: 0, conditionalAccessPolicies: 0, identityProtection: false },
+              dataGovernance: { sensitivityLabels: false, dlpPolicies: 0, retentionPolicies: 0, informationBarriers: false },
+              infrastructure: { networkConnectivity: "unknown", sharePointModernization: 0, teamsAdoption: 0, oneDriveAdoption: 0 },
+            };
+            console.warn('No tenant data available for', tenant.name, '— using empty baseline');
+          }
+
+          // Look up customer info for better context
+          const customer = customers?.find(c =>
+            c.id === tenant.customerId
+          );
 
           const tenantContext = {
             tenantName: tenant.name,
             tenantConnectionId: tenant.id,
-            industry: "Technology",
-            size: "Medium Enterprise",
-            currentM365Usage: "High",
+            industry: customer?.industry || "Unknown",
+            size: (readinessData.licensing as Record<string, unknown>)?.totalUsers
+              ? `${(readinessData.licensing as Record<string, unknown>).totalUsers} users`
+              : "Unknown",
+            currentM365Usage: "Based on live data",
           };
 
           const { data, error } = await supabase.functions.invoke('ai-copilot-advisor', {
