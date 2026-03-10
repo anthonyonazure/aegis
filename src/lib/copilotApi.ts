@@ -1,12 +1,23 @@
 import { supabase } from '@/integrations/supabase/client';
 
+export interface ReadinessCategory {
+  ready: boolean;
+  details: any;
+}
+
 export interface ReadinessAssessment {
   overallScore: number;
-  licensing: { ready: boolean; details: any };
-  permissions: { ready: boolean; details: any };
-  semanticIndex: { ready: boolean; details: any };
-  dataGovernance: { ready: boolean; details: any };
-  network: { ready: boolean; details: any };
+  licensing: ReadinessCategory;
+  identity: ReadinessCategory;
+  exchange: ReadinessCategory;
+  dataGovernance: ReadinessCategory;
+  sharePoint: ReadinessCategory;
+  teams: ReadinessCategory;
+  apps: ReadinessCategory;
+  network: ReadinessCategory;
+  // Legacy compat
+  permissions: ReadinessCategory;
+  semanticIndex: ReadinessCategory;
   recommendations: string[];
 }
 
@@ -329,10 +340,10 @@ export async function saveReadinessAssessment(
       overall_score: assessment.overallScore,
       licensing_ready: assessment.licensing.ready,
       licensing_details: assessment.licensing.details,
-      permissions_ready: assessment.permissions.ready,
-      permissions_details: assessment.permissions.details,
-      semantic_index_ready: assessment.semanticIndex.ready,
-      semantic_index_details: assessment.semanticIndex.details,
+      permissions_ready: assessment.identity?.ready ?? assessment.permissions?.ready,
+      permissions_details: assessment.identity?.details ?? assessment.permissions?.details,
+      semantic_index_ready: assessment.semanticIndex?.ready ?? assessment.dataGovernance?.ready,
+      semantic_index_details: assessment.semanticIndex?.details ?? assessment.dataGovernance?.details,
       data_governance_ready: assessment.dataGovernance.ready,
       data_governance_details: assessment.dataGovernance.details,
       network_ready: assessment.network.ready,

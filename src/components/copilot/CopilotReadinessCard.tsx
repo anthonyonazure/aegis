@@ -3,7 +3,6 @@ import { motion } from 'framer-motion';
 import { 
   CheckCircle2, 
   XCircle, 
-  AlertTriangle, 
   Loader2, 
   RefreshCw,
   Shield,
@@ -11,7 +10,13 @@ import {
   Database,
   Wifi,
   Lightbulb,
-  Download
+  Download,
+  Mail,
+  HardDrive,
+  Phone,
+  AppWindow,
+  Globe,
+  UserCheck,
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -32,6 +37,42 @@ interface CopilotReadinessCardProps {
   tenantName: string;
 }
 
+const ReadinessItem = ({ 
+  label, 
+  ready, 
+  icon: Icon,
+  subtitle,
+}: { 
+  label: string; 
+  ready: boolean; 
+  icon: React.ElementType;
+  subtitle?: string;
+}) => (
+  <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border/50">
+    <div className="flex items-center gap-3">
+      <div className={cn(
+        "w-8 h-8 rounded-lg flex items-center justify-center",
+        ready ? "bg-green-500/20" : "bg-red-500/20"
+      )}>
+        <Icon className={cn("w-4 h-4", ready ? "text-green-400" : "text-red-400")} />
+      </div>
+      <div>
+        <span className="font-medium text-foreground">{label}</span>
+        {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
+      </div>
+    </div>
+    {ready ? (
+      <Badge className="bg-green-500/20 text-green-400">
+        <CheckCircle2 className="w-3 h-3 mr-1" /> Ready
+      </Badge>
+    ) : (
+      <Badge className="bg-red-500/20 text-red-400">
+        <XCircle className="w-3 h-3 mr-1" /> Not Ready
+      </Badge>
+    )}
+  </div>
+);
+
 export const CopilotReadinessCard = ({ 
   tenantConnectionId, 
   customerId,
@@ -46,10 +87,7 @@ export const CopilotReadinessCard = ({
     try {
       const result = await fetchReadinessAssessment(tenantConnectionId);
       setAssessment(result);
-      
-      // Save to database
       await saveReadinessAssessment(tenantConnectionId, customerId, result);
-      
       toast({
         title: 'Assessment Complete',
         description: `Copilot readiness score: ${result.overallScore}%`,
@@ -71,45 +109,6 @@ export const CopilotReadinessCard = ({
     if (score >= 50) return 'text-yellow-400';
     return 'text-red-400';
   };
-
-  const getScoreGradient = (score: number) => {
-    if (score >= 80) return 'from-green-500 to-emerald-500';
-    if (score >= 50) return 'from-yellow-500 to-amber-500';
-    return 'from-red-500 to-rose-500';
-  };
-
-  const ReadinessItem = ({ 
-    label, 
-    ready, 
-    icon: Icon,
-    details 
-  }: { 
-    label: string; 
-    ready: boolean; 
-    icon: React.ElementType;
-    details?: any;
-  }) => (
-    <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border/50">
-      <div className="flex items-center gap-3">
-        <div className={cn(
-          "w-8 h-8 rounded-lg flex items-center justify-center",
-          ready ? "bg-green-500/20" : "bg-red-500/20"
-        )}>
-          <Icon className={cn("w-4 h-4", ready ? "text-green-400" : "text-red-400")} />
-        </div>
-        <span className="font-medium text-foreground">{label}</span>
-      </div>
-      {ready ? (
-        <Badge className="bg-green-500/20 text-green-400">
-          <CheckCircle2 className="w-3 h-3 mr-1" /> Ready
-        </Badge>
-      ) : (
-        <Badge className="bg-red-500/20 text-red-400">
-          <XCircle className="w-3 h-3 mr-1" /> Not Ready
-        </Badge>
-      )}
-    </div>
-  );
 
   return (
     <Card className="glass-panel border-border/50">
@@ -158,44 +157,61 @@ export const CopilotReadinessCard = ({
                 {assessment.overallScore}%
               </div>
               <p className="text-muted-foreground">Overall Readiness Score</p>
-              <Progress 
-                value={assessment.overallScore} 
-                className={cn("mt-4 h-3", `bg-gradient-to-r ${getScoreGradient(assessment.overallScore)}`)}
-              />
+              <Progress value={assessment.overallScore} className="mt-4 h-3" />
             </div>
 
-            {/* Readiness Checklist */}
+            {/* Readiness Checklist - 8 Categories */}
             <div className="space-y-3">
               <h4 className="font-medium text-foreground">Readiness Checklist</h4>
               <ReadinessItem 
                 label="Copilot Licensing" 
                 ready={assessment.licensing.ready} 
                 icon={Key}
-                details={assessment.licensing.details}
+                subtitle={assessment.licensing.details?.copilotLicenses > 0 
+                  ? `${assessment.licensing.details.copilotLicenses} licenses (${assessment.licensing.details.consumedLicenses} assigned)` 
+                  : 'No Copilot licenses detected'}
               />
               <ReadinessItem 
-                label="Permissions & Access" 
-                ready={assessment.permissions.ready} 
-                icon={Shield}
-                details={assessment.permissions.details}
+                label="Identity & Access" 
+                ready={assessment.identity?.ready ?? assessment.permissions?.ready ?? false} 
+                icon={UserCheck}
+                subtitle={`MFA: ${assessment.identity?.details?.mfaEnabled ? 'Enabled' : 'Not detected'} · CA Policies: ${assessment.identity?.details?.conditionalAccessPolicies ?? 0}`}
               />
               <ReadinessItem 
-                label="Semantic Index" 
-                ready={assessment.semanticIndex.ready} 
-                icon={Database}
-                details={assessment.semanticIndex.details}
+                label="Exchange & Mailbox" 
+                ready={assessment.exchange?.ready ?? true} 
+                icon={Mail}
+                subtitle={assessment.exchange?.details?.mailboxesDetected ? 'Cloud mailboxes detected' : 'Verify Exchange Online mailboxes'}
               />
               <ReadinessItem 
                 label="Data Governance" 
                 ready={assessment.dataGovernance.ready} 
                 icon={Shield}
-                details={assessment.dataGovernance.details}
+                subtitle={assessment.dataGovernance.details?.sensitivityLabelsEnabled ? 'Sensitivity labels configured' : 'Labels not configured'}
               />
               <ReadinessItem 
-                label="Network Connectivity" 
+                label="SharePoint & OneDrive" 
+                ready={assessment.sharePoint?.ready ?? true} 
+                icon={HardDrive}
+                subtitle={`OneDrive: ${assessment.sharePoint?.details?.oneDriveProvisioned ? 'Provisioned' : 'Check provisioning'} · Overshare risk: ${assessment.sharePoint?.details?.overshareRisk ?? 'unknown'}`}
+              />
+              <ReadinessItem 
+                label="Teams & Voice" 
+                ready={assessment.teams?.ready ?? true} 
+                icon={Phone}
+                subtitle={`Transcription: ${assessment.teams?.details?.transcriptionEnabled !== false ? 'OK' : 'Disabled'} · Voice: ${assessment.teams?.details?.copilotVoiceReady ? 'Ready' : 'Teams Phone needed'}`}
+              />
+              <ReadinessItem 
+                label="Apps & Update Channel" 
+                ready={assessment.apps?.ready ?? true} 
+                icon={AppWindow}
+                subtitle="Verify Current/Monthly Enterprise Channel & Connected Experiences"
+              />
+              <ReadinessItem 
+                label="Network" 
                 ready={assessment.network.ready} 
-                icon={Wifi}
-                details={assessment.network.details}
+                icon={Globe}
+                subtitle="WSS endpoints, firewall rules, third-party cookies"
               />
             </div>
 
@@ -225,6 +241,23 @@ export const CopilotReadinessCard = ({
                     <div className="text-xs text-muted-foreground">Available</div>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {/* Network Endpoints Info */}
+            {assessment.network?.details?.requiredEndpoints && (
+              <div className="p-4 rounded-lg bg-muted/30 border border-border/50">
+                <h4 className="font-medium text-foreground mb-3 flex items-center gap-2">
+                  <Wifi className="w-4 h-4" /> Required Network Endpoints
+                </h4>
+                <ul className="text-sm text-muted-foreground space-y-1">
+                  {assessment.network.details.requiredEndpoints.map((ep: string, i: number) => (
+                    <li key={i} className="font-mono text-xs">• {ep}</li>
+                  ))}
+                </ul>
+                {assessment.network.details.wssRequired && (
+                  <p className="text-xs text-yellow-400 mt-2">⚠ WebSocket (WSS) connections must be allowed for Copilot Voice</p>
+                )}
               </div>
             )}
 

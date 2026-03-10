@@ -1,73 +1,28 @@
 
 
-# Add Microsoft Learn-Based Copilot Readiness Checks
+## Problem Identified
 
-## What's Missing
+The secure score fetch **is working** -- it successfully retrieves data from Microsoft Graph. However, it **fails to save** for one tenant ("Tesoro XP, Inc.") because of a database column overflow.
 
-Based on Microsoft's official documentation, the current readiness assessment is missing several critical checks. Here's what needs to be added:
+**Root cause:** The `current_score` and `max_score` columns in both `tenant_secure_scores` and `secure_score_history` are defined as `NUMERIC(5,2)`, which caps at **999.99**. Microsoft Graph returned `currentScore: 574.75` and `maxScore: 1170` for this tenant -- the `max_score` of 1170 exceeds the limit.
 
-### New Checks from Microsoft Learn
+The other two tenants (scores ~88 and ~122) saved fine because their values fit within 999.99.
 
-| Check | Source | Current Status |
-|-------|--------|----------------|
-| **Exchange Online Mailbox** | Minimum requirements | Not checked |
-| **Update Channel** (Current/Monthly Enterprise, NOT Semi-Annual) | Setup guide | Not checked |
-| **Connected Experiences / Privacy Settings** | App requirements | Not checked |
-| **MFA Enabled** | Security measures | Not checked |
-| **Conditional Access Policies** | Readiness activities | Not checked |
-| **OneDrive Provisioned** | App requirements | Not checked |
-| **Teams Transcription/Recording** (for Copilot in Teams) | App requirements | Not checked |
-| **Teams Phone + PSTN License** (for Copilot Voice) | App requirements | Not checked |
-| **Loop Enabled** | App requirements | Not checked |
-| **WebSocket (WSS) Endpoints** (`*.cloud.microsoft`, `*.office.com`) | Network requirements | Hardcoded as "ready" |
-| **SharePoint Governance / Oversharing** | Setup guide | Not checked |
-| **Purview Sensitivity Labels** | Setup guide | Partially checked |
-| **Audit Logging Enabled** | Security measures | Not checked |
-| **Entra ID Accounts** | Minimum requirements | Not checked |
-| **Third-Party Cookies** (for Web apps) | App requirements | Not checked |
-| **Office Feature Updates Task** | App requirements | Not checked |
+Edge function log confirms:
+```
+numeric field overflow
+A field with precision 5, scale 2 must round to an absolute value less than 10^3.
+```
 
-## Implementation Plan
+## Fix
 
-### 1. Expand the Edge Function (`fetch-copilot-data/index.ts`)
+**Database migration** -- widen the numeric columns to `NUMERIC(10,2)` (supports up to 99,999,999.99):
 
-Add new Graph API checks inside `performReadinessCheck`:
+1. `tenant_secure_scores.current_score` -- ALTER to `NUMERIC(10,2)`
+2. `tenant_secure_scores.max_score` -- ALTER to `NUMERIC(10,2)`
+3. `tenant_secure_scores.score_percentage` -- keep or widen to `NUMERIC(7,2)` (percentage could theoretically exceed 999 in edge cases with bad data)
+4. `secure_score_history.score` -- ALTER to `NUMERIC(10,2)`
+5. `secure_score_history.max_score` -- ALTER to `NUMERIC(10,2)`
 
-- **MFA check**: Query `GET /reports/authenticationMethods/usersRegisteredByMethod` or conditional access policies
-- **Conditional Access**: `GET /identity/conditionalAccess/policies` - count active policies
-- **Exchange Online mailbox**: `GET /users?$select=mailboxSettings` to verify mailbox hosted on EXO
-- **OneDrive provisioned**: `GET /users?$select=mySite` or check OneDrive provisioning
-- **Teams config**: `GET /teamwork/teamsAppSettings` for transcription/recording settings
-- **Audit logging**: `GET /security/auditLog/queries` (beta) to check if enabled
-- **SharePoint oversharing**: `GET /sites?$select=sharingCapability` for sharing policy review
-- **Loop enabled**: Check via admin settings or org settings endpoint
-
-Restructure the scoring from 5 categories to 8:
-1. Licensing (weight: 15)
-2. Identity & Access (MFA, Conditional Access, Entra ID) (weight: 15)
-3. Exchange & Mailbox (weight: 10)
-4. Data Governance (Sensitivity Labels, DLP, Purview) (weight: 15)
-5. SharePoint & OneDrive (provisioning, oversharing) (weight: 10)
-6. Teams & Voice (transcription, Teams Phone, PSTN) (weight: 10)
-7. Apps & Update Channel (Current/Monthly channel, Loop, Connected Experiences) (weight: 10)
-8. Network (WSS endpoints, `*.cloud.microsoft`) (weight: 15)
-
-### 2. Update the `ReadinessAssessment` Interface (`copilotApi.ts`)
-
-Add new category fields to match the expanded checks.
-
-### 3. Update `CopilotReadinessCard.tsx`
-
-Add new readiness items for each new check category with appropriate icons.
-
-### 4. Update AI Advisor Edge Function (`ai-copilot-advisor/index.ts`)
-
-Update the system prompt to reference the specific Microsoft Learn requirements so AI recommendations are grounded in official documentation.
-
-### 5. Files to Modify
-
-- `supabase/functions/fetch-copilot-data/index.ts` - Add 8+ new Graph API checks
-- `src/lib/copilotApi.ts` - Expand `ReadinessAssessment` interface
-- `src/components/copilot/CopilotReadinessCard.tsx` - Display new check categories
-- `supabase/functions/ai-copilot-advisor/index.ts` - Update prompts with official requirements
+No code changes needed -- the edge function and client code are correct. Only the column precision is too small.
 
