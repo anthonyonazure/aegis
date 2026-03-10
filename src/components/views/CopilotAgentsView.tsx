@@ -606,16 +606,26 @@ export const CopilotAgentsView = () => {
 
         {/* Usage Analytics Tab */}
         <TabsContent value="analytics" className="space-y-4">
-          {connectionId ? (
-            <CopilotUsageChart 
-              tenantConnectionId={connectionId}
-              tenantName={tenantDisplayName}
-            />
+          <TenantMultiSelector
+            selectedTenantIds={selectedAnalyticsTenants.map(t => t.id)}
+            onSelectionChange={setSelectedAnalyticsTenants}
+            label="Select tenants for usage analytics"
+          />
+          {selectedAnalyticsTenants.length > 0 ? (
+            <div className="space-y-4">
+              {selectedAnalyticsTenants.map(tenant => (
+                <CopilotUsageChart
+                  key={tenant.id}
+                  tenantConnectionId={tenant.id}
+                  tenantName={tenant.name}
+                />
+              ))}
+            </div>
           ) : (
             <Card className="glass-panel border-border/50">
               <CardContent className="py-12 text-center text-muted-foreground">
                 <BarChart3 className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p>Connect to a tenant to view usage analytics</p>
+                <p>Select one or more tenants above to view usage analytics</p>
               </CardContent>
             </Card>
           )}
