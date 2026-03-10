@@ -318,14 +318,26 @@ export const PermissionHealthIndicator = ({ connectionId, accessToken }: Permiss
               </CardDescription>
             </div>
           </div>
-          <Button onClick={runCheck} disabled={isChecking} variant={hasChecked ? "outline" : "default"} size="sm">
-            {isChecking ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <RefreshCw className="w-4 h-4 mr-2" />
-            )}
-            {hasChecked ? 'Re-check' : 'Check Permissions'}
-          </Button>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Switch
+                id="read-only-mode"
+                checked={readOnlyMode}
+                onCheckedChange={setReadOnlyMode}
+              />
+              <Label htmlFor="read-only-mode" className="text-xs text-muted-foreground cursor-pointer">
+                {readOnlyMode ? 'Read-only' : 'Read + Write'}
+              </Label>
+            </div>
+            <Button onClick={runCheck} disabled={isChecking} variant={hasChecked ? "outline" : "default"} size="sm">
+              {isChecking ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <RefreshCw className="w-4 h-4 mr-2" />
+              )}
+              {hasChecked ? 'Re-check' : 'Check Permissions'}
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
