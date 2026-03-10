@@ -274,13 +274,16 @@ export const PermissionHealthIndicator = ({ connectionId, accessToken }: Permiss
   const score = results.length > 0 ? Math.round((passed.length / results.length) * 100) : 0;
 
   // Collect all missing permissions and their affected features
-  const missingPermissionImpact = missing.flatMap(r =>
-    r.requiredPermissions.map(perm => ({
-      permission: perm,
-      resourceName: r.resourceName,
-      ...(PERMISSION_FEATURE_MAP[perm] || { features: [r.resourceName], severity: 'medium' as const }),
-    }))
-  );
+  const uniqueMissingPermissions = missing.map(r => ({
+    permission: r.permission,
+    features: r.features,
+    severity: r.severity,
+    displayName: r.displayName,
+    category: r.category,
+  })).sort((a, b) => {
+    const severityOrder = { critical: 0, high: 1, medium: 2 };
+    return severityOrder[a.severity] - severityOrder[b.severity];
+  });
 
   // Deduplicate by permission
   const uniqueMissingPermissions = Array.from(
