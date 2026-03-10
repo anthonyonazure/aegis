@@ -19,7 +19,8 @@ import {
   FileText,
   Lock,
   Briefcase,
-  Award
+  Award,
+  ExternalLink
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -31,6 +32,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useTenant } from '@/contexts/TenantContext';
 import { cn } from '@/lib/utils';
+
+interface DetailedItem {
+  title: string;
+  explanation: string;
+  referenceUrl: string;
+}
 
 interface CopilotAdvisorAnalysis {
   overallAssessment: {
@@ -50,22 +57,22 @@ interface CopilotAdvisorAnalysis {
     currentState: string;
     requiredLicenses: number;
     estimatedMonthlyCost: number;
-    optimizationOpportunities: string[];
-    licensingRecommendations: string[];
+    optimizationOpportunities: (string | DetailedItem)[];
+    licensingRecommendations: (string | DetailedItem)[];
   };
   dataGovernance: {
     sensitivityLabelsStatus: string;
     dlpPoliciesStatus: string;
     retentionPoliciesStatus: string;
     oversharedContentRisk: string;
-    recommendations: string[];
+    recommendations: (string | DetailedItem)[];
   };
   securityRequirements: {
     mfaStatus: string;
     conditionalAccessStatus: string;
     identityProtectionStatus: string;
-    gaps: string[];
-    recommendations: string[];
+    gaps: (string | DetailedItem)[];
+    recommendations: (string | DetailedItem)[];
   };
   adoptionStrategy: {
     targetUserGroups: Array<{
@@ -98,6 +105,8 @@ interface CopilotAdvisorAnalysis {
       likelihood: string;
       impact: string;
       mitigation: string;
+      explanation?: string;
+      referenceUrl?: string;
     }>;
   };
   prioritizedActions: Array<{
@@ -107,6 +116,9 @@ interface CopilotAdvisorAnalysis {
     effort: string;
     impact: string;
     timeline: string;
+    explanation?: string;
+    goal?: string;
+    referenceUrl?: string;
   }>;
   expectedBenefits: {
     productivityGains: string;
@@ -116,6 +128,10 @@ interface CopilotAdvisorAnalysis {
   };
 }
 
+const getItemTitle = (item: string | DetailedItem): string =>
+  typeof item === 'string' ? item : item.title;
+const getItemDetail = (item: string | DetailedItem): DetailedItem | null =>
+  typeof item === 'object' ? item : null;
 interface CopilotReadinessAdvisorProps {
   selectedTenants?: Array<{ id: string; name: string; customerId: string | null }>;
 }
@@ -126,6 +142,9 @@ export const CopilotReadinessAdvisor = ({ selectedTenants }: CopilotReadinessAdv
   const [analysis, setAnalysis] = useState<CopilotAdvisorAnalysis | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [expandedPhases, setExpandedPhases] = useState<number[]>([]);
+  const [expandedActions, setExpandedActions] = useState<Set<number>>(new Set());
+  const [expandedRisks, setExpandedRisks] = useState<Set<number>>(new Set());
+  const [expandedGovItems, setExpandedGovItems] = useState<Set<string>>(new Set());
 
   const [analysisResults, setAnalysisResults] = useState<Map<string, CopilotAdvisorAnalysis>>(new Map());
 
@@ -204,6 +223,39 @@ export const CopilotReadinessAdvisor = ({ selectedTenants }: CopilotReadinessAdv
       prev.includes(phase) ? prev.filter(p => p !== phase) : [...prev, phase]
     );
   };
+
+  const toggleSet = <T,>(setter: React.Dispatch<React.SetStateAction<Set<T>>>, key: T) => {
+    setter(prev => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  };
+
+  const ExpandableDetail = ({ detail, referenceUrl, goal }: { detail?: string; referenceUrl?: string; goal?: string }) => (
+    <div className="mt-3 pt-3 border-t border-border/30 space-y-2">
+      {goal && (
+        <div>
+          <span className="text-xs font-semibold text-foreground">Goal: </span>
+          <span className="text-xs text-muted-foreground">{goal}</span>
+        </div>
+      )}
+      {detail && (
+        <p className="text-xs text-muted-foreground leading-relaxed">{detail}</p>
+      )}
+      {referenceUrl && (
+        <a
+          href={referenceUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+        >
+          <ExternalLink className="w-3 h-3" />
+          Learn more on Microsoft Learn
+        </a>
+      )}
+    </div>
+  );
 
   const getReadinessColor = (level: string) => {
     switch (level) {
@@ -346,28 +398,49 @@ export const CopilotReadinessAdvisor = ({ selectedTenants }: CopilotReadinessAdv
                   Prioritized Actions
                 </h4>
                 {analysis.prioritizedActions.map((action, index) => (
-                  <div key={index} className="p-4 rounded-lg bg-muted/30 border border-border/50">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-start gap-3">
-                        <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm">
-                          {action.priority}
-                        </div>
-                        <div>
-                          <p className="font-medium text-foreground">{action.action}</p>
-                          <div className="flex items-center gap-2 mt-2">
-                            <Badge variant="outline">{action.category}</Badge>
-                            <Badge className={getEffortBadge(action.effort)}>
-                              {action.effort} effort
-                            </Badge>
-                            <Badge className={getRiskBadge(action.impact === 'high' ? 'low' : action.impact === 'low' ? 'high' : 'medium')}>
-                              {action.impact} impact
-                            </Badge>
+                  <Collapsible key={index} open={expandedActions.has(index)}>
+                    <div className="rounded-lg bg-muted/30 border border-border/50 overflow-hidden">
+                      <CollapsibleTrigger
+                        onClick={() => toggleSet(setExpandedActions, index)}
+                        className="w-full p-4 hover:bg-muted/50 transition-colors cursor-pointer"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-start gap-3">
+                            <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm">
+                              {action.priority}
+                            </div>
+                            <div className="text-left">
+                              <p className="font-medium text-foreground">{action.action}</p>
+                              <div className="flex items-center gap-2 mt-2">
+                                <Badge variant="outline">{action.category}</Badge>
+                                <Badge className={getEffortBadge(action.effort)}>
+                                  {action.effort} effort
+                                </Badge>
+                                <Badge className={getRiskBadge(action.impact === 'high' ? 'low' : action.impact === 'low' ? 'high' : 'medium')}>
+                                  {action.impact} impact
+                                </Badge>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-muted-foreground">{action.timeline}</span>
+                            {expandedActions.has(index) ? (
+                              <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                            ) : (
+                              <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                            )}
                           </div>
                         </div>
-                      </div>
-                      <span className="text-sm text-muted-foreground">{action.timeline}</span>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="px-4 pb-4">
+                        <ExpandableDetail
+                          goal={action.goal}
+                          detail={action.explanation}
+                          referenceUrl={action.referenceUrl}
+                        />
+                      </CollapsibleContent>
                     </div>
-                  </div>
+                  </Collapsible>
                 ))}
               </TabsContent>
 
@@ -458,7 +531,7 @@ export const CopilotReadinessAdvisor = ({ selectedTenants }: CopilotReadinessAdv
                       <FileText className="w-4 h-4 text-primary" />
                       <h5 className="font-medium text-foreground">Data Governance</h5>
                     </div>
-                    <div className="space-y-2 text-sm">
+                    <div className="space-y-2 text-sm mb-3">
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Sensitivity Labels</span>
                         <span className="text-foreground">{analysis.dataGovernance.sensitivityLabelsStatus}</span>
@@ -478,6 +551,31 @@ export const CopilotReadinessAdvisor = ({ selectedTenants }: CopilotReadinessAdv
                         </Badge>
                       </div>
                     </div>
+                    {analysis.dataGovernance.recommendations.length > 0 && (
+                      <div className="border-t border-border/30 pt-3 space-y-2">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Recommendations</p>
+                        {analysis.dataGovernance.recommendations.map((rec, i) => {
+                          const detail = getItemDetail(rec);
+                          const govKey = `dg-${i}`;
+                          return (
+                            <Collapsible key={i} open={expandedGovItems.has(govKey)}>
+                              <CollapsibleTrigger
+                                onClick={() => toggleSet(setExpandedGovItems, govKey)}
+                                className="w-full flex items-center justify-between text-left cursor-pointer hover:bg-muted/30 rounded p-1.5 -mx-1.5 transition-colors"
+                              >
+                                <span className="text-xs text-foreground">{getItemTitle(rec)}</span>
+                                {detail && (expandedGovItems.has(govKey) ? <ChevronUp className="w-3 h-3 text-muted-foreground shrink-0" /> : <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />)}
+                              </CollapsibleTrigger>
+                              {detail && (
+                                <CollapsibleContent className="pl-1.5">
+                                  <ExpandableDetail detail={detail.explanation} referenceUrl={detail.referenceUrl} />
+                                </CollapsibleContent>
+                              )}
+                            </Collapsible>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
 
                   <div className="p-4 rounded-lg bg-muted/30 border border-border/50">
@@ -485,7 +583,7 @@ export const CopilotReadinessAdvisor = ({ selectedTenants }: CopilotReadinessAdv
                       <Lock className="w-4 h-4 text-primary" />
                       <h5 className="font-medium text-foreground">Security Status</h5>
                     </div>
-                    <div className="space-y-2 text-sm">
+                    <div className="space-y-2 text-sm mb-3">
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">MFA Status</span>
                         <span className="text-foreground">{analysis.securityRequirements.mfaStatus}</span>
@@ -499,6 +597,56 @@ export const CopilotReadinessAdvisor = ({ selectedTenants }: CopilotReadinessAdv
                         <span className="text-foreground">{analysis.securityRequirements.identityProtectionStatus}</span>
                       </div>
                     </div>
+                    {analysis.securityRequirements.gaps.length > 0 && (
+                      <div className="border-t border-border/30 pt-3 space-y-2 mb-3">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Security Gaps</p>
+                        {analysis.securityRequirements.gaps.map((gap, i) => {
+                          const detail = getItemDetail(gap);
+                          const govKey = `sg-${i}`;
+                          return (
+                            <Collapsible key={i} open={expandedGovItems.has(govKey)}>
+                              <CollapsibleTrigger
+                                onClick={() => toggleSet(setExpandedGovItems, govKey)}
+                                className="w-full flex items-center justify-between text-left cursor-pointer hover:bg-muted/30 rounded p-1.5 -mx-1.5 transition-colors"
+                              >
+                                <span className="text-xs text-red-400">{getItemTitle(gap)}</span>
+                                {detail && (expandedGovItems.has(govKey) ? <ChevronUp className="w-3 h-3 text-muted-foreground shrink-0" /> : <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />)}
+                              </CollapsibleTrigger>
+                              {detail && (
+                                <CollapsibleContent className="pl-1.5">
+                                  <ExpandableDetail detail={detail.explanation} referenceUrl={detail.referenceUrl} />
+                                </CollapsibleContent>
+                              )}
+                            </Collapsible>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {analysis.securityRequirements.recommendations.length > 0 && (
+                      <div className="border-t border-border/30 pt-3 space-y-2">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Recommendations</p>
+                        {analysis.securityRequirements.recommendations.map((rec, i) => {
+                          const detail = getItemDetail(rec);
+                          const govKey = `sr-${i}`;
+                          return (
+                            <Collapsible key={i} open={expandedGovItems.has(govKey)}>
+                              <CollapsibleTrigger
+                                onClick={() => toggleSet(setExpandedGovItems, govKey)}
+                                className="w-full flex items-center justify-between text-left cursor-pointer hover:bg-muted/30 rounded p-1.5 -mx-1.5 transition-colors"
+                              >
+                                <span className="text-xs text-foreground">{getItemTitle(rec)}</span>
+                                {detail && (expandedGovItems.has(govKey) ? <ChevronUp className="w-3 h-3 text-muted-foreground shrink-0" /> : <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />)}
+                              </CollapsibleTrigger>
+                              {detail && (
+                                <CollapsibleContent className="pl-1.5">
+                                  <ExpandableDetail detail={detail.explanation} referenceUrl={detail.referenceUrl} />
+                                </CollapsibleContent>
+                              )}
+                            </Collapsible>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -521,7 +669,32 @@ export const CopilotReadinessAdvisor = ({ selectedTenants }: CopilotReadinessAdv
                       <div className="text-xs text-muted-foreground">Optimizations</div>
                     </div>
                   </div>
-                  <p className="text-sm text-muted-foreground">{analysis.licensingAnalysis.currentState}</p>
+                  <p className="text-sm text-muted-foreground mb-3">{analysis.licensingAnalysis.currentState}</p>
+                  {(analysis.licensingAnalysis.optimizationOpportunities.length > 0 || analysis.licensingAnalysis.licensingRecommendations.length > 0) && (
+                    <div className="border-t border-border/30 pt-3 space-y-2">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Recommendations</p>
+                      {[...analysis.licensingAnalysis.optimizationOpportunities, ...analysis.licensingAnalysis.licensingRecommendations].map((rec, i) => {
+                        const detail = getItemDetail(rec);
+                        const govKey = `lic-${i}`;
+                        return (
+                          <Collapsible key={i} open={expandedGovItems.has(govKey)}>
+                            <CollapsibleTrigger
+                              onClick={() => toggleSet(setExpandedGovItems, govKey)}
+                              className="w-full flex items-center justify-between text-left cursor-pointer hover:bg-muted/30 rounded p-1.5 -mx-1.5 transition-colors"
+                            >
+                              <span className="text-xs text-foreground">{getItemTitle(rec)}</span>
+                              {detail && (expandedGovItems.has(govKey) ? <ChevronUp className="w-3 h-3 text-muted-foreground shrink-0" /> : <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />)}
+                            </CollapsibleTrigger>
+                            {detail && (
+                              <CollapsibleContent className="pl-1.5">
+                                <ExpandableDetail detail={detail.explanation} referenceUrl={detail.referenceUrl} />
+                              </CollapsibleContent>
+                            )}
+                          </Collapsible>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </TabsContent>
 
@@ -599,23 +772,41 @@ export const CopilotReadinessAdvisor = ({ selectedTenants }: CopilotReadinessAdv
                 </div>
                 <div className="space-y-3">
                   {analysis.riskAssessment.risks.map((risk, index) => (
-                    <div key={index} className="p-4 rounded-lg bg-muted/30 border border-border/50">
-                      <div className="flex items-start justify-between mb-2">
-                        <p className="font-medium text-foreground">{risk.risk}</p>
-                        <div className="flex gap-2">
-                          <Badge className={getRiskBadge(risk.likelihood)}>
-                            {risk.likelihood} likelihood
-                          </Badge>
-                          <Badge className={getRiskBadge(risk.impact)}>
-                            {risk.impact} impact
-                          </Badge>
-                        </div>
+                    <Collapsible key={index} open={expandedRisks.has(index)}>
+                      <div className="rounded-lg bg-muted/30 border border-border/50 overflow-hidden">
+                        <CollapsibleTrigger
+                          onClick={() => toggleSet(setExpandedRisks, index)}
+                          className="w-full p-4 hover:bg-muted/50 transition-colors cursor-pointer"
+                        >
+                          <div className="flex items-start justify-between mb-2">
+                            <p className="font-medium text-foreground text-left">{risk.risk}</p>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <Badge className={getRiskBadge(risk.likelihood)}>
+                                {risk.likelihood} likelihood
+                              </Badge>
+                              <Badge className={getRiskBadge(risk.impact)}>
+                                {risk.impact} impact
+                              </Badge>
+                              {expandedRisks.has(index) ? (
+                                <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                              ) : (
+                                <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-start gap-2 mt-2">
+                            <Shield className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
+                            <p className="text-sm text-muted-foreground text-left">{risk.mitigation}</p>
+                          </div>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="px-4 pb-4">
+                          <ExpandableDetail
+                            detail={risk.explanation}
+                            referenceUrl={risk.referenceUrl}
+                          />
+                        </CollapsibleContent>
                       </div>
-                      <div className="flex items-start gap-2 mt-2">
-                        <Shield className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
-                        <p className="text-sm text-muted-foreground">{risk.mitigation}</p>
-                      </div>
-                    </div>
+                    </Collapsible>
                   ))}
                 </div>
               </TabsContent>

@@ -81,6 +81,11 @@ IMPORTANT — base your analysis on these Microsoft Learn requirements:
 
 Provide actionable, specific recommendations based on the tenant's current state.
 
+CRITICAL RULES FOR RECOMMENDATIONS AND ACTIONS:
+- Every recommendation, action, gap, risk, and optimization MUST include an "explanation" field with a 2-3 sentence plain-English description of what it means and why it matters.
+- Every recommendation, action, gap, risk, and optimization MUST include a "referenceUrl" field with a direct Microsoft Learn URL (https://learn.microsoft.com/...) backing the requirement.
+- Every prioritized action MUST also include a "goal" field describing the specific objective/outcome.
+
 IMPORTANT: Respond with valid JSON only, no markdown formatting.`;
 
     const userPrompt = `Analyze Copilot readiness for this tenant and provide comprehensive deployment recommendations:
@@ -112,22 +117,22 @@ Provide a detailed analysis in this JSON structure:
     "currentState": "string",
     "requiredLicenses": number,
     "estimatedMonthlyCost": number,
-    "optimizationOpportunities": ["string"],
-    "licensingRecommendations": ["string"]
+    "optimizationOpportunities": [{ "title": "string", "explanation": "string", "referenceUrl": "string (Microsoft Learn URL)" }],
+    "licensingRecommendations": [{ "title": "string", "explanation": "string", "referenceUrl": "string (Microsoft Learn URL)" }]
   },
   "dataGovernance": {
     "sensitivityLabelsStatus": "string",
     "dlpPoliciesStatus": "string",
     "retentionPoliciesStatus": "string",
     "oversharedContentRisk": "low" | "medium" | "high",
-    "recommendations": ["string"]
+    "recommendations": [{ "title": "string", "explanation": "string", "referenceUrl": "string (Microsoft Learn URL)" }]
   },
   "securityRequirements": {
     "mfaStatus": "string",
     "conditionalAccessStatus": "string",
     "identityProtectionStatus": "string",
-    "gaps": ["string"],
-    "recommendations": ["string"]
+    "gaps": [{ "title": "string", "explanation": "string", "referenceUrl": "string (Microsoft Learn URL)" }],
+    "recommendations": [{ "title": "string", "explanation": "string", "referenceUrl": "string (Microsoft Learn URL)" }]
   },
   "teamsAndVoice": {
     "transcriptionStatus": "string",
@@ -178,7 +183,9 @@ Provide a detailed analysis in this JSON structure:
         "risk": "string",
         "likelihood": "low" | "medium" | "high",
         "impact": "low" | "medium" | "high",
-        "mitigation": "string"
+        "mitigation": "string",
+        "explanation": "string (2-3 sentence description of what this risk means)",
+        "referenceUrl": "string (Microsoft Learn URL)"
       }
     ]
   },
@@ -189,7 +196,10 @@ Provide a detailed analysis in this JSON structure:
       "category": "string",
       "effort": "low" | "medium" | "high",
       "impact": "low" | "medium" | "high",
-      "timeline": "string"
+      "timeline": "string",
+      "explanation": "string (2-3 sentence description of what this action means and why it matters)",
+      "goal": "string (specific objective/outcome)",
+      "referenceUrl": "string (Microsoft Learn URL)"
     }
   ],
   "expectedBenefits": {
@@ -275,22 +285,29 @@ Provide a detailed analysis in this JSON structure:
           currentState: "Partial licensing in place",
           requiredLicenses: 50,
           estimatedMonthlyCost: 1500,
-          optimizationOpportunities: ["Review unused licenses"],
-          licensingRecommendations: ["Start with pilot group"]
+          optimizationOpportunities: [{ title: "Review unused licenses", explanation: "Identify and reclaim Copilot licenses assigned to inactive or low-usage accounts to reduce waste.", referenceUrl: "https://learn.microsoft.com/en-us/microsoft-365/admin/manage/assign-licenses-to-users" }],
+          licensingRecommendations: [{ title: "Start with pilot group", explanation: "Begin with a focused pilot of 25-50 users to validate ROI before scaling. This reduces risk and provides measurable adoption data.", referenceUrl: "https://learn.microsoft.com/en-us/copilot/microsoft-365/microsoft-365-copilot-setup" }]
         },
         dataGovernance: {
           sensitivityLabelsStatus: "Partially configured",
           dlpPoliciesStatus: "Basic policies in place",
           retentionPoliciesStatus: "Needs review",
           oversharedContentRisk: "medium",
-          recommendations: ["Audit SharePoint permissions", "Configure sensitivity labels", "Review external sharing"]
+          recommendations: [
+            { title: "Audit SharePoint permissions", explanation: "Copilot respects existing permissions, so overshared content will be surfaced to users who shouldn't see it. Review and tighten SharePoint site and document library permissions.", referenceUrl: "https://learn.microsoft.com/en-us/copilot/microsoft-365/microsoft-365-copilot-privacy" },
+            { title: "Configure sensitivity labels", explanation: "Publish and auto-apply Microsoft Purview sensitivity labels to classify and protect sensitive data before Copilot can access it.", referenceUrl: "https://learn.microsoft.com/en-us/purview/sensitivity-labels" },
+            { title: "Review external sharing", explanation: "Restrict external sharing in SharePoint and OneDrive to prevent Copilot from indexing externally shared content that may contain sensitive information.", referenceUrl: "https://learn.microsoft.com/en-us/sharepoint/turn-external-sharing-on-or-off" }
+          ]
         },
         securityRequirements: {
           mfaStatus: "Enabled for most users",
           conditionalAccessStatus: "Basic policies configured",
           identityProtectionStatus: "Active",
-          gaps: ["Some legacy auth remains"],
-          recommendations: ["Block legacy authentication", "Enforce MFA via Conditional Access"]
+          gaps: [{ title: "Some legacy auth remains", explanation: "Legacy authentication protocols (POP, IMAP, SMTP) bypass MFA and Conditional Access, creating a security gap that attackers can exploit.", referenceUrl: "https://learn.microsoft.com/en-us/entra/identity/conditional-access/block-legacy-authentication" }],
+          recommendations: [
+            { title: "Block legacy authentication", explanation: "Create a Conditional Access policy to block all legacy authentication protocols. This ensures all sign-ins go through modern auth with MFA.", referenceUrl: "https://learn.microsoft.com/en-us/entra/identity/conditional-access/block-legacy-authentication" },
+            { title: "Enforce MFA via Conditional Access", explanation: "Require MFA for all users accessing Microsoft 365 services. This is a prerequisite for secure Copilot deployment.", referenceUrl: "https://learn.microsoft.com/en-us/entra/identity/conditional-access/howto-conditional-access-policy-all-users-mfa" }
+          ]
         },
         teamsAndVoice: {
           transcriptionStatus: "Check required",
@@ -325,14 +342,14 @@ Provide a detailed analysis in this JSON structure:
         riskAssessment: {
           overallRisk: "medium",
           risks: [
-            { risk: "Data oversharing via Copilot", likelihood: "medium", impact: "high", mitigation: "Review SharePoint permissions and sensitivity labels before rollout" },
-            { risk: "Network blocking Copilot Voice", likelihood: "low", impact: "high", mitigation: "Verify WSS endpoints with network team" }
+            { risk: "Data oversharing via Copilot", likelihood: "medium", impact: "high", mitigation: "Review SharePoint permissions and sensitivity labels before rollout", explanation: "Copilot surfaces content based on existing user permissions. If SharePoint sites or documents are overshared, Copilot will present sensitive data to unauthorized users in search results and generated content.", referenceUrl: "https://learn.microsoft.com/en-us/copilot/microsoft-365/microsoft-365-copilot-privacy" },
+            { risk: "Network blocking Copilot Voice", likelihood: "low", impact: "high", mitigation: "Verify WSS endpoints with network team", explanation: "Copilot Voice requires WebSocket connections to Microsoft endpoints. If firewalls or proxies block WSS traffic, voice features will fail silently.", referenceUrl: "https://learn.microsoft.com/en-us/microsoft-365/enterprise/urls-and-ip-address-ranges" }
           ]
         },
         prioritizedActions: [
-          { priority: 1, action: "Complete data governance review and sensitivity labels", category: "Security", effort: "medium", impact: "high", timeline: "1-2 weeks" },
-          { priority: 2, action: "Enable MFA and Conditional Access for all users", category: "Identity", effort: "medium", impact: "high", timeline: "1 week" },
-          { priority: 3, action: "Verify network endpoints and WSS connectivity", category: "Network", effort: "low", impact: "high", timeline: "1-2 days" },
+          { priority: 1, action: "Complete data governance review and sensitivity labels", category: "Security", effort: "medium", impact: "high", timeline: "1-2 weeks", explanation: "Before enabling Copilot, you must ensure sensitive data is properly classified and protected. Copilot respects sensitivity labels, so applying them prevents accidental data exposure in AI-generated content.", goal: "All sensitive documents classified with Purview sensitivity labels and DLP policies enforced", referenceUrl: "https://learn.microsoft.com/en-us/purview/sensitivity-labels" },
+          { priority: 2, action: "Enable MFA and Conditional Access for all users", category: "Identity", effort: "medium", impact: "high", timeline: "1 week", explanation: "MFA is a mandatory security requirement for Copilot. Without it, compromised accounts could use Copilot to exfiltrate data at scale across the entire tenant.", goal: "100% MFA coverage with Conditional Access policies enforcing compliant device access", referenceUrl: "https://learn.microsoft.com/en-us/entra/identity/conditional-access/howto-conditional-access-policy-all-users-mfa" },
+          { priority: 3, action: "Verify network endpoints and WSS connectivity", category: "Network", effort: "low", impact: "high", timeline: "1-2 days", explanation: "Copilot requires connectivity to specific Microsoft endpoints including WebSocket connections. Blocked endpoints will cause Copilot features to fail or degrade.", goal: "All required Microsoft Copilot endpoints unblocked at firewall/proxy level", referenceUrl: "https://learn.microsoft.com/en-us/microsoft-365/enterprise/urls-and-ip-address-ranges" },
         ],
         expectedBenefits: {
           productivityGains: "15-30% improvement in document creation",

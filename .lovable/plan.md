@@ -1,48 +1,28 @@
 
 
-# Plan: Expandable Cards with Explanations and Reference Links
+## Problem Identified
 
-## Scope
-Apply the same expandable pattern across three sections of the Copilot Readiness Advisor:
-1. **Prioritized Actions** (actions tab) -- add `explanation`, `goal`, `referenceUrl`
-2. **Governance tab** -- make data governance recommendations, security gaps, and licensing recommendations expandable with explanations and reference links
-3. **Risks tab** -- make each risk card expandable with a detailed `explanation` and `referenceUrl`
+The secure score fetch **is working** -- it successfully retrieves data from Microsoft Graph. However, it **fails to save** for one tenant ("Tesoro XP, Inc.") because of a database column overflow.
 
-## Changes
+**Root cause:** The `current_score` and `max_score` columns in both `tenant_secure_scores` and `secure_score_history` are defined as `NUMERIC(5,2)`, which caps at **999.99**. Microsoft Graph returned `currentScore: 574.75` and `maxScore: 1170` for this tenant -- the `max_score` of 1170 exceeds the limit.
 
-### 1. Edge Function -- Extend AI JSON Schema
-**File:** `supabase/functions/ai-copilot-advisor/index.ts`
+The other two tenants (scores ~88 and ~122) saved fine because their values fit within 999.99.
 
-Add to each relevant schema section:
+Edge function log confirms:
+```
+numeric field overflow
+A field with precision 5, scale 2 must round to an absolute value less than 10^3.
+```
 
-- **`prioritizedActions`** items: add `explanation` (string), `goal` (string), `referenceUrl` (string -- Microsoft Learn URL)
-- **`riskAssessment.risks`** items: add `explanation` (string), `referenceUrl` (string)
-- **`dataGovernance.recommendations`**: change from `string[]` to `Array<{ title, explanation, referenceUrl }>` (or add a parallel `detailedRecommendations` array to avoid breaking the simple display)
-- **`securityRequirements.gaps`** and **`securityRequirements.recommendations`**: same treatment
-- **`licensingAnalysis.optimizationOpportunities`** and **`licensingAnalysis.licensingRecommendations`**: same treatment
+## Fix
 
-Update the system prompt to instruct the AI to always provide a relevant `learn.microsoft.com` link for each item.
+**Database migration** -- widen the numeric columns to `NUMERIC(10,2)` (supports up to 99,999,999.99):
 
-### 2. Frontend TypeScript Interface
-**File:** `src/components/ai/CopilotReadinessAdvisor.tsx`
+1. `tenant_secure_scores.current_score` -- ALTER to `NUMERIC(10,2)`
+2. `tenant_secure_scores.max_score` -- ALTER to `NUMERIC(10,2)`
+3. `tenant_secure_scores.score_percentage` -- keep or widen to `NUMERIC(7,2)` (percentage could theoretically exceed 999 in edge cases with bad data)
+4. `secure_score_history.score` -- ALTER to `NUMERIC(10,2)`
+5. `secure_score_history.max_score` -- ALTER to `NUMERIC(10,2)`
 
-Update `CopilotAdvisorAnalysis`:
-- `prioritizedActions[].explanation`, `.goal`, `.referenceUrl`
-- `riskAssessment.risks[].explanation`, `.referenceUrl`
-- `dataGovernance.recommendations` → array of objects with `title`, `explanation`, `referenceUrl`
-- `securityRequirements.gaps` and `.recommendations` → same
-- `licensingAnalysis` recommendations → same
-
-### 3. Expandable UI Components
-**File:** `src/components/ai/CopilotReadinessAdvisor.tsx`
-
-- Add `expandedActions`, `expandedRisks`, `expandedGovItems` state sets
-- **Actions tab**: Wrap each action in `Collapsible`, show goal/explanation/reference link on expand with chevron indicator and `ExternalLink` icon for the URL
-- **Governance tab**: Each recommendation item becomes a collapsible card showing explanation and reference link
-- **Risks tab**: Each risk card gets a `Collapsible` wrapper; expanded state shows `explanation` and reference link below the existing mitigation text
-
-All expanded sections follow the same visual pattern:
-- Goal in bold
-- Explanation paragraph
-- "Learn more" link with `ExternalLink` icon opening in new tab
+No code changes needed -- the edge function and client code are correct. Only the column precision is too small.
 
