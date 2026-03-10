@@ -142,6 +142,9 @@ export const CopilotReadinessAdvisor = ({ selectedTenants }: CopilotReadinessAdv
   const [analysis, setAnalysis] = useState<CopilotAdvisorAnalysis | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [expandedPhases, setExpandedPhases] = useState<number[]>([]);
+  const [expandedActions, setExpandedActions] = useState<Set<number>>(new Set());
+  const [expandedRisks, setExpandedRisks] = useState<Set<number>>(new Set());
+  const [expandedGovItems, setExpandedGovItems] = useState<Set<string>>(new Set());
 
   const [analysisResults, setAnalysisResults] = useState<Map<string, CopilotAdvisorAnalysis>>(new Map());
 
