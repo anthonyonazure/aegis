@@ -367,7 +367,19 @@ export const AuthView = () => {
         </motion.div>
       )}
 
-      {/* Connection Type Selector */}
+      {/* Permission Health Indicator - shown when connected */}
+      {isConnected && activeConnectionId && accessToken && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+        >
+          <PermissionHealthIndicator
+            connectionId={activeConnectionId}
+            accessToken={accessToken}
+          />
+        </motion.div>
+      )}
       <Card className="glass-panel">
         <CardHeader>
           <CardTitle className="text-lg">Connection Type</CardTitle>
