@@ -30,6 +30,7 @@ import { testAzureConnection } from '@/lib/azureApi';
 import { AzureSubscription } from '@/types/tenant';
 import { useToast } from '@/hooks/use-toast';
 import { ServicePrincipalManager, ServicePrincipalConfig } from '@/components/ServicePrincipalManager';
+import { PermissionHealthIndicator } from '@/components/PermissionHealthIndicator';
 import { AzureAutomationManager } from '@/components/AzureAutomationManager';
 import { loginWithPopup, acquireToken, logout, getCurrentAccount, GRAPH_SCOPES } from '@/lib/msalAuth';
 import type { AccountInfo } from '@azure/msal-browser';
