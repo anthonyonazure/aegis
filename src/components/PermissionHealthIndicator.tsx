@@ -14,6 +14,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -204,6 +206,11 @@ export const PermissionHealthIndicator = ({ connectionId, accessToken }: Permiss
   const [isChecking, setIsChecking] = useState(false);
   const [hasChecked, setHasChecked] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<string[]>(['missing']);
+  const [readOnlyMode, setReadOnlyMode] = useState(true);
+
+  // Filter results based on read-only toggle
+  const isReadWritePerm = (perm: string) => perm.includes('.ReadWrite.');
+  const filteredResults = readOnlyMode ? results.filter(r => !isReadWritePerm(r.permission)) : results;
 
   const runCheck = async () => {
     setIsChecking(true);
@@ -269,9 +276,9 @@ export const PermissionHealthIndicator = ({ connectionId, accessToken }: Permiss
     );
   };
 
-  const passed = results.filter(r => r.hasPermission);
-  const missing = results.filter(r => !r.hasPermission);
-  const score = results.length > 0 ? Math.round((passed.length / results.length) * 100) : 0;
+  const passed = filteredResults.filter(r => r.hasPermission);
+  const missing = filteredResults.filter(r => !r.hasPermission);
+  const score = filteredResults.length > 0 ? Math.round((passed.length / filteredResults.length) * 100) : 0;
 
   // Collect all missing permissions and their affected features
   const uniqueMissingPermissions = missing.map(r => ({
@@ -311,14 +318,26 @@ export const PermissionHealthIndicator = ({ connectionId, accessToken }: Permiss
               </CardDescription>
             </div>
           </div>
-          <Button onClick={runCheck} disabled={isChecking} variant={hasChecked ? "outline" : "default"} size="sm">
-            {isChecking ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <RefreshCw className="w-4 h-4 mr-2" />
-            )}
-            {hasChecked ? 'Re-check' : 'Check Permissions'}
-          </Button>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Switch
+                id="read-only-mode"
+                checked={readOnlyMode}
+                onCheckedChange={setReadOnlyMode}
+              />
+              <Label htmlFor="read-only-mode" className="text-xs text-muted-foreground cursor-pointer">
+                {readOnlyMode ? 'Read-only' : 'Read + Write'}
+              </Label>
+            </div>
+            <Button onClick={runCheck} disabled={isChecking} variant={hasChecked ? "outline" : "default"} size="sm">
+              {isChecking ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <RefreshCw className="w-4 h-4 mr-2" />
+              )}
+              {hasChecked ? 'Re-check' : 'Check Permissions'}
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -343,7 +362,7 @@ export const PermissionHealthIndicator = ({ connectionId, accessToken }: Permiss
               <div className="flex-1">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-sm font-medium text-foreground">
-                    {passed.length}/{results.length} permissions granted
+                    {passed.length}/{filteredResults.length} permissions granted
                   </span>
                   <span className={cn(
                     "text-sm font-bold",
