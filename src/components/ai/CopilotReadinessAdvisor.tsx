@@ -127,61 +127,73 @@ export const CopilotReadinessAdvisor = ({ selectedTenants }: CopilotReadinessAdv
   const [isLoading, setIsLoading] = useState(false);
   const [expandedPhases, setExpandedPhases] = useState<number[]>([]);
 
+  const [analysisResults, setAnalysisResults] = useState<Map<string, CopilotAdvisorAnalysis>>(new Map());
+
+  const tenantsToAnalyze = selectedTenants && selectedTenants.length > 0
+    ? selectedTenants
+    : connectionId ? [{ id: connectionId, name: customers?.[0]?.name || 'Current Tenant', customerId: null }] : [];
+
   const runAnalysis = async () => {
+    if (tenantsToAnalyze.length === 0) {
+      toast({ title: 'No Tenants Selected', description: 'Select at least one tenant to analyze', variant: 'destructive' });
+      return;
+    }
+
     setIsLoading(true);
+    setAnalysis(null);
+    setAnalysisResults(new Map());
+
     try {
-      const readinessData = {
-        licensing: {
-          totalUsers: 500,
-          copilotLicenses: 50,
-          m365E5Licenses: 200,
-          m365E3Licenses: 300
-        },
-        security: {
-          mfaEnabled: true,
-          mfaCoverage: 95,
-          conditionalAccessPolicies: 12,
-          identityProtection: true
-        },
-        dataGovernance: {
-          sensitivityLabels: true,
-          dlpPolicies: 8,
-          retentionPolicies: 5,
-          informationBarriers: false
-        },
-        infrastructure: {
-          networkConnectivity: "good",
-          sharePointModernization: 75,
-          teamsAdoption: 85,
-          oneDriveAdoption: 90
+      const results = await Promise.allSettled(
+        tenantsToAnalyze.map(async (tenant) => {
+          const readinessData = {
+            licensing: { totalUsers: 500, copilotLicenses: 50, m365E5Licenses: 200, m365E3Licenses: 300 },
+            security: { mfaEnabled: true, mfaCoverage: 95, conditionalAccessPolicies: 12, identityProtection: true },
+            dataGovernance: { sensitivityLabels: true, dlpPolicies: 8, retentionPolicies: 5, informationBarriers: false },
+            infrastructure: { networkConnectivity: "good", sharePointModernization: 75, teamsAdoption: 85, oneDriveAdoption: 90 },
+          };
+
+          const tenantContext = {
+            tenantName: tenant.name,
+            tenantConnectionId: tenant.id,
+            industry: "Technology",
+            size: "Medium Enterprise",
+            currentM365Usage: "High",
+          };
+
+          const { data, error } = await supabase.functions.invoke('ai-copilot-advisor', {
+            body: { readinessData, tenantContext },
+          });
+
+          if (error) throw error;
+          return { tenantId: tenant.id, tenantName: tenant.name, data };
+        })
+      );
+
+      const newResults = new Map<string, CopilotAdvisorAnalysis>();
+      let lastSuccessful: CopilotAdvisorAnalysis | null = null;
+
+      results.forEach((result) => {
+        if (result.status === 'fulfilled') {
+          newResults.set(result.value.tenantId, result.value.data);
+          lastSuccessful = result.value.data;
         }
-      };
-
-      const tenantContext = {
-        tenantName: customers?.[0]?.name || "Current Tenant",
-        industry: "Technology",
-        size: "Medium Enterprise",
-        currentM365Usage: "High"
-      };
-
-      const { data, error } = await supabase.functions.invoke('ai-copilot-advisor', {
-        body: { readinessData, tenantContext }
       });
 
-      if (error) throw error;
+      setAnalysisResults(newResults);
+      // Set single analysis for backward compat (show first result)
+      if (lastSuccessful) setAnalysis(lastSuccessful);
 
-      setAnalysis(data);
+      const succeeded = results.filter(r => r.status === 'fulfilled').length;
+      const failed = results.filter(r => r.status === 'rejected').length;
+
       toast({
         title: 'Analysis Complete',
-        description: `Copilot readiness score: ${data.overallAssessment?.readinessScore}%`,
+        description: `${succeeded} tenant${succeeded !== 1 ? 's' : ''} analyzed${failed > 0 ? `, ${failed} failed` : ''}`,
       });
     } catch (error) {
       console.error('Analysis error:', error);
-      toast({
-        title: 'Analysis Failed',
-        description: error instanceof Error ? error.message : 'Failed to analyze readiness',
-        variant: 'destructive',
-      });
+      toast({ title: 'Analysis Failed', description: error instanceof Error ? error.message : 'Failed to analyze readiness', variant: 'destructive' });
     } finally {
       setIsLoading(false);
     }
