@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { 
   Bot, 
@@ -66,6 +66,7 @@ import { CopilotReadinessCard } from '@/components/copilot/CopilotReadinessCard'
 import { CopilotUsageChart } from '@/components/copilot/CopilotUsageChart';
 import { CopilotLicensingTable } from '@/components/copilot/CopilotLicensingTable';
 import { PromptLibraryManager } from '@/components/copilot/PromptLibraryManager';
+import { TenantMultiSelector, SelectedTenantInfo } from '@/components/copilot/TenantMultiSelector';
 import { AIGovernancePolicies } from '@/components/copilot/AIGovernancePolicies';
 
 // Import AI components
@@ -125,6 +126,9 @@ export const CopilotAgentsView = () => {
   const [showAgentDetails, setShowAgentDetails] = useState(false);
   const [deploymentFilter, setDeploymentFilter] = useState<'all' | 'organization' | 'sideloaded'>('all');
   const [activeTab, setActiveTab] = useState('agents');
+  const [selectedReadinessTenants, setSelectedReadinessTenants] = useState<SelectedTenantInfo[]>([]);
+  const [selectedAnalyticsTenants, setSelectedAnalyticsTenants] = useState<SelectedTenantInfo[]>([]);
+  const [selectedLicensingTenants, setSelectedLicensingTenants] = useState<SelectedTenantInfo[]>([]);
 
   const selectedTenant = tenants.find(t => t.id === selectedTenantId);
   const tenantDisplayName = selectedTenant?.displayName || selectedTenant?.tenantName || 'All Tenants';
@@ -574,17 +578,27 @@ export const CopilotAgentsView = () => {
 
         {/* Readiness Assessment Tab */}
         <TabsContent value="readiness" className="space-y-4">
-          {connectionId ? (
-            <CopilotReadinessCard 
-              tenantConnectionId={connectionId}
-              customerId={selectedCustomerId || undefined}
-              tenantName={tenantDisplayName}
-            />
+          <TenantMultiSelector
+            selectedTenantIds={selectedReadinessTenants.map(t => t.id)}
+            onSelectionChange={setSelectedReadinessTenants}
+            label="Select tenants for readiness assessment"
+          />
+          {selectedReadinessTenants.length > 0 ? (
+            <div className="space-y-4">
+              {selectedReadinessTenants.map(tenant => (
+                <CopilotReadinessCard
+                  key={tenant.id}
+                  tenantConnectionId={tenant.id}
+                  customerId={tenant.customerId || undefined}
+                  tenantName={tenant.name}
+                />
+              ))}
+            </div>
           ) : (
             <Card className="glass-panel border-border/50">
               <CardContent className="py-12 text-center text-muted-foreground">
                 <ClipboardCheck className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p>Connect to a tenant to run readiness assessment</p>
+                <p>Select one or more tenants above to run readiness assessments</p>
               </CardContent>
             </Card>
           )}
@@ -592,16 +606,26 @@ export const CopilotAgentsView = () => {
 
         {/* Usage Analytics Tab */}
         <TabsContent value="analytics" className="space-y-4">
-          {connectionId ? (
-            <CopilotUsageChart 
-              tenantConnectionId={connectionId}
-              tenantName={tenantDisplayName}
-            />
+          <TenantMultiSelector
+            selectedTenantIds={selectedAnalyticsTenants.map(t => t.id)}
+            onSelectionChange={setSelectedAnalyticsTenants}
+            label="Select tenants for usage analytics"
+          />
+          {selectedAnalyticsTenants.length > 0 ? (
+            <div className="space-y-4">
+              {selectedAnalyticsTenants.map(tenant => (
+                <CopilotUsageChart
+                  key={tenant.id}
+                  tenantConnectionId={tenant.id}
+                  tenantName={tenant.name}
+                />
+              ))}
+            </div>
           ) : (
             <Card className="glass-panel border-border/50">
               <CardContent className="py-12 text-center text-muted-foreground">
                 <BarChart3 className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p>Connect to a tenant to view usage analytics</p>
+                <p>Select one or more tenants above to view usage analytics</p>
               </CardContent>
             </Card>
           )}
@@ -609,16 +633,26 @@ export const CopilotAgentsView = () => {
 
         {/* Licensing Tab */}
         <TabsContent value="licensing" className="space-y-4">
-          {connectionId ? (
-            <CopilotLicensingTable 
-              tenantConnectionId={connectionId}
-              tenantName={tenantDisplayName}
-            />
+          <TenantMultiSelector
+            selectedTenantIds={selectedLicensingTenants.map(t => t.id)}
+            onSelectionChange={setSelectedLicensingTenants}
+            label="Select tenants for licensing review"
+          />
+          {selectedLicensingTenants.length > 0 ? (
+            <div className="space-y-4">
+              {selectedLicensingTenants.map(tenant => (
+                <CopilotLicensingTable
+                  key={tenant.id}
+                  tenantConnectionId={tenant.id}
+                  tenantName={tenant.name}
+                />
+              ))}
+            </div>
           ) : (
             <Card className="glass-panel border-border/50">
               <CardContent className="py-12 text-center text-muted-foreground">
                 <CreditCard className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p>Connect to a tenant to view licensing status</p>
+                <p>Select one or more tenants above to view licensing status</p>
               </CardContent>
             </Card>
           )}
