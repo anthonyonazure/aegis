@@ -362,7 +362,7 @@ export const PermissionHealthIndicator = ({ connectionId, accessToken }: Permiss
               <div className="flex-1">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-sm font-medium text-foreground">
-                    {passed.length}/{results.length} permissions granted
+                    {passed.length}/{filteredResults.length} permissions granted
                   </span>
                   <span className={cn(
                     "text-sm font-bold",
