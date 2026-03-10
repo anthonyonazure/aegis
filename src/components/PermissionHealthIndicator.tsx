@@ -285,13 +285,6 @@ export const PermissionHealthIndicator = ({ connectionId, accessToken }: Permiss
     return severityOrder[a.severity] - severityOrder[b.severity];
   });
 
-  // Deduplicate by permission
-  const uniqueMissingPermissions = Array.from(
-    new Map(missingPermissionImpact.map(p => [p.permission, p])).values()
-  ).sort((a, b) => {
-    const severityOrder = { critical: 0, high: 1, medium: 2 };
-    return severityOrder[a.severity] - severityOrder[b.severity];
-  });
 
   return (
     <Card className="glass-panel border-border/50">
