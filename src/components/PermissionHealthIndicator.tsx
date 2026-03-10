@@ -206,6 +206,11 @@ export const PermissionHealthIndicator = ({ connectionId, accessToken }: Permiss
   const [isChecking, setIsChecking] = useState(false);
   const [hasChecked, setHasChecked] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<string[]>(['missing']);
+  const [readOnlyMode, setReadOnlyMode] = useState(true);
+
+  // Filter results based on read-only toggle
+  const isReadWritePerm = (perm: string) => perm.includes('.ReadWrite.');
+  const filteredResults = readOnlyMode ? results.filter(r => !isReadWritePerm(r.permission)) : results;
 
   const runCheck = async () => {
     setIsChecking(true);
