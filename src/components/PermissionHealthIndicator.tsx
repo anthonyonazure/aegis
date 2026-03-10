@@ -425,11 +425,12 @@ export const PermissionHealthIndicator = ({ connectionId, accessToken }: Permiss
                 <CollapsibleContent className="mt-2 space-y-1">
                   {passed.map((r) => (
                     <div
-                      key={r.resource}
+                      key={r.permission}
                       className="flex items-center gap-2 px-3 py-1.5 text-sm"
                     >
                       <CheckCircle2 className="w-3.5 h-3.5 text-green-400 shrink-0" />
-                      <span className="text-muted-foreground">{r.resourceName}</span>
+                      <span className="text-muted-foreground">{r.displayName}</span>
+                      <span className="text-xs text-muted-foreground/60 ml-auto">{r.permission}</span>
                     </div>
                   ))}
                 </CollapsibleContent>
