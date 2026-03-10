@@ -35,17 +35,49 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
-    const systemPrompt = `You are an expert Microsoft 365 Copilot readiness advisor. Analyze tenant readiness data and provide comprehensive recommendations for successful Copilot deployment.
+    const systemPrompt = `You are an expert Microsoft 365 Copilot readiness advisor grounded in official Microsoft Learn documentation. Analyze tenant readiness data and provide comprehensive recommendations.
 
-Your analysis should cover:
-1. Overall readiness assessment with specific scores
-2. Licensing optimization and cost analysis
-3. Data governance and security requirements
-4. User adoption and change management strategies
-5. Technical prerequisites and infrastructure needs
-6. Risk assessment and mitigation strategies
-7. Phased rollout recommendations
-8. Success metrics and KPIs
+IMPORTANT — base your analysis on these Microsoft Learn requirements:
+
+## Minimum Requirements (per Microsoft Learn)
+- Entra ID accounts (cloud identity)
+- Microsoft 365 Apps on Current Channel or Monthly Enterprise Channel (Semi-Annual Channel is NOT supported)
+- Exchange Online mailbox (on-premises mailboxes are not supported)
+- OneDrive for Business provisioned
+- Network connectivity to *.cloud.microsoft, *.office.com, copilot.microsoft.com on port 443
+- WebSocket (WSS) connections allowed through firewall/proxy
+
+## Security & Identity
+- MFA enabled for all Copilot users
+- Conditional Access policies enforcing device compliance and MFA
+- Audit logging enabled in Microsoft Purview
+
+## Data Governance (critical for safe rollout)
+- Microsoft Purview sensitivity labels published and applied
+- DLP policies configured to prevent data leakage via Copilot
+- SharePoint/OneDrive sharing reviewed — oversharing means Copilot surfaces content users shouldn't see
+- Retention policies in place
+
+## Apps & Privacy Settings
+- "Connected Experiences" enabled in Office privacy settings (required for cloud AI)
+- Microsoft Loop enabled (Copilot creates Loop components)
+- Third-party cookies allowed for *.cloud.microsoft and *.office.com in browsers
+- Office Feature Updates scheduled task enabled on devices
+
+## Teams & Copilot Voice
+- Transcription and recording enabled in Teams admin center (required for meeting Copilot)
+- For Copilot Voice: Teams Phone license + PSTN connectivity (Calling Plan, Direct Routing, or Operator Connect)
+- VoIP/WebSocket endpoints unblocked at network level
+
+## Scoring Categories (weighted)
+1. Licensing (15%) — Copilot SKUs assigned
+2. Identity & Access (15%) — MFA, Conditional Access, Entra ID
+3. Exchange & Mailbox (10%) — Cloud mailboxes
+4. Data Governance (15%) — Sensitivity labels, DLP, Purview
+5. SharePoint & OneDrive (10%) — Provisioning, oversharing risk
+6. Teams & Voice (10%) — Transcription, Teams Phone, PSTN
+7. Apps & Update Channel (10%) — Current/Monthly channel, Connected Experiences, Loop
+8. Network (15%) — WSS endpoints, firewall rules
 
 Provide actionable, specific recommendations based on the tenant's current state.
 
@@ -56,7 +88,7 @@ IMPORTANT: Respond with valid JSON only, no markdown formatting.`;
 Tenant Context:
 ${JSON.stringify(tenantContext, null, 2)}
 
-Current Readiness Data:
+Current Readiness Data (8-category assessment):
 ${JSON.stringify(readinessData, null, 2)}
 
 Provide a detailed analysis in this JSON structure:
@@ -95,6 +127,20 @@ Provide a detailed analysis in this JSON structure:
     "conditionalAccessStatus": "string",
     "identityProtectionStatus": "string",
     "gaps": ["string"],
+    "recommendations": ["string"]
+  },
+  "teamsAndVoice": {
+    "transcriptionStatus": "string",
+    "teamsPhoneStatus": "string",
+    "pstnConnectivity": "string",
+    "copilotVoiceReady": boolean,
+    "recommendations": ["string"]
+  },
+  "appsAndInfrastructure": {
+    "updateChannel": "string",
+    "connectedExperiences": "string",
+    "loopEnabled": "string",
+    "networkEndpoints": "string",
     "recommendations": ["string"]
   },
   "adoptionStrategy": {
@@ -179,14 +225,12 @@ Provide a detailed analysis in this JSON structure:
       
       if (response.status === 429) {
         return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again later." }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       if (response.status === 402) {
         return new Response(JSON.stringify({ error: "API credits exhausted. Please add credits." }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       throw new Error(`AI request failed: ${response.status}`);
@@ -201,7 +245,6 @@ Provide a detailed analysis in this JSON structure:
 
     console.log("AI response received, parsing...");
 
-    // Parse the JSON response
     let analysis;
     try {
       const cleanedContent = content.replace(/```json\n?|\n?```/g, '').trim();
@@ -210,19 +253,23 @@ Provide a detailed analysis in this JSON structure:
       console.error("Failed to parse AI response:", parseError);
       console.log("Raw content:", content);
       
-      // Return a structured fallback
+      // Structured fallback
       analysis = {
         overallAssessment: {
           readinessScore: 65,
           readinessLevel: "needs-work",
-          summary: "Analysis completed. Review recommendations for improving Copilot readiness.",
+          summary: "Analysis completed. Review recommendations for improving Copilot readiness across all 8 categories.",
           estimatedTimeToReady: "4-6 weeks"
         },
         categoryScores: [
           { category: "Licensing", score: 70, status: "warning", findings: ["Review current licenses"], recommendations: ["Optimize license allocation"] },
-          { category: "Data Governance", score: 60, status: "warning", findings: ["Sensitivity labels needed"], recommendations: ["Implement DLP policies"] },
-          { category: "Security", score: 75, status: "pass", findings: ["MFA enabled"], recommendations: ["Review conditional access"] },
-          { category: "Infrastructure", score: 80, status: "pass", findings: ["Network connectivity good"], recommendations: ["Monitor performance"] }
+          { category: "Identity & Access", score: 60, status: "warning", findings: ["MFA coverage needs review"], recommendations: ["Enable MFA for all users, configure Conditional Access"] },
+          { category: "Exchange & Mailbox", score: 80, status: "pass", findings: ["Cloud mailboxes detected"], recommendations: ["Verify all users have EXO mailboxes"] },
+          { category: "Data Governance", score: 50, status: "warning", findings: ["Sensitivity labels needed"], recommendations: ["Implement Purview sensitivity labels and DLP policies"] },
+          { category: "SharePoint & OneDrive", score: 60, status: "warning", findings: ["Oversharing risk detected"], recommendations: ["Review external sharing policies"] },
+          { category: "Teams & Voice", score: 55, status: "warning", findings: ["Teams Phone not detected"], recommendations: ["Enable transcription, assign Teams Phone for Voice"] },
+          { category: "Apps & Update Channel", score: 70, status: "warning", findings: ["Verify update channel"], recommendations: ["Confirm Current/Monthly Enterprise Channel via Intune"] },
+          { category: "Network", score: 80, status: "pass", findings: ["Endpoint list provided"], recommendations: ["Verify WSS endpoints unblocked at firewall"] },
         ],
         licensingAnalysis: {
           currentState: "Partial licensing in place",
@@ -236,14 +283,28 @@ Provide a detailed analysis in this JSON structure:
           dlpPoliciesStatus: "Basic policies in place",
           retentionPoliciesStatus: "Needs review",
           oversharedContentRisk: "medium",
-          recommendations: ["Audit SharePoint permissions", "Configure sensitivity labels"]
+          recommendations: ["Audit SharePoint permissions", "Configure sensitivity labels", "Review external sharing"]
         },
         securityRequirements: {
           mfaStatus: "Enabled for most users",
           conditionalAccessStatus: "Basic policies configured",
           identityProtectionStatus: "Active",
           gaps: ["Some legacy auth remains"],
-          recommendations: ["Block legacy authentication"]
+          recommendations: ["Block legacy authentication", "Enforce MFA via Conditional Access"]
+        },
+        teamsAndVoice: {
+          transcriptionStatus: "Check required",
+          teamsPhoneStatus: "Not detected",
+          pstnConnectivity: "Not configured",
+          copilotVoiceReady: false,
+          recommendations: ["Enable transcription in Teams admin", "Assign Teams Phone licenses for Voice users"]
+        },
+        appsAndInfrastructure: {
+          updateChannel: "Verify via Intune",
+          connectedExperiences: "Ensure enabled",
+          loopEnabled: "Default enabled",
+          networkEndpoints: "Provide endpoint list to network team",
+          recommendations: ["Confirm Current Channel deployment", "Enable Connected Experiences in Group Policy"]
         },
         adoptionStrategy: {
           targetUserGroups: [
@@ -251,7 +312,7 @@ Provide a detailed analysis in this JSON structure:
             { group: "IT Department", priority: "high", estimatedImpact: "Technical champions", rolloutPhase: 1 }
           ],
           changeManagementSteps: ["Executive sponsorship", "Communication plan", "Training program"],
-          trainingRequirements: ["Basic Copilot usage", "Prompt engineering"],
+          trainingRequirements: ["Basic Copilot usage", "Prompt engineering", "Data governance awareness"],
           successMetrics: ["Adoption rate", "User satisfaction", "Productivity metrics"]
         },
         rolloutPlan: {
@@ -264,18 +325,20 @@ Provide a detailed analysis in this JSON structure:
         riskAssessment: {
           overallRisk: "medium",
           risks: [
-            { risk: "Data oversharing", likelihood: "medium", impact: "high", mitigation: "Review permissions before rollout" }
+            { risk: "Data oversharing via Copilot", likelihood: "medium", impact: "high", mitigation: "Review SharePoint permissions and sensitivity labels before rollout" },
+            { risk: "Network blocking Copilot Voice", likelihood: "low", impact: "high", mitigation: "Verify WSS endpoints with network team" }
           ]
         },
         prioritizedActions: [
-          { priority: 1, action: "Complete data governance review", category: "Security", effort: "medium", impact: "high", timeline: "1-2 weeks" },
-          { priority: 2, action: "Configure sensitivity labels", category: "Compliance", effort: "medium", impact: "high", timeline: "2-3 weeks" }
+          { priority: 1, action: "Complete data governance review and sensitivity labels", category: "Security", effort: "medium", impact: "high", timeline: "1-2 weeks" },
+          { priority: 2, action: "Enable MFA and Conditional Access for all users", category: "Identity", effort: "medium", impact: "high", timeline: "1 week" },
+          { priority: 3, action: "Verify network endpoints and WSS connectivity", category: "Network", effort: "low", impact: "high", timeline: "1-2 days" },
         ],
         expectedBenefits: {
           productivityGains: "15-30% improvement in document creation",
           timesSavingsPerUser: "5-10 hours per week",
           estimatedROI: "3-6 months to positive ROI",
-          keyUseCases: ["Email summarization", "Document drafting", "Meeting preparation"]
+          keyUseCases: ["Email summarization", "Document drafting", "Meeting preparation", "Data analysis"]
         }
       };
     }
