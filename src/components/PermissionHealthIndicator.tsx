@@ -276,9 +276,9 @@ export const PermissionHealthIndicator = ({ connectionId, accessToken }: Permiss
     );
   };
 
-  const passed = results.filter(r => r.hasPermission);
-  const missing = results.filter(r => !r.hasPermission);
-  const score = results.length > 0 ? Math.round((passed.length / results.length) * 100) : 0;
+  const passed = filteredResults.filter(r => r.hasPermission);
+  const missing = filteredResults.filter(r => !r.hasPermission);
+  const score = filteredResults.length > 0 ? Math.round((passed.length / filteredResults.length) * 100) : 0;
 
   // Collect all missing permissions and their affected features
   const uniqueMissingPermissions = missing.map(r => ({
