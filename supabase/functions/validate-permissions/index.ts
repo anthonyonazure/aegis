@@ -114,6 +114,58 @@ const GRAPH_TEST_ENDPOINTS: Record<string, { endpoint: string; description: stri
     endpoint: '/teams?$top=1', 
     description: 'Teams' 
   },
+
+  // Copilot Readiness
+  'copilot/licensing': {
+    endpoint: '/subscribedSkus?$top=1',
+    description: 'Copilot Licensing & SKUs',
+  },
+  'copilot/organization-info': {
+    endpoint: '/organization?$select=displayName&$top=1',
+    description: 'Organization Info',
+  },
+  'copilot/mfa-registration': {
+    endpoint: '/reports/authenticationMethods/usersRegisteredByMethod?usersRegisteredByMethodNames=microsoftAuthenticator',
+    description: 'MFA Registration Reports',
+    useBeta: true,
+  },
+  'copilot/auth-methods': {
+    endpoint: '/reports/authenticationMethods/usersRegisteredByMethod',
+    description: 'Authentication Methods',
+    useBeta: true,
+  },
+  'copilot/sensitivity-labels': {
+    endpoint: '/security/informationProtection/sensitivityLabels?$top=1',
+    description: 'Purview Sensitivity Labels',
+    useBeta: true,
+  },
+  'copilot/sharepoint-sharing': {
+    endpoint: '/sites/root?$select=id',
+    description: 'SharePoint Sharing Settings',
+    useBeta: true,
+  },
+  'copilot/onedrive-provisioning': {
+    endpoint: '/users?$top=1&$select=id,mySite',
+    description: 'OneDrive Provisioning',
+  },
+  'copilot/exchange-mailbox': {
+    endpoint: '/users?$top=1&$select=id,mail,mailboxSettings',
+    description: 'Exchange Mailbox Status',
+  },
+  'copilot/teams-settings': {
+    endpoint: '/teamwork/teamsAppSettings',
+    description: 'Teams App Settings',
+    useBeta: true,
+  },
+  'copilot/conditional-access': {
+    endpoint: '/identity/conditionalAccess/policies?$top=1',
+    description: 'Conditional Access (Copilot)',
+  },
+  'copilot/usage-reports': {
+    endpoint: '/reports/getMicrosoft365CopilotUsageUserDetail(period=\'D7\')',
+    description: 'Copilot Usage Reports',
+    useBeta: true,
+  },
 };
 
 // Azure ARM endpoints to test

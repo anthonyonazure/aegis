@@ -60,6 +60,7 @@ function groupGraphPermissions(): CategoryGroup[] {
     'exchange': { name: 'Exchange Online', resources: [] },
     'sharepoint': { name: 'SharePoint Online', resources: [] },
     'teams': { name: 'Microsoft Teams', resources: [] },
+    'copilot': { name: 'Copilot Readiness', resources: [] },
   };
 
   for (const req of PERMISSION_REQUIREMENTS) {
