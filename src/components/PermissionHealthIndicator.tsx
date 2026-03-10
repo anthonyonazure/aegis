@@ -121,14 +121,39 @@ export const PermissionHealthIndicator = ({ connectionId, accessToken }: Permiss
   const [hasChecked, setHasChecked] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<string[]>(['missing']);
 
+  // All Graph resource IDs the edge function knows about
+  const ALL_GRAPH_RESOURCES = [
+    'intune/device-configurations', 'intune/compliance-policies', 'intune/app-configurations',
+    'intune/autopilot', 'intune/scripts', 'intune/win32-apps', 'intune/update-rings',
+    'intune/enrollment-restrictions', 'conditional-access/ca-policies', 'conditional-access/named-locations',
+    'conditional-access/auth-strengths', 'entra/users', 'entra/groups', 'entra/directory-roles',
+    'entra/applications', 'entra/domains', 'entra/admin-units', 'entra/directory-settings',
+    'defender/security-alerts', 'defender/secure-score', 'defender/antivirus-policies',
+    'defender/disk-encryption-policies', 'defender/firewall-policies',
+    'sharepoint/tenant-settings', 'teams/messaging-policies',
+    'copilot/licensing', 'copilot/organization-info', 'copilot/mfa-registration',
+    'copilot/auth-methods', 'copilot/sensitivity-labels', 'copilot/sharepoint-sharing',
+    'copilot/onedrive-provisioning', 'copilot/exchange-mailbox', 'copilot/teams-settings',
+    'copilot/conditional-access', 'copilot/usage-reports',
+  ];
+
   const runCheck = async () => {
     setIsChecking(true);
     try {
       const { data, error } = await supabase.functions.invoke('validate-permissions', {
-        body: { accessToken, connectionId },
+        body: { graphToken: accessToken, resourceIds: ALL_GRAPH_RESOURCES },
       });
 
       if (error) throw error;
+
+      // Map edge function results to component's PermissionResult format
+      const mapped: PermissionResult[] = (data?.results || []).map((r: any) => ({
+        resource: r.resourceId,
+        resourceName: r.resourceName,
+        hasPermission: r.success,
+        requiredPermissions: r.error ? [r.error] : [],
+        testedEndpoint: r.resourceId,
+      }));
 
       setResults(data?.results || []);
       setHasChecked(true);
