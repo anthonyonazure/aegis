@@ -196,7 +196,10 @@ Provide a detailed analysis in this JSON structure:
       "category": "string",
       "effort": "low" | "medium" | "high",
       "impact": "low" | "medium" | "high",
-      "timeline": "string"
+      "timeline": "string",
+      "explanation": "string (2-3 sentence description of what this action means and why it matters)",
+      "goal": "string (specific objective/outcome)",
+      "referenceUrl": "string (Microsoft Learn URL)"
     }
   ],
   "expectedBenefits": {
