@@ -578,17 +578,27 @@ export const CopilotAgentsView = () => {
 
         {/* Readiness Assessment Tab */}
         <TabsContent value="readiness" className="space-y-4">
-          {connectionId ? (
-            <CopilotReadinessCard 
-              tenantConnectionId={connectionId}
-              customerId={selectedCustomerId || undefined}
-              tenantName={tenantDisplayName}
-            />
+          <TenantMultiSelector
+            selectedTenantIds={selectedReadinessTenants.map(t => t.id)}
+            onSelectionChange={setSelectedReadinessTenants}
+            label="Select tenants for readiness assessment"
+          />
+          {selectedReadinessTenants.length > 0 ? (
+            <div className="space-y-4">
+              {selectedReadinessTenants.map(tenant => (
+                <CopilotReadinessCard
+                  key={tenant.id}
+                  tenantConnectionId={tenant.id}
+                  customerId={tenant.customerId || undefined}
+                  tenantName={tenant.name}
+                />
+              ))}
+            </div>
           ) : (
             <Card className="glass-panel border-border/50">
               <CardContent className="py-12 text-center text-muted-foreground">
                 <ClipboardCheck className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p>Connect to a tenant to run readiness assessment</p>
+                <p>Select one or more tenants above to run readiness assessments</p>
               </CardContent>
             </Card>
           )}
