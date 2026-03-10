@@ -125,14 +125,14 @@ Provide a detailed analysis in this JSON structure:
     "dlpPoliciesStatus": "string",
     "retentionPoliciesStatus": "string",
     "oversharedContentRisk": "low" | "medium" | "high",
-    "recommendations": ["string"]
+    "recommendations": [{ "title": "string", "explanation": "string", "referenceUrl": "string (Microsoft Learn URL)" }]
   },
   "securityRequirements": {
     "mfaStatus": "string",
     "conditionalAccessStatus": "string",
     "identityProtectionStatus": "string",
-    "gaps": ["string"],
-    "recommendations": ["string"]
+    "gaps": [{ "title": "string", "explanation": "string", "referenceUrl": "string (Microsoft Learn URL)" }],
+    "recommendations": [{ "title": "string", "explanation": "string", "referenceUrl": "string (Microsoft Learn URL)" }]
   },
   "teamsAndVoice": {
     "transcriptionStatus": "string",
