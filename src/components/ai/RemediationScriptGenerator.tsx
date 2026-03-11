@@ -79,6 +79,8 @@ export function RemediationScriptGenerator({ selectedTenants }: RemediationScrip
   const [result, setResult] = useState<RemediationResult | null>(null);
   const [copiedScript, setCopiedScript] = useState<string | null>(null);
 
+  const effectiveTenantId = selectedTenants?.[0]?.id;
+
   const generateScripts = async () => {
     if (!issue.trim()) {
       toast({
@@ -94,7 +96,11 @@ export function RemediationScriptGenerator({ selectedTenants }: RemediationScrip
 
     try {
       const { data, error } = await supabase.functions.invoke('ai-remediation', {
-        body: { issue }
+        body: { 
+          issue,
+          tenantConnectionId: effectiveTenantId,
+          tenantName: selectedTenants?.[0]?.name,
+        }
       });
 
       if (error) throw error;

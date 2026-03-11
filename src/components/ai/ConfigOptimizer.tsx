@@ -196,32 +196,18 @@ export const ConfigOptimizer: React.FC<ConfigOptimizerProps> = ({ selectedTenant
   };
 
   const analyzeConfig = async () => {
+    if (effectiveTenantIds.length === 0) {
+      toast.error('Please select at least one tenant first');
+      return;
+    }
     setLoading(true);
     try {
-      // Mock configuration data
-      const configData = {
-        conditionalAccessPolicies: 12,
-        securityDefaults: false,
-        mfaEnforced: true,
-        legacyAuthBlocked: false,
-        guestAccessRestricted: false,
-        adminMfaRequired: true,
-        signInRiskPolicies: 2,
-        userRiskPolicies: 1,
-        deviceCompliancePolicies: 5,
-        appProtectionPolicies: 3,
-        dlpPolicies: 4,
-        retentionPolicies: 6,
-        sensitivityLabels: 8
-      };
-
       const { data, error } = await supabase.functions.invoke('ai-config-optimizer', {
         body: { 
-          configData, 
+          tenantConnectionIds: effectiveTenantIds,
+          tenantNames: selectedTenants?.map(t => t.name) || [],
           optimizationGoals: goals,
           tenantContext: {
-            userCount: 500,
-            licenseType: 'E5',
             industry: 'Financial Services'
           }
         }

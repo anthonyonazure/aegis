@@ -112,7 +112,7 @@ export function IncidentResponder({ selectedTenants }: IncidentResponderProps) {
         await saveAnalysisResult({
           analysisType: 'incident-responder',
           result: data.analysis,
-          tenantConnectionId: connectionId || undefined,
+          tenantConnectionId: effectiveConnectionId || undefined,
         });
 
         toast.success('Incident response plan generated');

@@ -70,6 +70,9 @@ export function NaturalLanguageQuery({ selectedTenants }: NaturalLanguageQueryPr
   const { selectedTenantId, tenants } = useTenant();
   const selectedTenant = tenants.find(t => t.id === selectedTenantId);
 
+  const effectiveTenantId = selectedTenants?.[0]?.id || selectedTenantId;
+  const effectiveTenantName = selectedTenants?.[0]?.name || selectedTenant?.displayName;
+
   const [query, setQuery] = useState('');
   const [isQuerying, setIsQuerying] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -105,6 +108,15 @@ export function NaturalLanguageQuery({ selectedTenants }: NaturalLanguageQueryPr
       return;
     }
 
+    if (!effectiveTenantId) {
+      toast({
+        title: 'No Tenant Selected',
+        description: 'Please select a tenant to query',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setIsQuerying(true);
     setResult(null);
 
@@ -112,8 +124,9 @@ export function NaturalLanguageQuery({ selectedTenants }: NaturalLanguageQueryPr
       const { data, error } = await supabase.functions.invoke('ai-nl-query', {
         body: { 
           query: q,
-          tenantId: selectedTenantId,
-          context: selectedTenant ? { name: selectedTenant.displayName } : undefined
+          tenantConnectionId: effectiveTenantId,
+          tenantId: effectiveTenantId,
+          context: { name: effectiveTenantName }
         }
       });
 

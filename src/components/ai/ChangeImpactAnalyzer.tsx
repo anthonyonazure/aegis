@@ -42,9 +42,17 @@ export function ChangeImpactAnalyzer({ selectedTenants }: ChangeImpactAnalyzerPr
   const [proposedChanges, setProposedChanges] = useState('');
   const { connectionId, tenantName } = useTenant();
 
+  const effectiveConnectionId = selectedTenants?.[0]?.id || connectionId;
+  const effectiveTenantName = selectedTenants?.[0]?.name || tenantName;
+
   const runAnalysis = async () => {
     if (!proposedChanges.trim()) {
       toast.error('Please describe the proposed changes');
+      return;
+    }
+
+    if (!effectiveConnectionId) {
+      toast.error('Please select a tenant first');
       return;
     }
 
@@ -61,9 +69,10 @@ export function ChangeImpactAnalyzer({ selectedTenants }: ChangeImpactAnalyzerPr
         body: {
           proposedChanges: parsedChanges,
           currentConfig: {},
+          tenantConnectionId: effectiveConnectionId,
           tenantData: { 
-            tenantId: connectionId,
-            tenantName: tenantName 
+            tenantId: effectiveConnectionId,
+            tenantName: effectiveTenantName 
           }
         }
       });

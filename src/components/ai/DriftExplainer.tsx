@@ -106,13 +106,27 @@ export function DriftExplainer({ selectedTenants }: DriftExplainerProps) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [result, setResult] = useState<DriftExplanation | null>(null);
 
+  const effectiveTenantId = selectedTenants?.[0]?.id;
+
   const analyzeDrift = async () => {
+    if (!effectiveTenantId) {
+      toast({
+        title: 'No Tenant Selected',
+        description: 'Please select a tenant to analyze drift',
+        variant: 'destructive',
+      });
+      return;
+    }
     setIsAnalyzing(true);
     setResult(null);
 
     try {
       const { data, error } = await supabase.functions.invoke('ai-drift-explainer', {
-        body: { driftData: sampleDriftData }
+        body: { 
+          tenantConnectionId: effectiveTenantId,
+          tenantName: selectedTenants?.[0]?.name,
+          driftData: sampleDriftData 
+        }
       });
 
       if (error) throw error;
