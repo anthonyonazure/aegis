@@ -41,8 +41,11 @@ import {
 } from 'recharts';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useTenant } from '@/contexts/TenantContext';
 import { cn } from '@/lib/utils';
 import { format, subDays, startOfDay, eachDayOfInterval } from 'date-fns';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Filter } from 'lucide-react';
 
 interface ComplianceResult {
   id: string;
