@@ -1,37 +1,28 @@
 
 
-# Plan: Feed Real Audit Data to Anomaly Detection
+## Problem Identified
 
-## Problem
-The Anomaly Detector sends `data: {}` to the AI, which then fabricates sample anomalies with fake contoso.com accounts. No real tenant data is fetched.
+The secure score fetch **is working** -- it successfully retrieves data from Microsoft Graph. However, it **fails to save** for one tenant ("Tesoro XP, Inc.") because of a database column overflow.
 
-## Solution
-Apply the same "live-with-fallback" pattern from the Copilot Advisor: the edge function fetches real sign-in logs, audit logs, and directory role assignments from Microsoft Graph using stored tenant credentials, then sends that real data to the AI for analysis.
+**Root cause:** The `current_score` and `max_score` columns in both `tenant_secure_scores` and `secure_score_history` are defined as `NUMERIC(5,2)`, which caps at **999.99**. Microsoft Graph returned `currentScore: 574.75` and `maxScore: 1170` for this tenant -- the `max_score` of 1170 exceeds the limit.
 
-## Changes
+The other two tenants (scores ~88 and ~122) saved fine because their values fit within 999.99.
 
-### 1. Edge Function -- Fetch real Graph data before AI analysis
-**File:** `supabase/functions/ai-anomaly-detection/index.ts`
+Edge function log confirms:
+```
+numeric field overflow
+A field with precision 5, scale 2 must round to an absolute value less than 10^3.
+```
 
-- Accept `tenantConnectionId` (not just `tenantId`)
-- Authenticate the caller via Supabase JWT
-- Look up stored credentials via `rpc('get_decrypted_credential')`
-- Acquire a Graph access token (client credentials flow)
-- Fetch real data from Graph endpoints:
-  - **Sign-in logs:** `GET /auditLogs/signIns?$top=50&$orderby=createdDateTime desc` (requires `AuditLog.Read.All`)
-  - **Directory audit logs:** `GET /auditLogs/directoryAudits?$top=50&$orderby=activityDateTime desc` (config changes, permission grants)
-  - **Risky sign-ins (if available):** `GET /identityProtection/riskyUsers?$top=20`
-- Map Graph responses into the existing `AnomalyData` shape (signInLogs, configChanges, permissionGrants)
-- Remove the "generate sample anomalies" instruction from the AI prompt -- instead say "If no anomalies are found, return an empty anomalies array"
-- If Graph calls fail (missing permissions, expired token), fall back to returning an error message telling the user which permissions are needed
+## Fix
 
-### 2. Frontend -- Pass tenant connection ID
-**File:** `src/components/ai/AnomalyDetector.tsx`
+**Database migration** -- widen the numeric columns to `NUMERIC(10,2)` (supports up to 99,999,999.99):
 
-- Change the function invoke to send `tenantConnectionId` (the selected tenant's connection ID) instead of just `tenantId`
-- Show a warning if no tenant is connected or selected
-- Display a note about required permissions (`AuditLog.Read.All`) if the scan returns a permissions error
+1. `tenant_secure_scores.current_score` -- ALTER to `NUMERIC(10,2)`
+2. `tenant_secure_scores.max_score` -- ALTER to `NUMERIC(10,2)`
+3. `tenant_secure_scores.score_percentage` -- keep or widen to `NUMERIC(7,2)` (percentage could theoretically exceed 999 in edge cases with bad data)
+4. `secure_score_history.score` -- ALTER to `NUMERIC(10,2)`
+5. `secure_score_history.max_score` -- ALTER to `NUMERIC(10,2)`
 
-### 3. Remove sample data fallback
-The AI prompt will no longer instruct the model to "generate sample anomalies for demonstration." If there's no data, the response will correctly show zero anomalies.
+No code changes needed -- the edge function and client code are correct. Only the column precision is too small.
 

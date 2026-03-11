@@ -7,18 +7,18 @@ import {
   Settings, 
   Key,
   Loader2,
-  RefreshCw,
   ChevronDown,
   ChevronUp,
-  ExternalLink,
   Clock,
   User,
-  Activity
+  Activity,
+  Info
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenant } from '@/contexts/TenantContext';
@@ -47,9 +47,17 @@ interface AnomalySummary {
   recommendations: string[];
 }
 
+interface DataSources {
+  signInLogs: number;
+  directoryAudits: number;
+  riskyUsers: number;
+  missingPermissions: string[];
+}
+
 interface AnomalyResult {
   anomalies: Anomaly[];
   summary: AnomalySummary;
+  dataSources?: DataSources;
 }
 
 export function AnomalyDetector() {
@@ -60,6 +68,7 @@ export function AnomalyDetector() {
   const [isScanning, setIsScanning] = useState(false);
   const [result, setResult] = useState<AnomalyResult | null>(null);
   const [expandedAnomaly, setExpandedAnomaly] = useState<string | null>(null);
+  const [permissionError, setPermissionError] = useState<string | null>(null);
 
   const severityColors: Record<string, string> = {
     critical: 'bg-red-500/20 text-red-400 border-red-500/50',
@@ -75,29 +84,39 @@ export function AnomalyDetector() {
   };
 
   const runScan = async () => {
+    if (!selectedTenantId || !isConnected) {
+      toast({
+        title: 'No Tenant Connected',
+        description: 'Please connect and select a tenant before running a scan.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setIsScanning(true);
     setResult(null);
+    setPermissionError(null);
 
     try {
-      // In a real implementation, we would fetch actual audit data from the tenant
-      // For now, we'll let the AI generate sample anomalies
       const { data, error } = await supabase.functions.invoke('ai-anomaly-detection', {
-        body: { 
-          data: {},
-          tenantId: selectedTenantId 
-        }
+        body: { tenantConnectionId: selectedTenantId }
       });
 
       if (error) throw error;
 
       if (data.error) {
-        throw new Error(data.error);
+        if (data.missingPermissions) {
+          setPermissionError(data.error);
+        } else {
+          throw new Error(data.error);
+        }
+        return;
       }
 
       setResult(data);
       toast({
         title: 'Scan Complete',
-        description: `Found ${data.summary?.totalAnomalies || 0} potential anomalies`,
+        description: `Analyzed ${(data.dataSources?.signInLogs || 0) + (data.dataSources?.directoryAudits || 0)} events. Found ${data.summary?.totalAnomalies || 0} potential anomalies.`,
       });
     } catch (error) {
       console.error('Anomaly scan error:', error);
@@ -137,7 +156,7 @@ export function AnomalyDetector() {
         </div>
         <Button 
           onClick={runScan} 
-          disabled={isScanning}
+          disabled={isScanning || !isConnected}
           size="lg"
         >
           {isScanning ? (
@@ -153,6 +172,29 @@ export function AnomalyDetector() {
           )}
         </Button>
       </div>
+
+      {/* Permission Error */}
+      {permissionError && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>{permissionError}</AlertDescription>
+        </Alert>
+      )}
+
+      {/* Data Sources Info */}
+      {result?.dataSources && (
+        <Alert>
+          <Info className="h-4 w-4" />
+          <AlertDescription>
+            Analyzed {result.dataSources.signInLogs} sign-in logs, {result.dataSources.directoryAudits} directory audit events, and {result.dataSources.riskyUsers} risky user records.
+            {result.dataSources.missingPermissions.length > 0 && (
+              <span className="block mt-1 text-muted-foreground">
+                ⚠️ Some data unavailable due to missing permissions: {result.dataSources.missingPermissions.join(', ')}
+              </span>
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Summary Cards */}
       {result && (
@@ -284,13 +326,10 @@ export function AnomalyDetector() {
                             className="border-t border-border/30"
                           >
                             <div className="p-4 space-y-4 bg-background/30">
-                              {/* Impact */}
                               <div>
                                 <p className="text-xs font-medium text-muted-foreground mb-1">Potential Impact</p>
                                 <p className="text-sm text-foreground">{anomaly.impact}</p>
                               </div>
-
-                              {/* Investigation Steps */}
                               <div>
                                 <p className="text-xs font-medium text-muted-foreground mb-2">Investigation Steps</p>
                                 <div className="space-y-2">
@@ -304,8 +343,6 @@ export function AnomalyDetector() {
                                   ))}
                                 </div>
                               </div>
-
-                              {/* Related Events */}
                               {anomaly.relatedEvents && anomaly.relatedEvents.length > 0 && (
                                 <div>
                                   <p className="text-xs font-medium text-muted-foreground mb-2">Related Events</p>
@@ -331,8 +368,21 @@ export function AnomalyDetector() {
         </Card>
       )}
 
+      {/* No anomalies found */}
+      {result && result.anomalies.length === 0 && (
+        <Card className="glass-panel border-green-500/30">
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <Shield className="w-12 h-12 text-green-400 mb-4" />
+            <h3 className="text-lg font-medium text-foreground mb-2">No Anomalies Detected</h3>
+            <p className="text-sm text-muted-foreground text-center max-w-md">
+              The AI analysis found no security anomalies in the recent audit data. Your tenant appears to be in good shape.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Recommendations */}
-      {result && result.summary.recommendations.length > 0 && (
+      {result && result.summary.recommendations.length > 0 && result.anomalies.length > 0 && (
         <Card className="glass-panel border-primary/30">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-primary">
@@ -356,15 +406,18 @@ export function AnomalyDetector() {
       )}
 
       {/* Empty State */}
-      {!result && !isScanning && (
+      {!result && !isScanning && !permissionError && (
         <Card className="glass-panel border-border/50">
           <CardContent className="flex flex-col items-center justify-center py-16">
             <Radar className="w-16 h-16 text-muted-foreground/50 mb-4" />
             <h3 className="text-lg font-medium text-foreground mb-2">No Scan Results</h3>
             <p className="text-sm text-muted-foreground text-center max-w-md mb-4">
               Run an anomaly scan to detect unusual sign-ins, configuration changes, and permission grants in your tenant.
+              {!isConnected && (
+                <span className="block mt-2 text-yellow-400">⚠️ Please connect a tenant first to run a scan.</span>
+              )}
             </p>
-            <Button onClick={runScan}>
+            <Button onClick={runScan} disabled={!isConnected}>
               <Radar className="w-4 h-4 mr-2" />
               Start Scan
             </Button>
@@ -379,7 +432,7 @@ export function AnomalyDetector() {
             <Loader2 className="w-12 h-12 text-primary animate-spin mb-4" />
             <h3 className="text-lg font-medium text-foreground mb-2">Scanning for Anomalies</h3>
             <p className="text-sm text-muted-foreground text-center">
-              AI is analyzing audit logs and identifying potential security issues...
+              Fetching real audit logs from your tenant and analyzing with AI...
             </p>
           </CardContent>
         </Card>
