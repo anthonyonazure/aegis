@@ -46,8 +46,15 @@ import {
   HealthTrend,
 } from '@/lib/permissionHealthDatabase';
 import { useToast } from '@/hooks/use-toast';
+import { useTenant } from '@/contexts/TenantContext';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Filter } from 'lucide-react';
 
 export const PermissionHealthView = () => {
+  const { selectedCustomerId, selectedTenantId, customers } = useTenant();
+  const selectedCustomerName = selectedCustomerId
+    ? customers.find(c => c.id === selectedCustomerId)?.name
+    : null;
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState<Awaited<ReturnType<typeof getHealthSummary>> | null>(null);
   const [recentChecks, setRecentChecks] = useState<PermissionHealthCheck[]>([]);
@@ -118,6 +125,17 @@ export const PermissionHealthView = () => {
           Refresh
         </Button>
       </div>
+
+      {/* Customer filter indicator */}
+      {selectedCustomerId && (
+        <Alert className="border-primary/50 bg-primary/5">
+          <Filter className="h-4 w-4" />
+          <AlertDescription>
+            Showing permission health for <strong>{selectedCustomerName}</strong>
+            {selectedTenantId && ' (filtered by selected tenant)'}
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

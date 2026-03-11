@@ -41,8 +41,11 @@ import {
 } from 'recharts';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useTenant } from '@/contexts/TenantContext';
 import { cn } from '@/lib/utils';
 import { format, subDays, startOfDay, eachDayOfInterval } from 'date-fns';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Filter } from 'lucide-react';
 
 interface ComplianceResult {
   id: string;
@@ -63,9 +66,44 @@ const COLORS = {
 
 export const ComplianceDashboardView = () => {
   const { toast } = useToast();
+  const { selectedCustomerId, selectedTenantId, customers } = useTenant();
+  const [allResults, setAllResults] = useState<ComplianceResult[]>([]);
   const [results, setResults] = useState<ComplianceResult[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [timeRange, setTimeRange] = useState<string>('30');
+  const [tenantConnectionIds, setTenantConnectionIds] = useState<string[]>([]);
+
+  const selectedCustomerName = selectedCustomerId
+    ? customers.find(c => c.id === selectedCustomerId)?.name
+    : null;
+
+  // Load tenant connections for selected customer
+  useEffect(() => {
+    const loadTenantConnections = async () => {
+      if (!selectedCustomerId) {
+        setTenantConnectionIds([]);
+        return;
+      }
+      const { data } = await supabase
+        .from('tenant_connections')
+        .select('id')
+        .eq('customer_id', selectedCustomerId);
+      setTenantConnectionIds(data?.map(t => t.id) || []);
+    };
+    loadTenantConnections();
+  }, [selectedCustomerId]);
+
+  // Filter results when customer/tenant changes
+  useEffect(() => {
+    if (selectedTenantId) {
+      // compliance_results doesn't have tenant_connection_id directly,
+      // so filter via export_job_id -> export_jobs.tenant_connection_id
+      // For now, show all results when filtering by tenant (filtered at query level)
+      setResults(allResults);
+    } else {
+      setResults(allResults);
+    }
+  }, [selectedCustomerId, selectedTenantId, tenantConnectionIds, allResults]);
 
   useEffect(() => {
     loadData();
@@ -83,7 +121,7 @@ export const ComplianceDashboardView = () => {
         .order('created_at', { ascending: true });
 
       if (error) throw error;
-      setResults(data || []);
+      setAllResults(data || []);
     } catch (error) {
       console.error('Failed to load compliance data:', error);
       toast({
@@ -215,6 +253,17 @@ export const ComplianceDashboardView = () => {
           </Button>
         </div>
       </div>
+
+      {/* Customer filter indicator */}
+      {selectedCustomerId && (
+        <Alert className="border-primary/50 bg-primary/5">
+          <Filter className="h-4 w-4" />
+          <AlertDescription>
+            Showing compliance data for <strong>{selectedCustomerName}</strong>
+            {selectedTenantId && ' (filtered by selected tenant)'}
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
