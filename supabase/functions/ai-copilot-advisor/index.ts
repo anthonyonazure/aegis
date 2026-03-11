@@ -1,11 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Rate limiting (in-memory per instance)
 const _rl = new Map<string, { count: number; resetAt: number }>();
 function _checkRate(key: string, max = 15, windowMs = 60000): boolean {
   const now = Date.now();
@@ -14,6 +14,78 @@ function _checkRate(key: string, max = 15, windowMs = 60000): boolean {
   if (e.count >= max) return false;
   e.count++;
   return true;
+}
+
+async function getGraphToken(clientId: string, clientSecret: string, tenantId: string): Promise<string> {
+  const resp = await fetch(`https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ client_id: clientId, client_secret: clientSecret, scope: 'https://graph.microsoft.com/.default', grant_type: 'client_credentials' }).toString(),
+  });
+  if (!resp.ok) throw new Error(`Token error: ${resp.status}`);
+  return (await resp.json()).access_token;
+}
+
+async function fetchGraph(token: string, endpoint: string): Promise<any> {
+  const resp = await fetch(`https://graph.microsoft.com/v1.0${endpoint}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!resp.ok) return null;
+  return resp.json();
+}
+
+async function fetchCopilotReadinessData(token: string) {
+  const [users, subscribedSkus, caPolicies, authMethods, domains] = await Promise.all([
+    fetchGraph(token, '/users?$count=true&$top=1&$select=id'),
+    fetchGraph(token, '/subscribedSkus'),
+    fetchGraph(token, '/identity/conditionalAccess/policies'),
+    fetchGraph(token, '/reports/authenticationMethods/userRegistrationDetails?$top=999'),
+    fetchGraph(token, '/domains'),
+  ]);
+
+  const totalUsers = users?.['@odata.count'] || users?.value?.length || 0;
+  const licenses = (subscribedSkus?.value || []).map((s: any) => ({
+    skuPartNumber: s.skuPartNumber,
+    skuId: s.skuId,
+    consumedUnits: s.consumedUnits,
+    prepaidUnits: s.prepaidUnits?.enabled || 0,
+  }));
+
+  const copilotSkus = licenses.filter((l: any) =>
+    l.skuPartNumber?.toLowerCase().includes('copilot') ||
+    l.skuPartNumber?.toLowerCase().includes('microsoft_365_copilot')
+  );
+
+  const mfaRegistered = (authMethods?.value || []).filter((u: any) =>
+    u.methodsRegistered?.includes('microsoftAuthenticator') ||
+    u.methodsRegistered?.includes('fido2') ||
+    u.methodsRegistered?.includes('windowsHelloForBusiness') ||
+    u.isMfaRegistered === true
+  ).length;
+
+  const policies = (caPolicies?.value || []).map((p: any) => ({
+    name: p.displayName,
+    state: p.state,
+    grantControls: p.grantControls?.builtInControls || [],
+  }));
+
+  const mfaPolicies = policies.filter((p: any) =>
+    p.state === 'enabled' && p.grantControls?.includes('mfa')
+  );
+
+  return {
+    totalUsers,
+    licenses,
+    copilotLicenses: copilotSkus,
+    copilotLicenseCount: copilotSkus.reduce((sum: number, s: any) => sum + (s.prepaidUnits || 0), 0),
+    copilotAssigned: copilotSkus.reduce((sum: number, s: any) => sum + (s.consumedUnits || 0), 0),
+    mfaRegisteredCount: mfaRegistered,
+    mfaPercentage: totalUsers > 0 ? Math.round((mfaRegistered / totalUsers) * 100) : 0,
+    conditionalAccessPolicies: policies,
+    mfaEnforcingPolicies: mfaPolicies.length,
+    totalCAPolicies: policies.length,
+    domains: (domains?.value || []).map((d: any) => ({ id: d.id, isVerified: d.isVerified, isDefault: d.isDefault })),
+  };
 }
 
 serve(async (req) => {
@@ -28,12 +100,46 @@ serve(async (req) => {
   }
 
   try {
-    const { readinessData, tenantContext } = await req.json();
+    const { readinessData, tenantContext, tenantConnectionIds } = await req.json();
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+
+    // Fetch real data if tenantConnectionIds provided
+    let liveTelemetry: any = null;
+    if (tenantConnectionIds?.length > 0) {
+      const authHeader = req.headers.get('authorization');
+      const supabase = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_ANON_KEY')!,
+        { global: { headers: { Authorization: authHeader! } } }
+      );
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const connId = tenantConnectionIds[0];
+        const { data: creds } = await supabase.rpc('get_decrypted_credential', {
+          p_tenant_connection_id: connId,
+          p_user_id: user.id,
+        });
+        if (creds?.length > 0) {
+          try {
+            const token = await getGraphToken(creds[0].client_id, creds[0].client_secret, creds[0].tenant_id);
+            liveTelemetry = await fetchCopilotReadinessData(token);
+            console.log('Live Copilot readiness telemetry fetched:', {
+              users: liveTelemetry.totalUsers,
+              copilotLicenses: liveTelemetry.copilotLicenseCount,
+              mfa: liveTelemetry.mfaPercentage + '%',
+            });
+          } catch (e) {
+            console.error('Failed to fetch live data, using provided readinessData:', e);
+          }
+        }
+      }
     }
+
+    const effectiveData = liveTelemetry
+      ? { ...readinessData, liveTelemetry }
+      : readinessData;
 
     const systemPrompt = `You are an expert Microsoft 365 Copilot readiness advisor grounded in official Microsoft Learn documentation. Analyze tenant readiness data and provide comprehensive recommendations.
 
@@ -58,17 +164,6 @@ IMPORTANT — base your analysis on these Microsoft Learn requirements:
 - SharePoint/OneDrive sharing reviewed — oversharing means Copilot surfaces content users shouldn't see
 - Retention policies in place
 
-## Apps & Privacy Settings
-- "Connected Experiences" enabled in Office privacy settings (required for cloud AI)
-- Microsoft Loop enabled (Copilot creates Loop components)
-- Third-party cookies allowed for *.cloud.microsoft and *.office.com in browsers
-- Office Feature Updates scheduled task enabled on devices
-
-## Teams & Copilot Voice
-- Transcription and recording enabled in Teams admin center (required for meeting Copilot)
-- For Copilot Voice: Teams Phone license + PSTN connectivity (Calling Plan, Direct Routing, or Operator Connect)
-- VoIP/WebSocket endpoints unblocked at network level
-
 ## Scoring Categories (weighted)
 1. Licensing (15%) — Copilot SKUs assigned
 2. Identity & Access (15%) — MFA, Conditional Access, Entra ID
@@ -79,14 +174,13 @@ IMPORTANT — base your analysis on these Microsoft Learn requirements:
 7. Apps & Update Channel (10%) — Current/Monthly channel, Connected Experiences, Loop
 8. Network (15%) — WSS endpoints, firewall rules
 
-Provide actionable, specific recommendations based on the tenant's current state.
+${liveTelemetry ? 'IMPORTANT: The "liveTelemetry" field contains REAL data from the Microsoft Graph API. Use these actual numbers in your analysis — do NOT fabricate or replace them with estimates.' : ''}
 
-CRITICAL RULES FOR RECOMMENDATIONS AND ACTIONS:
-- Every recommendation, action, gap, risk, and optimization MUST include an "explanation" field with a 2-3 sentence plain-English description of what it means and why it matters.
-- Every recommendation, action, gap, risk, and optimization MUST include a "referenceUrl" field with a direct Microsoft Learn URL (https://learn.microsoft.com/...) backing the requirement.
-- Every prioritized action MUST also include a "goal" field describing the specific objective/outcome.
+CRITICAL RULES:
+- Every recommendation MUST include an "explanation" field (2-3 sentences) and a "referenceUrl" field (Microsoft Learn URL).
+- Every prioritized action MUST include a "goal" field.
 
-IMPORTANT: Respond with valid JSON only, no markdown formatting.`;
+Respond with valid JSON only, no markdown formatting.`;
 
     const userPrompt = `Analyze Copilot readiness for this tenant and provide comprehensive deployment recommendations:
 
@@ -94,7 +188,7 @@ Tenant Context:
 ${JSON.stringify(tenantContext, null, 2)}
 
 Current Readiness Data (8-category assessment):
-${JSON.stringify(readinessData, null, 2)}
+${JSON.stringify(effectiveData, null, 2)}
 
 Provide a detailed analysis in this JSON structure:
 {
@@ -117,91 +211,39 @@ Provide a detailed analysis in this JSON structure:
     "currentState": "string",
     "requiredLicenses": number,
     "estimatedMonthlyCost": number,
-    "optimizationOpportunities": [{ "title": "string", "explanation": "string", "referenceUrl": "string (Microsoft Learn URL)" }],
-    "licensingRecommendations": [{ "title": "string", "explanation": "string", "referenceUrl": "string (Microsoft Learn URL)" }]
+    "optimizationOpportunities": [{ "title": "string", "explanation": "string", "referenceUrl": "string" }],
+    "licensingRecommendations": [{ "title": "string", "explanation": "string", "referenceUrl": "string" }]
   },
   "dataGovernance": {
     "sensitivityLabelsStatus": "string",
     "dlpPoliciesStatus": "string",
     "retentionPoliciesStatus": "string",
     "oversharedContentRisk": "low" | "medium" | "high",
-    "recommendations": [{ "title": "string", "explanation": "string", "referenceUrl": "string (Microsoft Learn URL)" }]
+    "recommendations": [{ "title": "string", "explanation": "string", "referenceUrl": "string" }]
   },
   "securityRequirements": {
     "mfaStatus": "string",
     "conditionalAccessStatus": "string",
     "identityProtectionStatus": "string",
-    "gaps": [{ "title": "string", "explanation": "string", "referenceUrl": "string (Microsoft Learn URL)" }],
-    "recommendations": [{ "title": "string", "explanation": "string", "referenceUrl": "string (Microsoft Learn URL)" }]
-  },
-  "teamsAndVoice": {
-    "transcriptionStatus": "string",
-    "teamsPhoneStatus": "string",
-    "pstnConnectivity": "string",
-    "copilotVoiceReady": boolean,
-    "recommendations": ["string"]
-  },
-  "appsAndInfrastructure": {
-    "updateChannel": "string",
-    "connectedExperiences": "string",
-    "loopEnabled": "string",
-    "networkEndpoints": "string",
-    "recommendations": ["string"]
+    "gaps": [{ "title": "string", "explanation": "string", "referenceUrl": "string" }],
+    "recommendations": [{ "title": "string", "explanation": "string", "referenceUrl": "string" }]
   },
   "adoptionStrategy": {
-    "targetUserGroups": [
-      {
-        "group": "string",
-        "priority": "high" | "medium" | "low",
-        "estimatedImpact": "string",
-        "rolloutPhase": number
-      }
-    ],
+    "targetUserGroups": [{ "group": "string", "priority": "high" | "medium" | "low", "estimatedImpact": "string", "rolloutPhase": number }],
     "changeManagementSteps": ["string"],
     "trainingRequirements": ["string"],
     "successMetrics": ["string"]
   },
   "rolloutPlan": {
-    "phases": [
-      {
-        "phase": number,
-        "name": "string",
-        "duration": "string",
-        "userCount": number,
-        "objectives": ["string"],
-        "successCriteria": ["string"],
-        "risks": ["string"]
-      }
-    ],
+    "phases": [{ "phase": number, "name": "string", "duration": "string", "userCount": number, "objectives": ["string"], "successCriteria": ["string"], "risks": ["string"] }],
     "totalDuration": "string",
     "keyMilestones": ["string"]
   },
   "riskAssessment": {
     "overallRisk": "low" | "medium" | "high",
-    "risks": [
-      {
-        "risk": "string",
-        "likelihood": "low" | "medium" | "high",
-        "impact": "low" | "medium" | "high",
-        "mitigation": "string",
-        "explanation": "string (2-3 sentence description of what this risk means)",
-        "referenceUrl": "string (Microsoft Learn URL)"
-      }
-    ]
+    "risks": [{ "risk": "string", "likelihood": "low" | "medium" | "high", "impact": "low" | "medium" | "high", "mitigation": "string", "explanation": "string", "referenceUrl": "string" }]
   },
-  "prioritizedActions": [
-    {
-      "priority": number,
-      "action": "string",
-      "category": "string",
-      "effort": "low" | "medium" | "high",
-      "impact": "low" | "medium" | "high",
-      "timeline": "string",
-      "explanation": "string (2-3 sentence description of what this action means and why it matters)",
-      "goal": "string (specific objective/outcome)",
-      "referenceUrl": "string (Microsoft Learn URL)"
-    }
-  ],
+  "prioritizedActions": [{ "priority": number, "action": "string", "category": "string", "effort": "low" | "medium" | "high", "impact": "low" | "medium" | "high", "timeline": "string", "explanation": "string", "goal": "string", "referenceUrl": "string" }],
   "expectedBenefits": {
     "productivityGains": "string",
     "timesSavingsPerUser": "string",
@@ -210,7 +252,7 @@ Provide a detailed analysis in this JSON structure:
   }
 }`;
 
-    console.log("Calling Lovable AI for Copilot readiness analysis...");
+    console.log("Calling AI for Copilot readiness analysis...");
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -230,137 +272,30 @@ Provide a detailed analysis in this JSON structure:
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Lovable AI error:", response.status, errorText);
-      
       if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again later." }), {
-          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return new Response(JSON.stringify({ error: "Rate limit exceeded." }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
       if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "API credits exhausted. Please add credits." }), {
-          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return new Response(JSON.stringify({ error: "API credits exhausted." }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
       throw new Error(`AI request failed: ${response.status}`);
     }
 
     const aiResponse = await response.json();
     const content = aiResponse.choices?.[0]?.message?.content;
-
-    if (!content) {
-      throw new Error("No content in AI response");
-    }
-
-    console.log("AI response received, parsing...");
+    if (!content) throw new Error("No content in AI response");
 
     let analysis;
     try {
-      const cleanedContent = content.replace(/```json\n?|\n?```/g, '').trim();
-      analysis = JSON.parse(cleanedContent);
-    } catch (parseError) {
-      console.error("Failed to parse AI response:", parseError);
-      console.log("Raw content:", content);
-      
-      // Structured fallback
-      analysis = {
-        overallAssessment: {
-          readinessScore: 65,
-          readinessLevel: "needs-work",
-          summary: "Analysis completed. Review recommendations for improving Copilot readiness across all 8 categories.",
-          estimatedTimeToReady: "4-6 weeks"
-        },
-        categoryScores: [
-          { category: "Licensing", score: 70, status: "warning", findings: ["Review current licenses"], recommendations: ["Optimize license allocation"] },
-          { category: "Identity & Access", score: 60, status: "warning", findings: ["MFA coverage needs review"], recommendations: ["Enable MFA for all users, configure Conditional Access"] },
-          { category: "Exchange & Mailbox", score: 80, status: "pass", findings: ["Cloud mailboxes detected"], recommendations: ["Verify all users have EXO mailboxes"] },
-          { category: "Data Governance", score: 50, status: "warning", findings: ["Sensitivity labels needed"], recommendations: ["Implement Purview sensitivity labels and DLP policies"] },
-          { category: "SharePoint & OneDrive", score: 60, status: "warning", findings: ["Oversharing risk detected"], recommendations: ["Review external sharing policies"] },
-          { category: "Teams & Voice", score: 55, status: "warning", findings: ["Teams Phone not detected"], recommendations: ["Enable transcription, assign Teams Phone for Voice"] },
-          { category: "Apps & Update Channel", score: 70, status: "warning", findings: ["Verify update channel"], recommendations: ["Confirm Current/Monthly Enterprise Channel via Intune"] },
-          { category: "Network", score: 80, status: "pass", findings: ["Endpoint list provided"], recommendations: ["Verify WSS endpoints unblocked at firewall"] },
-        ],
-        licensingAnalysis: {
-          currentState: "Partial licensing in place",
-          requiredLicenses: 50,
-          estimatedMonthlyCost: 1500,
-          optimizationOpportunities: [{ title: "Review unused licenses", explanation: "Identify and reclaim Copilot licenses assigned to inactive or low-usage accounts to reduce waste.", referenceUrl: "https://learn.microsoft.com/en-us/microsoft-365/admin/manage/assign-licenses-to-users" }],
-          licensingRecommendations: [{ title: "Start with pilot group", explanation: "Begin with a focused pilot of 25-50 users to validate ROI before scaling. This reduces risk and provides measurable adoption data.", referenceUrl: "https://learn.microsoft.com/en-us/copilot/microsoft-365/microsoft-365-copilot-setup" }]
-        },
-        dataGovernance: {
-          sensitivityLabelsStatus: "Partially configured",
-          dlpPoliciesStatus: "Basic policies in place",
-          retentionPoliciesStatus: "Needs review",
-          oversharedContentRisk: "medium",
-          recommendations: [
-            { title: "Audit SharePoint permissions", explanation: "Copilot respects existing permissions, so overshared content will be surfaced to users who shouldn't see it. Review and tighten SharePoint site and document library permissions.", referenceUrl: "https://learn.microsoft.com/en-us/copilot/microsoft-365/microsoft-365-copilot-privacy" },
-            { title: "Configure sensitivity labels", explanation: "Publish and auto-apply Microsoft Purview sensitivity labels to classify and protect sensitive data before Copilot can access it.", referenceUrl: "https://learn.microsoft.com/en-us/purview/sensitivity-labels" },
-            { title: "Review external sharing", explanation: "Restrict external sharing in SharePoint and OneDrive to prevent Copilot from indexing externally shared content that may contain sensitive information.", referenceUrl: "https://learn.microsoft.com/en-us/sharepoint/turn-external-sharing-on-or-off" }
-          ]
-        },
-        securityRequirements: {
-          mfaStatus: "Enabled for most users",
-          conditionalAccessStatus: "Basic policies configured",
-          identityProtectionStatus: "Active",
-          gaps: [{ title: "Some legacy auth remains", explanation: "Legacy authentication protocols (POP, IMAP, SMTP) bypass MFA and Conditional Access, creating a security gap that attackers can exploit.", referenceUrl: "https://learn.microsoft.com/en-us/entra/identity/conditional-access/block-legacy-authentication" }],
-          recommendations: [
-            { title: "Block legacy authentication", explanation: "Create a Conditional Access policy to block all legacy authentication protocols. This ensures all sign-ins go through modern auth with MFA.", referenceUrl: "https://learn.microsoft.com/en-us/entra/identity/conditional-access/block-legacy-authentication" },
-            { title: "Enforce MFA via Conditional Access", explanation: "Require MFA for all users accessing Microsoft 365 services. This is a prerequisite for secure Copilot deployment.", referenceUrl: "https://learn.microsoft.com/en-us/entra/identity/conditional-access/howto-conditional-access-policy-all-users-mfa" }
-          ]
-        },
-        teamsAndVoice: {
-          transcriptionStatus: "Check required",
-          teamsPhoneStatus: "Not detected",
-          pstnConnectivity: "Not configured",
-          copilotVoiceReady: false,
-          recommendations: ["Enable transcription in Teams admin", "Assign Teams Phone licenses for Voice users"]
-        },
-        appsAndInfrastructure: {
-          updateChannel: "Verify via Intune",
-          connectedExperiences: "Ensure enabled",
-          loopEnabled: "Default enabled",
-          networkEndpoints: "Provide endpoint list to network team",
-          recommendations: ["Confirm Current Channel deployment", "Enable Connected Experiences in Group Policy"]
-        },
-        adoptionStrategy: {
-          targetUserGroups: [
-            { group: "Executive Team", priority: "high", estimatedImpact: "High visibility success stories", rolloutPhase: 1 },
-            { group: "IT Department", priority: "high", estimatedImpact: "Technical champions", rolloutPhase: 1 }
-          ],
-          changeManagementSteps: ["Executive sponsorship", "Communication plan", "Training program"],
-          trainingRequirements: ["Basic Copilot usage", "Prompt engineering", "Data governance awareness"],
-          successMetrics: ["Adoption rate", "User satisfaction", "Productivity metrics"]
-        },
-        rolloutPlan: {
-          phases: [
-            { phase: 1, name: "Pilot", duration: "2 weeks", userCount: 25, objectives: ["Validate deployment"], successCriteria: ["80% adoption"], risks: ["Limited feedback"] }
-          ],
-          totalDuration: "8-12 weeks",
-          keyMilestones: ["Pilot complete", "Department rollout", "Full deployment"]
-        },
-        riskAssessment: {
-          overallRisk: "medium",
-          risks: [
-            { risk: "Data oversharing via Copilot", likelihood: "medium", impact: "high", mitigation: "Review SharePoint permissions and sensitivity labels before rollout", explanation: "Copilot surfaces content based on existing user permissions. If SharePoint sites or documents are overshared, Copilot will present sensitive data to unauthorized users in search results and generated content.", referenceUrl: "https://learn.microsoft.com/en-us/copilot/microsoft-365/microsoft-365-copilot-privacy" },
-            { risk: "Network blocking Copilot Voice", likelihood: "low", impact: "high", mitigation: "Verify WSS endpoints with network team", explanation: "Copilot Voice requires WebSocket connections to Microsoft endpoints. If firewalls or proxies block WSS traffic, voice features will fail silently.", referenceUrl: "https://learn.microsoft.com/en-us/microsoft-365/enterprise/urls-and-ip-address-ranges" }
-          ]
-        },
-        prioritizedActions: [
-          { priority: 1, action: "Complete data governance review and sensitivity labels", category: "Security", effort: "medium", impact: "high", timeline: "1-2 weeks", explanation: "Before enabling Copilot, you must ensure sensitive data is properly classified and protected. Copilot respects sensitivity labels, so applying them prevents accidental data exposure in AI-generated content.", goal: "All sensitive documents classified with Purview sensitivity labels and DLP policies enforced", referenceUrl: "https://learn.microsoft.com/en-us/purview/sensitivity-labels" },
-          { priority: 2, action: "Enable MFA and Conditional Access for all users", category: "Identity", effort: "medium", impact: "high", timeline: "1 week", explanation: "MFA is a mandatory security requirement for Copilot. Without it, compromised accounts could use Copilot to exfiltrate data at scale across the entire tenant.", goal: "100% MFA coverage with Conditional Access policies enforcing compliant device access", referenceUrl: "https://learn.microsoft.com/en-us/entra/identity/conditional-access/howto-conditional-access-policy-all-users-mfa" },
-          { priority: 3, action: "Verify network endpoints and WSS connectivity", category: "Network", effort: "low", impact: "high", timeline: "1-2 days", explanation: "Copilot requires connectivity to specific Microsoft endpoints including WebSocket connections. Blocked endpoints will cause Copilot features to fail or degrade.", goal: "All required Microsoft Copilot endpoints unblocked at firewall/proxy level", referenceUrl: "https://learn.microsoft.com/en-us/microsoft-365/enterprise/urls-and-ip-address-ranges" },
-        ],
-        expectedBenefits: {
-          productivityGains: "15-30% improvement in document creation",
-          timesSavingsPerUser: "5-10 hours per week",
-          estimatedROI: "3-6 months to positive ROI",
-          keyUseCases: ["Email summarization", "Document drafting", "Meeting preparation", "Data analysis"]
-        }
-      };
+      const cleaned = content.replace(/```json\n?|\n?```/g, '').trim();
+      analysis = JSON.parse(cleaned);
+    } catch {
+      console.error("Failed to parse AI response, returning raw");
+      analysis = { rawResponse: content, overallAssessment: { readinessScore: 0, readinessLevel: "needs-work", summary: "Analysis completed but response parsing failed. See raw data.", estimatedTimeToReady: "Unknown" } };
     }
 
-    console.log("Copilot readiness analysis complete");
+    // Tag with data source info
+    analysis._dataSource = liveTelemetry ? 'live' : 'user-provided';
 
     return new Response(JSON.stringify(analysis), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -368,11 +303,8 @@ Provide a detailed analysis in this JSON structure:
 
   } catch (error) {
     console.error("Error in ai-copilot-advisor:", error);
-    return new Response(JSON.stringify({ 
-      error: error instanceof Error ? error.message : "Failed to analyze Copilot readiness" 
-    }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Failed to analyze Copilot readiness" }), {
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });

@@ -1,11 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Rate limiting (in-memory per instance)
 const _rl = new Map<string, { count: number; resetAt: number }>();
 function _checkRate(key: string, max = 15, windowMs = 60000): boolean {
   const now = Date.now();
@@ -16,6 +16,41 @@ function _checkRate(key: string, max = 15, windowMs = 60000): boolean {
   return true;
 }
 
+async function getGraphToken(clientId: string, clientSecret: string, tenantId: string): Promise<string> {
+  const resp = await fetch(`https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ client_id: clientId, client_secret: clientSecret, scope: 'https://graph.microsoft.com/.default', grant_type: 'client_credentials' }).toString(),
+  });
+  if (!resp.ok) throw new Error(`Token error: ${resp.status}`);
+  return (await resp.json()).access_token;
+}
+
+async function fetchGraph(token: string, endpoint: string): Promise<any> {
+  const resp = await fetch(`https://graph.microsoft.com/v1.0${endpoint}`, {
+    headers: { Authorization: `Bearer ${token}`, ConsistencyLevel: 'eventual' },
+  });
+  if (!resp.ok) return null;
+  return resp.json();
+}
+
+// Map of safe, read-only Graph endpoints the AI can request
+const ALLOWED_ENDPOINTS: Record<string, string> = {
+  'users': '/users?$top=50&$select=displayName,mail,department,jobTitle,accountEnabled,createdDateTime,assignedLicenses&$count=true',
+  'users_mfa': '/reports/authenticationMethods/userRegistrationDetails?$top=50',
+  'groups': '/groups?$top=50&$select=displayName,groupTypes,mailEnabled,securityEnabled,membershipRule',
+  'devices': '/deviceManagement/managedDevices?$top=50&$select=deviceName,operatingSystem,complianceState,isEncrypted,lastSyncDateTime',
+  'applications': '/applications?$top=50&$select=displayName,appId,publisherDomain,signInAudience',
+  'conditionalAccess': '/identity/conditionalAccess/policies?$select=displayName,state,conditions,grantControls',
+  'subscribedSkus': '/subscribedSkus',
+  'secureScores': '/security/secureScores?$top=1',
+  'domains': '/domains',
+  'directoryAudits': '/auditLogs/directoryAudits?$top=25&$orderby=activityDateTime desc',
+  'signIns': '/auditLogs/signIns?$top=25&$orderby=createdDateTime desc',
+  'riskyUsers': '/identityProtection/riskyUsers?$top=25',
+  'servicePrincipals': '/servicePrincipals?$top=50&$select=displayName,appId,servicePrincipalType',
+};
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -23,147 +58,150 @@ serve(async (req) => {
 
   const _rlKey = req.headers.get('authorization')?.slice(-20) || 'anon';
   if (!_checkRate(_rlKey)) {
-    return new Response(JSON.stringify({ error: 'Rate limit exceeded. Please try again later.' }),
+    return new Response(JSON.stringify({ error: 'Rate limit exceeded.' }),
       { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Retry-After': '60' } });
   }
 
   try {
-    const { query, tenantId, context } = await req.json();
-    
+    const { query, tenantId, context, tenantConnectionIds } = await req.json();
     console.log('Natural language query:', { query, tenantId });
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+
+    // Step 1: Ask AI to determine which endpoints to query
+    const planPrompt = `You are a Microsoft 365 data assistant. Given the user's question, determine which Graph API data sources are needed.
+
+Available data sources (return ONLY keys from this list):
+${Object.keys(ALLOWED_ENDPOINTS).map(k => `- "${k}"`).join('\n')}
+
+User question: "${query}"
+
+Return JSON only:
+{ "endpoints": ["key1", "key2"], "interpretation": "What data the user wants" }`;
+
+    const planResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash-lite",
+        messages: [{ role: "user", content: planPrompt }],
+        temperature: 0.1,
+      }),
+    });
+
+    let endpointsToFetch: string[] = [];
+    let interpretation = query;
+    if (planResp.ok) {
+      const planData = await planResp.json();
+      const planContent = planData.choices?.[0]?.message?.content || '';
+      try {
+        const cleaned = planContent.replace(/```json\n?|\n?```/g, '').trim();
+        const plan = JSON.parse(cleaned);
+        endpointsToFetch = (plan.endpoints || []).filter((k: string) => ALLOWED_ENDPOINTS[k]);
+        interpretation = plan.interpretation || query;
+      } catch { /* fall through */ }
     }
 
-    const systemPrompt = `You are an intelligent Microsoft 365 data assistant. Users will ask questions in natural language about their tenant data.
+    // Step 2: Fetch real data if we have credentials
+    let liveData: Record<string, any> = {};
+    let dataSource = 'simulated';
+    const connIds = tenantConnectionIds || [];
 
-Your job is to:
-1. Understand the user's intent
-2. Determine what Microsoft Graph API endpoints would be needed
-3. Generate a structured response with:
-   - The interpreted query
-   - The Graph API calls that would retrieve this data
-   - Sample/simulated results (since we don't have live data)
-   - Insights and recommendations based on the query
+    if (connIds.length > 0 && endpointsToFetch.length > 0) {
+      const authHeader = req.headers.get('authorization');
+      const supabase = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_ANON_KEY')!,
+        { global: { headers: { Authorization: authHeader! } } }
+      );
+      const { data: { user } } = await supabase.auth.getUser();
 
-Available data domains you can query:
-- Users (properties: displayName, mail, department, jobTitle, accountEnabled, mfaRegistered, lastSignIn, createdDateTime, assignedLicenses)
-- Groups (properties: displayName, members, owners, groupTypes, mailEnabled, securityEnabled)
-- Devices (properties: displayName, operatingSystem, isCompliant, isManaged, lastSyncDateTime)
-- Applications (properties: displayName, appId, publisherName, signInAudience, permissions)
-- Conditional Access Policies (properties: displayName, state, conditions, grantControls)
-- Sign-in Logs (properties: userPrincipalName, ipAddress, location, status, riskLevel)
-- Audit Logs (properties: activityDisplayName, initiatedBy, targetResources, result)
+      if (user) {
+        const { data: creds } = await supabase.rpc('get_decrypted_credential', {
+          p_tenant_connection_id: connIds[0],
+          p_user_id: user.id,
+        });
 
-When generating sample results:
-- Create realistic-looking data that matches the query
-- Include 5-10 sample records
-- Format data appropriately for the query type
-- Add relevant statistics (counts, percentages)
+        if (creds?.length > 0) {
+          try {
+            const token = await getGraphToken(creds[0].client_id, creds[0].client_secret, creds[0].tenant_id);
+            const results = await Promise.all(
+              endpointsToFetch.map(async (key) => {
+                const data = await fetchGraph(token, ALLOWED_ENDPOINTS[key]);
+                return [key, data];
+              })
+            );
+            liveData = Object.fromEntries(results.filter(([, v]) => v !== null));
+            if (Object.keys(liveData).length > 0) {
+              dataSource = 'live';
+              console.log('Fetched live data for endpoints:', Object.keys(liveData));
+            }
+          } catch (e) {
+            console.error('Failed to fetch live Graph data:', e);
+          }
+        }
+      }
+    }
 
-Output format:
+    // Step 3: Ask AI to analyze the data and answer the question
+    const contextInfo = context ? `\nTenant context: ${JSON.stringify(context)}` : '';
+    const dataInfo = dataSource === 'live'
+      ? `\n\nREAL DATA from Microsoft Graph API:\n${JSON.stringify(liveData, null, 2)}\n\nIMPORTANT: This is REAL tenant data. Use these actual values — do NOT fabricate or simulate results.`
+      : '\n\nNo live data available. Generate realistic sample data to illustrate the query structure.';
+
+    const systemPrompt = `You are an intelligent Microsoft 365 data assistant. Answer the user's question using the provided data.
+
+Output JSON:
 {
-  "interpretation": "What you understood the user is asking for",
-  "graphQueries": [
-    {
-      "endpoint": "/users",
-      "filter": "$filter=...",
-      "select": "$select=...",
-      "description": "Why this query"
-    }
-  ],
+  "interpretation": "What you understood",
+  "graphQueries": [{ "endpoint": "string", "filter": "string", "select": "string", "description": "string" }],
   "results": {
     "type": "table|list|stats|chart",
-    "columns": ["Column1", "Column2"],
-    "data": [
-      { "Column1": "value", "Column2": "value" }
-    ],
-    "summary": {
-      "total": 0,
-      "matching": 0,
-      "percentage": 0
-    }
+    "columns": ["Col1", "Col2"],
+    "data": [{ "Col1": "val", "Col2": "val" }],
+    "summary": { "total": 0, "matching": 0, "percentage": 0 }
   },
-  "insights": [
-    "Key finding 1",
-    "Key finding 2"
-  ],
-  "recommendations": [
-    "Suggested action 1",
-    "Suggested action 2"
-  ],
-  "relatedQueries": [
-    "Follow-up question 1",
-    "Follow-up question 2"
-  ]
+  "insights": ["Finding 1"],
+  "recommendations": ["Action 1"],
+  "relatedQueries": ["Follow-up 1"],
+  "dataSource": "${dataSource}"
 }`;
-
-    const contextInfo = context ? `\n\nTenant context: ${JSON.stringify(context)}` : '';
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
+      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model: "google/gemini-3-flash-preview",
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: query + contextInfo }
+          { role: "user", content: query + contextInfo + dataInfo }
         ],
         temperature: 0.3,
       }),
     });
 
     if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again later." }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "Payment required. Please add credits to continue." }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      const errorText = await response.text();
-      console.error("AI gateway error:", response.status, errorText);
+      if (response.status === 429) return new Response(JSON.stringify({ error: "Rate limit exceeded." }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      if (response.status === 402) return new Response(JSON.stringify({ error: "Payment required." }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       throw new Error(`AI gateway error: ${response.status}`);
     }
 
     const aiData = await response.json();
     const content = aiData.choices?.[0]?.message?.content;
-
-    if (!content) {
-      throw new Error("No content in AI response");
-    }
+    if (!content) throw new Error("No content in AI response");
 
     let parsedResponse;
     try {
       const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
       const jsonString = jsonMatch ? jsonMatch[1].trim() : content.trim();
       parsedResponse = JSON.parse(jsonString);
-    } catch (parseError) {
-      console.log("Could not parse as JSON, returning text response");
-      parsedResponse = {
-        interpretation: query,
-        graphQueries: [],
-        results: {
-          type: "text",
-          content: content
-        },
-        insights: [],
-        recommendations: [],
-        relatedQueries: []
-      };
+    } catch {
+      parsedResponse = { interpretation: query, results: { type: "text", content }, insights: [], recommendations: [], relatedQueries: [], dataSource };
     }
 
-    console.log('Query processed successfully');
+    parsedResponse.dataSource = dataSource;
+    console.log('Query processed:', { dataSource, endpoints: endpointsToFetch });
 
     return new Response(JSON.stringify(parsedResponse), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -171,11 +209,8 @@ Output format:
 
   } catch (error) {
     console.error("NL Query error:", error);
-    return new Response(JSON.stringify({ 
-      error: error instanceof Error ? error.message : "Unknown error" 
-    }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }), {
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });
