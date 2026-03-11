@@ -470,7 +470,7 @@ export function LicenseOptimizer({ selectedTenants }: LicenseOptimizerProps) {
                 variant="outline" 
                 size="sm" 
                 onClick={fetchTenantLicenses}
-                disabled={isFetchingLicenses || !connectionId}
+                disabled={isFetchingLicenses || !effectiveConnectionId}
               >
                 {isFetchingLicenses ? (
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
