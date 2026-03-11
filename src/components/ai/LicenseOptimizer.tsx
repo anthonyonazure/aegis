@@ -585,7 +585,7 @@ export function LicenseOptimizer({ selectedTenants }: LicenseOptimizerProps) {
                 <Button variant="outline" size="sm" onClick={loadSampleData}>
                   Load Sample Data
                 </Button>
-                {connectionId && (
+                {effectiveConnectionId && (
                   <Button variant="default" size="sm" onClick={fetchTenantLicenses}>
                     <RefreshCw className="w-4 h-4 mr-2" />
                     Fetch from Tenant
