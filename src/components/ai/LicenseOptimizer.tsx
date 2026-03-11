@@ -201,7 +201,7 @@ export function LicenseOptimizer({ selectedTenants }: LicenseOptimizerProps) {
       }
     };
     loadLastAnalysisForTenant();
-  }, [connectionId]);
+  }, [effectiveConnectionId]);
 
   // Auto-fetch licenses when tenant changes or is connected with credentials
   useEffect(() => {
