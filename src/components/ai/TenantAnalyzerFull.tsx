@@ -128,7 +128,13 @@ interface TenantAnalysis {
   };
 }
 
-export const TenantAnalyzerFull = () => {
+import { SelectedTenantInfo } from '@/components/copilot/TenantMultiSelector';
+
+interface TenantAnalyzerFullProps {
+  selectedTenants?: SelectedTenantInfo[];
+}
+
+export const TenantAnalyzerFull = ({ selectedTenants }: TenantAnalyzerFullProps) => {
   const { toast } = useToast();
   const [analysis, setAnalysis] = useState<TenantAnalysis | null>(null);
   const [isLoading, setIsLoading] = useState(false);

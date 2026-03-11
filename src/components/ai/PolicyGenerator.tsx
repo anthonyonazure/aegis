@@ -31,7 +31,13 @@ interface PolicyResult {
   rawResponse?: boolean;
 }
 
-export function PolicyGenerator() {
+import { SelectedTenantInfo } from '@/components/copilot/TenantMultiSelector';
+
+interface PolicyGeneratorProps {
+  selectedTenants?: SelectedTenantInfo[];
+}
+
+export function PolicyGenerator({ selectedTenants }: PolicyGeneratorProps) {
   const { toast } = useToast();
   const [prompt, setPrompt] = useState('');
   const [policyType, setPolicyType] = useState<'conditionalAccess' | 'intune'>('conditionalAccess');

@@ -136,7 +136,13 @@ const AVAILABLE_FRAMEWORKS = [
   { id: 'cmmc', name: 'CMMC', description: 'Cybersecurity Maturity Model' },
 ];
 
-export const ComplianceAdvisorFull = () => {
+import { SelectedTenantInfo } from '@/components/copilot/TenantMultiSelector';
+
+interface ComplianceAdvisorFullProps {
+  selectedTenants?: SelectedTenantInfo[];
+}
+
+export const ComplianceAdvisorFull = ({ selectedTenants }: ComplianceAdvisorFullProps) => {
   const { toast } = useToast();
   const [analysis, setAnalysis] = useState<ComplianceAnalysis | null>(null);
   const [isLoading, setIsLoading] = useState(false);

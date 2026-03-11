@@ -66,7 +66,13 @@ const exampleIssues = [
   "BitLocker is not enforced on Windows devices"
 ];
 
-export function RemediationScriptGenerator() {
+import { SelectedTenantInfo } from '@/components/copilot/TenantMultiSelector';
+
+interface RemediationScriptGeneratorProps {
+  selectedTenants?: SelectedTenantInfo[];
+}
+
+export function RemediationScriptGenerator({ selectedTenants }: RemediationScriptGeneratorProps) {
   const { toast } = useToast();
   const [issue, setIssue] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);

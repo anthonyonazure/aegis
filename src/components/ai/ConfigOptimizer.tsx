@@ -122,7 +122,13 @@ interface OptimizationAnalysis {
   };
 }
 
-export const ConfigOptimizer: React.FC = () => {
+import { SelectedTenantInfo } from '@/components/copilot/TenantMultiSelector';
+
+interface ConfigOptimizerProps {
+  selectedTenants?: SelectedTenantInfo[];
+}
+
+export const ConfigOptimizer: React.FC<ConfigOptimizerProps> = ({ selectedTenants }) => {
   const [analysis, setAnalysis] = useState<OptimizationAnalysis | null>(null);
   const [loading, setLoading] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);

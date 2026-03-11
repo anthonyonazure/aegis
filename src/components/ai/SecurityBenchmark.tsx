@@ -51,7 +51,13 @@ const COMPANY_SIZES = [
   { value: 'enterprise', label: 'Enterprise (5000+ employees)' }
 ];
 
-export function SecurityBenchmark() {
+import { SelectedTenantInfo } from '@/components/copilot/TenantMultiSelector';
+
+interface SecurityBenchmarkProps {
+  selectedTenants?: SelectedTenantInfo[];
+}
+
+export function SecurityBenchmark({ selectedTenants }: SecurityBenchmarkProps) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<Record<string, unknown> | null>(null);
   const [industry, setIndustry] = useState('Technology');

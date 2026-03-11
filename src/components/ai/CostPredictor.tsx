@@ -33,11 +33,14 @@ import { toast } from 'sonner';
 import { getLastAnalysis, saveAnalysisResult, type AIAnalysisResult } from '@/lib/aiApi';
 import { AIAnalysisHistoryPanel } from './AIAnalysisHistoryPanel';
 
+import { SelectedTenantInfo } from '@/components/copilot/TenantMultiSelector';
+
 interface CostPredictorProps {
   tenantData?: Record<string, unknown>;
+  selectedTenants?: SelectedTenantInfo[];
 }
 
-export function CostPredictor({ tenantData }: CostPredictorProps) {
+export function CostPredictor({ tenantData, selectedTenants }: CostPredictorProps) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [analysis, setAnalysis] = useState<Record<string, unknown> | null>(null);

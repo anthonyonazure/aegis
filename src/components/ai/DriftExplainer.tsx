@@ -95,7 +95,13 @@ const sampleDriftData = {
   ]
 };
 
-export function DriftExplainer() {
+import { SelectedTenantInfo } from '@/components/copilot/TenantMultiSelector';
+
+interface DriftExplainerProps {
+  selectedTenants?: SelectedTenantInfo[];
+}
+
+export function DriftExplainer({ selectedTenants }: DriftExplainerProps) {
   const { toast } = useToast();
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [result, setResult] = useState<DriftExplanation | null>(null);

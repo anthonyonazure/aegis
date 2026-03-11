@@ -134,7 +134,13 @@ interface OptimizationResult {
   };
 }
 
-export function LicenseOptimizer() {
+import { SelectedTenantInfo } from '@/components/copilot/TenantMultiSelector';
+
+interface LicenseOptimizerProps {
+  selectedTenants?: SelectedTenantInfo[];
+}
+
+export function LicenseOptimizer({ selectedTenants }: LicenseOptimizerProps) {
   const { toast } = useToast();
   const { connectionId, tenantName, hasStoredCredentials } = useTenant();
   const [isAnalyzing, setIsAnalyzing] = useState(false);

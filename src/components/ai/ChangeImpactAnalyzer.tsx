@@ -30,7 +30,13 @@ import { supabase } from '@/integrations/supabase/client';
 import { useTenant } from '@/contexts/TenantContext';
 import { toast } from 'sonner';
 
-export function ChangeImpactAnalyzer() {
+import { SelectedTenantInfo } from '@/components/copilot/TenantMultiSelector';
+
+interface ChangeImpactAnalyzerProps {
+  selectedTenants?: SelectedTenantInfo[];
+}
+
+export function ChangeImpactAnalyzer({ selectedTenants }: ChangeImpactAnalyzerProps) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<Record<string, unknown> | null>(null);
   const [proposedChanges, setProposedChanges] = useState('');

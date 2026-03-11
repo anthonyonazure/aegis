@@ -122,7 +122,13 @@ interface RiskAnalysis {
   };
 }
 
-export const UserRiskProfiler: React.FC = () => {
+import { SelectedTenantInfo } from '@/components/copilot/TenantMultiSelector';
+
+interface UserRiskProfilerProps {
+  selectedTenants?: SelectedTenantInfo[];
+}
+
+export const UserRiskProfiler: React.FC<UserRiskProfilerProps> = ({ selectedTenants }) => {
   const [analysis, setAnalysis] = useState<RiskAnalysis | null>(null);
   const [loading, setLoading] = useState(false);
   const [userEmail, setUserEmail] = useState('');

@@ -85,7 +85,13 @@ interface ExecutiveReport {
   };
 }
 
-export function ExecutiveReportGenerator() {
+import { SelectedTenantInfo } from '@/components/copilot/TenantMultiSelector';
+
+interface ExecutiveReportGeneratorProps {
+  selectedTenants?: SelectedTenantInfo[];
+}
+
+export function ExecutiveReportGenerator({ selectedTenants }: ExecutiveReportGeneratorProps) {
   const { toast } = useToast();
   const [isGenerating, setIsGenerating] = useState(false);
   const [report, setReport] = useState<ExecutiveReport | null>(null);
