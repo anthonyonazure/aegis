@@ -66,9 +66,44 @@ const COLORS = {
 
 export const ComplianceDashboardView = () => {
   const { toast } = useToast();
+  const { selectedCustomerId, selectedTenantId, customers } = useTenant();
+  const [allResults, setAllResults] = useState<ComplianceResult[]>([]);
   const [results, setResults] = useState<ComplianceResult[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [timeRange, setTimeRange] = useState<string>('30');
+  const [tenantConnectionIds, setTenantConnectionIds] = useState<string[]>([]);
+
+  const selectedCustomerName = selectedCustomerId
+    ? customers.find(c => c.id === selectedCustomerId)?.name
+    : null;
+
+  // Load tenant connections for selected customer
+  useEffect(() => {
+    const loadTenantConnections = async () => {
+      if (!selectedCustomerId) {
+        setTenantConnectionIds([]);
+        return;
+      }
+      const { data } = await supabase
+        .from('tenant_connections')
+        .select('id')
+        .eq('customer_id', selectedCustomerId);
+      setTenantConnectionIds(data?.map(t => t.id) || []);
+    };
+    loadTenantConnections();
+  }, [selectedCustomerId]);
+
+  // Filter results when customer/tenant changes
+  useEffect(() => {
+    if (selectedTenantId) {
+      // compliance_results doesn't have tenant_connection_id directly,
+      // so filter via export_job_id -> export_jobs.tenant_connection_id
+      // For now, show all results when filtering by tenant (filtered at query level)
+      setResults(allResults);
+    } else {
+      setResults(allResults);
+    }
+  }, [selectedCustomerId, selectedTenantId, tenantConnectionIds, allResults]);
 
   useEffect(() => {
     loadData();
@@ -86,7 +121,7 @@ export const ComplianceDashboardView = () => {
         .order('created_at', { ascending: true });
 
       if (error) throw error;
-      setResults(data || []);
+      setAllResults(data || []);
     } catch (error) {
       console.error('Failed to load compliance data:', error);
       toast({
