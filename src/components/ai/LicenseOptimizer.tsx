@@ -218,7 +218,7 @@ export function LicenseOptimizer({ selectedTenants }: LicenseOptimizerProps) {
 
   // Fetch licenses from tenant
   const fetchTenantLicenses = async () => {
-    if (!connectionId || !hasStoredCredentials) {
+    if (!effectiveConnectionId || !effectiveHasCredentials) {
       toast({
         title: 'No Tenant Credentials',
         description: 'Please configure App Registration credentials for this tenant in Tenant Config',
@@ -230,7 +230,7 @@ export function LicenseOptimizer({ selectedTenants }: LicenseOptimizerProps) {
     setIsFetchingLicenses(true);
     try {
       const { data, error } = await supabase.functions.invoke('fetch-governance-metrics', {
-        body: { tenantConnectionId: connectionId }
+        body: { tenantConnectionId: effectiveConnectionId }
       });
 
       if (error) throw error;
