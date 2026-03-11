@@ -1,6 +1,10 @@
+import { useState } from 'react';
 import { ComplianceAdvisorFull } from '@/components/ai/ComplianceAdvisorFull';
+import { TenantMultiSelector, SelectedTenantInfo } from '@/components/copilot/TenantMultiSelector';
 
 export const ComplianceAdvisorView = () => {
+  const [selectedTenants, setSelectedTenants] = useState<SelectedTenantInfo[]>([]);
+
   return (
     <div className="space-y-6">
       <div>
@@ -9,7 +13,13 @@ export const ComplianceAdvisorView = () => {
           Analyze your M365 tenant against major compliance frameworks
         </p>
       </div>
-      <ComplianceAdvisorFull />
+      <TenantMultiSelector
+        selectedTenantIds={selectedTenants.map(t => t.id)}
+        onSelectionChange={setSelectedTenants}
+        multiSelect={true}
+        label="Select tenants to analyze"
+      />
+      <ComplianceAdvisorFull selectedTenants={selectedTenants} />
     </div>
   );
 };

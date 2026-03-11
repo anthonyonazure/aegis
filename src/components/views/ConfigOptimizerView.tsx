@@ -1,7 +1,10 @@
-import React from 'react';
+import { useState } from 'react';
 import { ConfigOptimizer } from '@/components/ai/ConfigOptimizer';
+import { TenantMultiSelector, SelectedTenantInfo } from '@/components/copilot/TenantMultiSelector';
 
-const ConfigOptimizerView: React.FC = () => {
+const ConfigOptimizerView = () => {
+  const [selectedTenants, setSelectedTenants] = useState<SelectedTenantInfo[]>([]);
+
   return (
     <div className="space-y-6">
       <div>
@@ -10,7 +13,13 @@ const ConfigOptimizerView: React.FC = () => {
           Get AI-powered recommendations to optimize your M365 configuration for security, performance, and cost
         </p>
       </div>
-      <ConfigOptimizer />
+      <TenantMultiSelector
+        selectedTenantIds={selectedTenants.map(t => t.id)}
+        onSelectionChange={setSelectedTenants}
+        multiSelect={true}
+        label="Select tenants to optimize"
+      />
+      <ConfigOptimizer selectedTenants={selectedTenants} />
     </div>
   );
 };

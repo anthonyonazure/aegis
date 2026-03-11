@@ -1,7 +1,10 @@
-import React from 'react';
+import { useState } from 'react';
 import { CrossTenantInsights } from '@/components/ai/CrossTenantInsights';
+import { TenantMultiSelector, SelectedTenantInfo } from '@/components/copilot/TenantMultiSelector';
 
-const CrossTenantInsightsView: React.FC = () => {
+const CrossTenantInsightsView = () => {
+  const [selectedTenants, setSelectedTenants] = useState<SelectedTenantInfo[]>([]);
+
   return (
     <div className="space-y-6">
       <div>
@@ -10,7 +13,13 @@ const CrossTenantInsightsView: React.FC = () => {
           Analyze patterns, benchmarks, and optimization opportunities across your entire tenant portfolio
         </p>
       </div>
-      <CrossTenantInsights />
+      <TenantMultiSelector
+        selectedTenantIds={selectedTenants.map(t => t.id)}
+        onSelectionChange={setSelectedTenants}
+        multiSelect={true}
+        label="Select tenants to compare"
+      />
+      <CrossTenantInsights selectedTenants={selectedTenants} />
     </div>
   );
 };

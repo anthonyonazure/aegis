@@ -1,6 +1,10 @@
+import { useState } from 'react';
 import { ChangeImpactAnalyzer } from '@/components/ai/ChangeImpactAnalyzer';
+import { TenantMultiSelector, SelectedTenantInfo } from '@/components/copilot/TenantMultiSelector';
 
 export default function ChangeImpactView() {
+  const [selectedTenants, setSelectedTenants] = useState<SelectedTenantInfo[]>([]);
+
   return (
     <div className="space-y-6">
       <div>
@@ -9,8 +13,13 @@ export default function ChangeImpactView() {
           Predict the impact of configuration changes before deployment
         </p>
       </div>
-      
-      <ChangeImpactAnalyzer />
+      <TenantMultiSelector
+        selectedTenantIds={selectedTenants.map(t => t.id)}
+        onSelectionChange={setSelectedTenants}
+        multiSelect={false}
+        label="Select tenant"
+      />
+      <ChangeImpactAnalyzer selectedTenants={selectedTenants} />
     </div>
   );
 }
