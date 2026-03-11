@@ -98,13 +98,28 @@ export function ExecutiveReportGenerator({ selectedTenants }: ExecutiveReportGen
   const [reportType, setReportType] = useState('governance');
   const [audience, setAudience] = useState('executive');
 
+  const effectiveTenantIds = selectedTenants?.map(t => t.id).filter(Boolean) || [];
+
   const generateReport = async () => {
+    if (effectiveTenantIds.length === 0) {
+      toast({
+        title: 'No Tenants Selected',
+        description: 'Please select at least one tenant for the report',
+        variant: 'destructive',
+      });
+      return;
+    }
     setIsGenerating(true);
     setReport(null);
 
     try {
       const { data, error } = await supabase.functions.invoke('ai-executive-report', {
-        body: { reportType, audience }
+        body: { 
+          reportType, 
+          audience,
+          tenantConnectionIds: effectiveTenantIds,
+          tenantNames: selectedTenants?.map(t => t.name) || [],
+        }
       });
 
       if (error) throw error;

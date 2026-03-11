@@ -45,6 +45,8 @@ export function PolicyGenerator({ selectedTenants }: PolicyGeneratorProps) {
   const [result, setResult] = useState<PolicyResult | null>(null);
   const [copiedJson, setCopiedJson] = useState(false);
 
+  const effectiveTenantId = selectedTenants?.[0]?.id;
+
   const examplePrompts = [
     "Block all sign-ins from outside the US and require MFA for admin accounts",
     "Require compliant devices for accessing SharePoint and OneDrive",
@@ -68,7 +70,12 @@ export function PolicyGenerator({ selectedTenants }: PolicyGeneratorProps) {
 
     try {
       const { data, error } = await supabase.functions.invoke('ai-policy-generator', {
-        body: { prompt, policyType }
+        body: { 
+          prompt, 
+          policyType,
+          tenantConnectionId: effectiveTenantId,
+          tenantName: selectedTenants?.[0]?.name,
+        }
       });
 
       if (error) throw error;

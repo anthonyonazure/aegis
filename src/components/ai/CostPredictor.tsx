@@ -48,6 +48,10 @@ export function CostPredictor({ tenantData, selectedTenants }: CostPredictorProp
   const [lastAnalyzedAt, setLastAnalyzedAt] = useState<string | null>(null);
   const { tenants, connectionId, tenantName } = useTenant();
 
+  const effectiveConnectionId = selectedTenants?.[0]?.id || connectionId;
+  const effectiveTenantName = selectedTenants?.[0]?.name || tenantName;
+  const effectiveTenantIds = selectedTenants?.map(t => t.id).filter(Boolean) || (connectionId ? [connectionId] : []);
+
   const handleLoadHistoricalResult = (historicalResult: AIAnalysisResult) => {
     setAnalysis(historicalResult.result);
     setLastAnalyzedAt(historicalResult.createdAt);
@@ -72,13 +76,18 @@ export function CostPredictor({ tenantData, selectedTenants }: CostPredictorProp
   }, []);
 
   const runAnalysis = async () => {
+    if (effectiveTenantIds.length === 0) {
+      toast.error('Please select at least one tenant first');
+      return;
+    }
     setIsAnalyzing(true);
     try {
       const { data, error } = await supabase.functions.invoke('ai-cost-predictor', {
         body: {
+          tenantConnectionIds: effectiveTenantIds,
           tenantData: tenantData || { 
-            tenantId: connectionId,
-            tenantName: tenantName 
+            tenantId: effectiveConnectionId,
+            tenantName: effectiveTenantName 
           },
           historicalCosts: [],
           growthRate: 5
@@ -95,7 +104,7 @@ export function CostPredictor({ tenantData, selectedTenants }: CostPredictorProp
         await saveAnalysisResult({
           analysisType: 'cost-predictor',
           result: data.analysis,
-          tenantConnectionId: connectionId || undefined,
+          tenantConnectionId: effectiveConnectionId || undefined,
         });
 
         toast.success('Cost analysis completed');

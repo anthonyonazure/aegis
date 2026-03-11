@@ -62,6 +62,9 @@ export function IncidentResponder({ selectedTenants }: IncidentResponderProps) {
   const [affectedUsers, setAffectedUsers] = useState('');
   const { connectionId, tenantName } = useTenant();
 
+  const effectiveConnectionId = selectedTenants?.[0]?.id || connectionId;
+  const effectiveTenantName = selectedTenants?.[0]?.name || tenantName;
+
   // Load last analysis on mount
   useEffect(() => {
     const loadLastAnalysis = async () => {
@@ -92,9 +95,10 @@ export function IncidentResponder({ selectedTenants }: IncidentResponderProps) {
           incidentDescription,
           incidentType,
           affectedUsers: affectedUsers.split(',').map(u => u.trim()).filter(Boolean),
+          tenantConnectionId: effectiveConnectionId,
           tenantData: { 
-            tenantId: connectionId,
-            tenantName: tenantName 
+            tenantId: effectiveConnectionId,
+            tenantName: effectiveTenantName 
           }
         }
       });
@@ -108,7 +112,7 @@ export function IncidentResponder({ selectedTenants }: IncidentResponderProps) {
         await saveAnalysisResult({
           analysisType: 'incident-responder',
           result: data.analysis,
-          tenantConnectionId: connectionId || undefined,
+          tenantConnectionId: effectiveConnectionId || undefined,
         });
 
         toast.success('Incident response plan generated');

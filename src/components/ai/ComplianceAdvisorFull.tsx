@@ -149,6 +149,8 @@ export const ComplianceAdvisorFull = ({ selectedTenants }: ComplianceAdvisorFull
   const [selectedFrameworks, setSelectedFrameworks] = useState<string[]>(['nist-csf', 'cis-m365', 'iso-27001']);
   const [expandedGaps, setExpandedGaps] = useState<string[]>([]);
 
+  const effectiveTenantIds = selectedTenants?.map(t => t.id).filter(Boolean) || [];
+
   const runAnalysis = async () => {
     if (selectedFrameworks.length === 0) {
       toast({
@@ -159,39 +161,21 @@ export const ComplianceAdvisorFull = ({ selectedTenants }: ComplianceAdvisorFull
       return;
     }
 
+    if (effectiveTenantIds.length === 0) {
+      toast({
+        title: 'No Tenants Selected',
+        description: 'Please select at least one tenant to analyze',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setIsLoading(true);
     try {
-      const tenantConfig = {
-        security: {
-          mfaEnabled: true,
-          mfaCoverage: 85,
-          conditionalAccess: 12,
-          legacyAuthBlocked: false,
-          pimEnabled: false,
-          securityDefaults: false
-        },
-        identity: {
-          passwordPolicy: { minLength: 12, complexity: true, expiry: 90 },
-          guestAccess: 'restricted',
-          selfServicePasswordReset: true,
-          adminCount: 15
-        },
-        dataProtection: {
-          dlpPolicies: 8,
-          sensitivityLabels: true,
-          retentionPolicies: 5,
-          encryptionAtRest: true
-        },
-        auditLogging: {
-          enabled: true,
-          retentionDays: 180,
-          advancedAudit: false
-        }
-      };
-
       const { data, error } = await supabase.functions.invoke('ai-compliance-advisor', {
         body: { 
-          tenantConfig, 
+          tenantConnectionIds: effectiveTenantIds,
+          tenantNames: selectedTenants?.map(t => t.name) || [],
           selectedFrameworks: selectedFrameworks.map(f => 
             AVAILABLE_FRAMEWORKS.find(af => af.id === f)?.name || f
           )

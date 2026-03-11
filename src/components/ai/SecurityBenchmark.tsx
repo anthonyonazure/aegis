@@ -64,14 +64,22 @@ export function SecurityBenchmark({ selectedTenants }: SecurityBenchmarkProps) {
   const [companySize, setCompanySize] = useState('medium');
   const { connectionId, tenantName } = useTenant();
 
+  const effectiveConnectionId = selectedTenants?.[0]?.id || connectionId;
+  const effectiveTenantName = selectedTenants?.[0]?.name || tenantName;
+
   const runBenchmark = async () => {
+    if (!effectiveConnectionId) {
+      toast.error('Please select a tenant first');
+      return;
+    }
     setIsAnalyzing(true);
     try {
       const { data, error } = await supabase.functions.invoke('ai-security-benchmark', {
         body: {
+          tenantConnectionId: effectiveConnectionId,
           tenantData: { 
-            tenantId: connectionId,
-            tenantName: tenantName 
+            tenantId: effectiveConnectionId,
+            tenantName: effectiveTenantName 
           },
           industry,
           companySize

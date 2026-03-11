@@ -142,7 +142,11 @@ interface LicenseOptimizerProps {
 
 export function LicenseOptimizer({ selectedTenants }: LicenseOptimizerProps) {
   const { toast } = useToast();
-  const { connectionId, tenantName, hasStoredCredentials } = useTenant();
+  const { connectionId: globalConnectionId, tenantName: globalTenantName, hasStoredCredentials } = useTenant();
+
+  const effectiveConnectionId = selectedTenants?.[0]?.id || globalConnectionId;
+  const effectiveTenantName = selectedTenants?.[0]?.name || globalTenantName;
+  const effectiveHasCredentials = selectedTenants?.[0]?.hasCredentials ?? hasStoredCredentials;
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isFetchingLicenses, setIsFetchingLicenses] = useState(false);
@@ -180,7 +184,7 @@ export function LicenseOptimizer({ selectedTenants }: LicenseOptimizerProps) {
       setIsLoading(true);
       try {
         // Load last analysis for this specific tenant (or global if no tenant selected)
-        const lastAnalysis = await getLastAnalysis('license-optimizer', connectionId || undefined);
+        const lastAnalysis = await getLastAnalysis('license-optimizer', effectiveConnectionId || undefined);
         if (lastAnalysis?.result) {
           setResult(lastAnalysis.result as unknown as OptimizationResult);
           setLastAnalyzedAt(lastAnalysis.createdAt);
@@ -197,26 +201,24 @@ export function LicenseOptimizer({ selectedTenants }: LicenseOptimizerProps) {
       }
     };
     loadLastAnalysisForTenant();
-  }, [connectionId]);
+  }, [effectiveConnectionId]);
 
   // Auto-fetch licenses when tenant changes or is connected with credentials
   useEffect(() => {
-    if (connectionId && hasStoredCredentials) {
-      // Reset licenses and fetch new data when tenant changes
+    if (effectiveConnectionId && effectiveHasCredentials) {
       setLicenses([]);
       setDataSource('sample');
       fetchTenantLicenses();
     } else {
-      // Clear data when tenant is disconnected
       setLicenses([]);
       setDataSource('sample');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connectionId, hasStoredCredentials]);
+  }, [effectiveConnectionId, effectiveHasCredentials]);
 
   // Fetch licenses from tenant
   const fetchTenantLicenses = async () => {
-    if (!connectionId || !hasStoredCredentials) {
+    if (!effectiveConnectionId || !effectiveHasCredentials) {
       toast({
         title: 'No Tenant Credentials',
         description: 'Please configure App Registration credentials for this tenant in Tenant Config',
@@ -228,7 +230,7 @@ export function LicenseOptimizer({ selectedTenants }: LicenseOptimizerProps) {
     setIsFetchingLicenses(true);
     try {
       const { data, error } = await supabase.functions.invoke('fetch-governance-metrics', {
-        body: { tenantConnectionId: connectionId }
+        body: { tenantConnectionId: effectiveConnectionId }
       });
 
       if (error) throw error;
@@ -249,7 +251,7 @@ export function LicenseOptimizer({ selectedTenants }: LicenseOptimizerProps) {
         setDataSource('tenant');
         toast({
           title: 'Licenses Loaded',
-          description: `Loaded ${fetchedLicenses.length} license types from ${tenantName || 'tenant'}`,
+          description: `Loaded ${fetchedLicenses.length} license types from ${effectiveTenantName || 'tenant'}`,
         });
       } else {
         toast({
@@ -343,7 +345,7 @@ export function LicenseOptimizer({ selectedTenants }: LicenseOptimizerProps) {
         analysisType: 'license-optimizer',
         result: data,
         score: data.summary?.optimizationScore,
-        tenantConnectionId: connectionId || undefined,
+        tenantConnectionId: effectiveConnectionId || undefined,
       });
 
       toast({
@@ -468,7 +470,7 @@ export function LicenseOptimizer({ selectedTenants }: LicenseOptimizerProps) {
                 variant="outline" 
                 size="sm" 
                 onClick={fetchTenantLicenses}
-                disabled={isFetchingLicenses || !connectionId}
+                disabled={isFetchingLicenses || !effectiveConnectionId}
               >
                 {isFetchingLicenses ? (
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -583,7 +585,7 @@ export function LicenseOptimizer({ selectedTenants }: LicenseOptimizerProps) {
                 <Button variant="outline" size="sm" onClick={loadSampleData}>
                   Load Sample Data
                 </Button>
-                {connectionId && (
+                {effectiveConnectionId && (
                   <Button variant="default" size="sm" onClick={fetchTenantLicenses}>
                     <RefreshCw className="w-4 h-4 mr-2" />
                     Fetch from Tenant

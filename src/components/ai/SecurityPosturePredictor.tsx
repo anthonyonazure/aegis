@@ -103,6 +103,8 @@ export function SecurityPosturePredictor({ selectedTenants }: SecurityPosturePre
   const [result, setResult] = useState<SecurityPrediction | null>(null);
   const [lastAnalyzedAt, setLastAnalyzedAt] = useState<string | null>(null);
 
+  const effectiveTenantIds = selectedTenants?.map(t => t.id).filter(Boolean) || [];
+
   const handleLoadHistoricalResult = (historicalResult: AIAnalysisResult) => {
     setResult(historicalResult.result as unknown as SecurityPrediction);
     setLastAnalyzedAt(historicalResult.createdAt);
@@ -127,12 +129,23 @@ export function SecurityPosturePredictor({ selectedTenants }: SecurityPosturePre
   }, []);
 
   const analyzeAndPredict = async () => {
+    if (effectiveTenantIds.length === 0) {
+      toast({
+        title: 'No Tenants Selected',
+        description: 'Please select at least one tenant to analyze',
+        variant: 'destructive',
+      });
+      return;
+    }
     setIsAnalyzing(true);
     setResult(null);
 
     try {
       const { data, error } = await supabase.functions.invoke('ai-security-predictor', {
-        body: {}
+        body: {
+          tenantConnectionIds: effectiveTenantIds,
+          tenantNames: selectedTenants?.map(t => t.name) || [],
+        }
       });
 
       if (error) throw error;

@@ -129,6 +129,8 @@ interface UserRiskProfilerProps {
 }
 
 export const UserRiskProfiler: React.FC<UserRiskProfilerProps> = ({ selectedTenants }) => {
+  const effectiveTenantId = selectedTenants?.[0]?.id;
+  const effectiveTenantName = selectedTenants?.[0]?.name;
   const [analysis, setAnalysis] = useState<RiskAnalysis | null>(null);
   const [loading, setLoading] = useState(false);
   const [userEmail, setUserEmail] = useState('');
@@ -173,35 +175,19 @@ export const UserRiskProfiler: React.FC<UserRiskProfilerProps> = ({ selectedTena
       return;
     }
 
+    if (!effectiveTenantId) {
+      toast.error('Please select a tenant first');
+      return;
+    }
+
     setLoading(true);
     try {
-      // Mock user data for demo
-      const userData = {
-        email: userEmail,
-        displayName: userEmail.split('@')[0].replace('.', ' ').replace(/\b\w/g, l => l.toUpperCase()),
-        department: 'Engineering',
-        jobTitle: 'Senior Developer',
-        signInCount: 45,
-        failedSignIns: 3,
-        riskySignIns: 1,
-        lastSignIn: new Date().toISOString(),
-        deviceCount: 3,
-        locationCount: 2,
-        adminRoles: ['Application Administrator'],
-        sensitiveDataAccess: true,
-        externalSharing: 12,
-        downloadCount: 156
-      };
-
-      const tenantContext = {
-        totalUsers: 500,
-        securityDefaults: true,
-        conditionalAccess: true,
-        mfaEnforced: true
-      };
-
       const { data, error } = await supabase.functions.invoke('ai-user-risk-profiler', {
-        body: { userData, tenantContext }
+        body: { 
+          userEmail,
+          tenantConnectionId: effectiveTenantId,
+          tenantName: effectiveTenantName,
+        }
       });
 
       if (error) throw error;

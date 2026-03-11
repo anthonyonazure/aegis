@@ -105,6 +105,8 @@ export function MigrationPlanner({ selectedTenants }: MigrationPlannerProps) {
   const [migrationType, setMigrationType] = useState('tenant-to-tenant');
   const [expandedPhase, setExpandedPhase] = useState<number | null>(null);
 
+  const effectiveTenantId = selectedTenants?.[0]?.id;
+
   // Load last plan on mount
   useEffect(() => {
     const loadLastPlan = async () => {
@@ -123,12 +125,24 @@ export function MigrationPlanner({ selectedTenants }: MigrationPlannerProps) {
   }, []);
 
   const createPlan = async () => {
+    if (!effectiveTenantId) {
+      toast({
+        title: 'No Tenant Selected',
+        description: 'Please select a source tenant',
+        variant: 'destructive',
+      });
+      return;
+    }
     setIsPlanning(true);
     setPlan(null);
 
     try {
       const { data, error } = await supabase.functions.invoke('ai-migration-planner', {
-        body: { migrationType }
+        body: { 
+          migrationType,
+          tenantConnectionId: effectiveTenantId,
+          tenantName: selectedTenants?.[0]?.name,
+        }
       });
 
       if (error) throw error;
