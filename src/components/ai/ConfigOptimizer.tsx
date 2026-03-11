@@ -129,6 +129,7 @@ interface ConfigOptimizerProps {
 }
 
 export const ConfigOptimizer: React.FC<ConfigOptimizerProps> = ({ selectedTenants }) => {
+  const effectiveTenantIds = selectedTenants?.map(t => t.id).filter(Boolean) || [];
   const [analysis, setAnalysis] = useState<OptimizationAnalysis | null>(null);
   const [loading, setLoading] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
