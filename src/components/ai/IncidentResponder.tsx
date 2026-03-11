@@ -47,7 +47,13 @@ const INCIDENT_TYPES = [
   { value: 'other', label: 'Other' }
 ];
 
-export function IncidentResponder() {
+import { SelectedTenantInfo } from '@/components/copilot/TenantMultiSelector';
+
+interface IncidentResponderProps {
+  selectedTenants?: SelectedTenantInfo[];
+}
+
+export function IncidentResponder({ selectedTenants }: IncidentResponderProps) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [analysis, setAnalysis] = useState<Record<string, unknown> | null>(null);

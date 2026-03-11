@@ -59,7 +59,13 @@ const exampleQueries = [
   "Groups with more than 100 members"
 ];
 
-export function NaturalLanguageQuery() {
+import { SelectedTenantInfo } from '@/components/copilot/TenantMultiSelector';
+
+interface NaturalLanguageQueryProps {
+  selectedTenants?: SelectedTenantInfo[];
+}
+
+export function NaturalLanguageQuery({ selectedTenants }: NaturalLanguageQueryProps) {
   const { toast } = useToast();
   const { selectedTenantId, tenants } = useTenant();
   const selectedTenant = tenants.find(t => t.id === selectedTenantId);

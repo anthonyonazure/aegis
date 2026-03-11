@@ -60,7 +60,13 @@ interface AnomalyResult {
   dataSources?: DataSources;
 }
 
-export function AnomalyDetector() {
+import { SelectedTenantInfo } from '@/components/copilot/TenantMultiSelector';
+
+interface AnomalyDetectorProps {
+  selectedTenants?: SelectedTenantInfo[];
+}
+
+export function AnomalyDetector({ selectedTenants }: AnomalyDetectorProps) {
   const { toast } = useToast();
   const { selectedTenantId, tenants, isConnected } = useTenant();
   const selectedTenant = tenants.find(t => t.id === selectedTenantId);

@@ -1,6 +1,10 @@
+import { useState } from 'react';
 import { SecurityBenchmark } from '@/components/ai/SecurityBenchmark';
+import { TenantMultiSelector, SelectedTenantInfo } from '@/components/copilot/TenantMultiSelector';
 
 export default function SecurityBenchmarkView() {
+  const [selectedTenants, setSelectedTenants] = useState<SelectedTenantInfo[]>([]);
+
   return (
     <div className="space-y-6">
       <div>
@@ -9,8 +13,13 @@ export default function SecurityBenchmarkView() {
           Compare your security posture against industry standards and peer organizations
         </p>
       </div>
-      
-      <SecurityBenchmark />
+      <TenantMultiSelector
+        selectedTenantIds={selectedTenants.map(t => t.id)}
+        onSelectionChange={setSelectedTenants}
+        multiSelect={true}
+        label="Select tenants to benchmark"
+      />
+      <SecurityBenchmark selectedTenants={selectedTenants} />
     </div>
   );
 }

@@ -90,7 +90,13 @@ interface SecurityPrediction {
   prioritizedActions?: PrioritizedAction[];
 }
 
-export function SecurityPosturePredictor() {
+import { SelectedTenantInfo } from '@/components/copilot/TenantMultiSelector';
+
+interface SecurityPosturePredictorProps {
+  selectedTenants?: SelectedTenantInfo[];
+}
+
+export function SecurityPosturePredictor({ selectedTenants }: SecurityPosturePredictorProps) {
   const { toast } = useToast();
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);

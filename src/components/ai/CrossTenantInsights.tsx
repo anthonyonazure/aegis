@@ -117,7 +117,13 @@ interface CrossTenantAnalysis {
   }>;
 }
 
-export const CrossTenantInsights: React.FC = () => {
+import { SelectedTenantInfo } from '@/components/copilot/TenantMultiSelector';
+
+interface CrossTenantInsightsProps {
+  selectedTenants?: SelectedTenantInfo[];
+}
+
+export const CrossTenantInsights: React.FC<CrossTenantInsightsProps> = ({ selectedTenants }) => {
   const [analysis, setAnalysis] = useState<CrossTenantAnalysis | null>(null);
   const [loading, setLoading] = useState(false);
 

@@ -1,7 +1,10 @@
-import React from 'react';
+import { useState } from 'react';
 import { UserRiskProfiler } from '@/components/ai/UserRiskProfiler';
+import { TenantMultiSelector, SelectedTenantInfo } from '@/components/copilot/TenantMultiSelector';
 
-const UserRiskProfilerView: React.FC = () => {
+const UserRiskProfilerView = () => {
+  const [selectedTenants, setSelectedTenants] = useState<SelectedTenantInfo[]>([]);
+
   return (
     <div className="space-y-6">
       <div>
@@ -10,7 +13,13 @@ const UserRiskProfilerView: React.FC = () => {
           Analyze individual user behavior patterns and generate comprehensive risk assessments
         </p>
       </div>
-      <UserRiskProfiler />
+      <TenantMultiSelector
+        selectedTenantIds={selectedTenants.map(t => t.id)}
+        onSelectionChange={setSelectedTenants}
+        multiSelect={false}
+        label="Select tenant"
+      />
+      <UserRiskProfiler selectedTenants={selectedTenants} />
     </div>
   );
 };

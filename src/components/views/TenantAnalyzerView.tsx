@@ -1,6 +1,10 @@
+import { useState } from 'react';
 import { TenantAnalyzerFull } from '@/components/ai/TenantAnalyzerFull';
+import { TenantMultiSelector, SelectedTenantInfo } from '@/components/copilot/TenantMultiSelector';
 
 export const TenantAnalyzerView = () => {
+  const [selectedTenants, setSelectedTenants] = useState<SelectedTenantInfo[]>([]);
+
   return (
     <div className="space-y-6">
       <div>
@@ -9,7 +13,13 @@ export const TenantAnalyzerView = () => {
           Comprehensive AI-powered analysis of your M365 tenant configuration
         </p>
       </div>
-      <TenantAnalyzerFull />
+      <TenantMultiSelector
+        selectedTenantIds={selectedTenants.map(t => t.id)}
+        onSelectionChange={setSelectedTenants}
+        multiSelect={true}
+        label="Select tenants to analyze"
+      />
+      <TenantAnalyzerFull selectedTenants={selectedTenants} />
     </div>
   );
 };

@@ -91,7 +91,13 @@ interface MigrationPlan {
   };
 }
 
-export function MigrationPlanner() {
+import { SelectedTenantInfo } from '@/components/copilot/TenantMultiSelector';
+
+interface MigrationPlannerProps {
+  selectedTenants?: SelectedTenantInfo[];
+}
+
+export function MigrationPlanner({ selectedTenants }: MigrationPlannerProps) {
   const { toast } = useToast();
   const [isPlanning, setIsPlanning] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
