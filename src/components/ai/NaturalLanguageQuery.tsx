@@ -142,7 +142,7 @@ export function NaturalLanguageQuery({ selectedTenants }: NaturalLanguageQueryPr
       await saveAnalysisResult({
         analysisType: 'nl-query',
         result: data,
-        tenantConnectionId: selectedTenantId || undefined,
+        tenantConnectionId: effectiveTenantId || undefined,
       });
       
       // Add to history
