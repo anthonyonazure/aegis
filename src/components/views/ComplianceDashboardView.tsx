@@ -254,6 +254,17 @@ export const ComplianceDashboardView = () => {
         </div>
       </div>
 
+      {/* Customer filter indicator */}
+      {selectedCustomerId && (
+        <Alert className="border-primary/50 bg-primary/5">
+          <Filter className="h-4 w-4" />
+          <AlertDescription>
+            Showing compliance data for <strong>{selectedCustomerName}</strong>
+            {selectedTenantId && ' (filtered by selected tenant)'}
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="glass-panel border-border/50">

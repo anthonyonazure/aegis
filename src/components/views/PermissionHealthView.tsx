@@ -126,6 +126,17 @@ export const PermissionHealthView = () => {
         </Button>
       </div>
 
+      {/* Customer filter indicator */}
+      {selectedCustomerId && (
+        <Alert className="border-primary/50 bg-primary/5">
+          <Filter className="h-4 w-4" />
+          <AlertDescription>
+            Showing permission health for <strong>{selectedCustomerName}</strong>
+            {selectedTenantId && ' (filtered by selected tenant)'}
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Current Health Score */}
