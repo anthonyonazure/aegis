@@ -141,37 +141,26 @@ export const TenantAnalyzerFull = ({ selectedTenants }: TenantAnalyzerFullProps)
   const [analysisType, setAnalysisType] = useState('comprehensive');
   const [expandedSections, setExpandedSections] = useState<string[]>(['security']);
 
+  const effectiveTenantIds = selectedTenants?.map(t => t.id).filter(Boolean) || [];
+
   const runAnalysis = async () => {
+    if (effectiveTenantIds.length === 0) {
+      toast({
+        title: 'No Tenants Selected',
+        description: 'Please select at least one tenant to analyze',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setIsLoading(true);
     try {
-      const tenantData = {
-        users: { total: 500, admins: 15, guests: 50, mfaEnabled: 460 },
-        licenses: { 
-          E5: { total: 100, assigned: 85 },
-          E3: { total: 300, assigned: 280 },
-          E1: { total: 150, assigned: 120 }
-        },
-        security: {
-          secureScore: 72,
-          conditionalAccessPolicies: 12,
-          dlpPolicies: 8,
-          mfaEnforced: true,
-          legacyAuthBlocked: false
-        },
-        collaboration: {
-          teamsChannels: 250,
-          sharePointSites: 85,
-          oneDriveUsage: 92
-        },
-        compliance: {
-          auditLogEnabled: true,
-          retentionPolicies: 3,
-          sensitivityLabels: 5
-        }
-      };
-
       const { data, error } = await supabase.functions.invoke('ai-tenant-analyzer', {
-        body: { tenantData, analysisType }
+        body: { 
+          tenantConnectionIds: effectiveTenantIds,
+          analysisType,
+          tenantNames: selectedTenants?.map(t => t.name) || [],
+        }
       });
 
       if (error) throw error;

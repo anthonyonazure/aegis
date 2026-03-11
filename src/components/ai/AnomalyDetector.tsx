@@ -71,6 +71,10 @@ export function AnomalyDetector({ selectedTenants }: AnomalyDetectorProps) {
   const { selectedTenantId, tenants, isConnected } = useTenant();
   const selectedTenant = tenants.find(t => t.id === selectedTenantId);
 
+  const effectiveTenantIds = selectedTenants?.length
+    ? selectedTenants.map(t => t.id)
+    : selectedTenantId ? [selectedTenantId] : [];
+
   const [isScanning, setIsScanning] = useState(false);
   const [result, setResult] = useState<AnomalyResult | null>(null);
   const [expandedAnomaly, setExpandedAnomaly] = useState<string | null>(null);
@@ -90,10 +94,10 @@ export function AnomalyDetector({ selectedTenants }: AnomalyDetectorProps) {
   };
 
   const runScan = async () => {
-    if (!selectedTenantId || !isConnected) {
+    if (effectiveTenantIds.length === 0) {
       toast({
-        title: 'No Tenant Connected',
-        description: 'Please connect and select a tenant before running a scan.',
+        title: 'No Tenant Selected',
+        description: 'Please select at least one tenant before running a scan.',
         variant: 'destructive',
       });
       return;
@@ -105,7 +109,11 @@ export function AnomalyDetector({ selectedTenants }: AnomalyDetectorProps) {
 
     try {
       const { data, error } = await supabase.functions.invoke('ai-anomaly-detection', {
-        body: { tenantConnectionId: selectedTenantId }
+        body: { 
+          tenantConnectionId: effectiveTenantIds[0],
+          tenantConnectionIds: effectiveTenantIds,
+          tenantNames: selectedTenants?.map(t => t.name) || [],
+        }
       });
 
       if (error) throw error;

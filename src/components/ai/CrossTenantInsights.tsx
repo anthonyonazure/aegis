@@ -127,6 +127,8 @@ export const CrossTenantInsights: React.FC<CrossTenantInsightsProps> = ({ select
   const [analysis, setAnalysis] = useState<CrossTenantAnalysis | null>(null);
   const [loading, setLoading] = useState(false);
 
+  const effectiveTenantIds = selectedTenants?.map(t => t.id).filter(Boolean) || [];
+
   const getSeverityColor = (severity: string) => {
     switch (severity?.toLowerCase()) {
       case 'critical': return 'text-red-600 bg-red-100';
@@ -157,19 +159,18 @@ export const CrossTenantInsights: React.FC<CrossTenantInsightsProps> = ({ select
   };
 
   const analyzePortfolio = async () => {
+    if (effectiveTenantIds.length === 0) {
+      toast.error('Please select at least one tenant to analyze');
+      return;
+    }
     setLoading(true);
     try {
-      // Mock multi-tenant data
-      const tenantsData = [
-        { name: 'Contoso Ltd', users: 150, securityScore: 78, mfaRate: 92, licenses: 200 },
-        { name: 'Fabrikam Inc', users: 85, securityScore: 65, mfaRate: 78, licenses: 100 },
-        { name: 'Woodgrove Bank', users: 320, securityScore: 88, mfaRate: 99, licenses: 400 },
-        { name: 'Tailspin Toys', users: 45, securityScore: 55, mfaRate: 65, licenses: 60 },
-        { name: 'Adventure Works', users: 200, securityScore: 72, mfaRate: 85, licenses: 250 }
-      ];
-
       const { data, error } = await supabase.functions.invoke('ai-cross-tenant-insights', {
-        body: { tenantsData, analysisType: 'comprehensive' }
+        body: { 
+          tenantConnectionIds: effectiveTenantIds,
+          tenantNames: selectedTenants?.map(t => t.name) || [],
+          analysisType: 'comprehensive' 
+        }
       });
 
       if (error) throw error;

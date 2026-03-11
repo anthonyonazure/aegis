@@ -142,7 +142,11 @@ interface LicenseOptimizerProps {
 
 export function LicenseOptimizer({ selectedTenants }: LicenseOptimizerProps) {
   const { toast } = useToast();
-  const { connectionId, tenantName, hasStoredCredentials } = useTenant();
+  const { connectionId: globalConnectionId, tenantName: globalTenantName, hasStoredCredentials } = useTenant();
+
+  const effectiveConnectionId = selectedTenants?.[0]?.id || globalConnectionId;
+  const effectiveTenantName = selectedTenants?.[0]?.name || globalTenantName;
+  const effectiveHasCredentials = selectedTenants?.[0]?.hasCredentials ?? hasStoredCredentials;
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isFetchingLicenses, setIsFetchingLicenses] = useState(false);
