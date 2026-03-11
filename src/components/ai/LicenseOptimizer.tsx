@@ -251,7 +251,7 @@ export function LicenseOptimizer({ selectedTenants }: LicenseOptimizerProps) {
         setDataSource('tenant');
         toast({
           title: 'Licenses Loaded',
-          description: `Loaded ${fetchedLicenses.length} license types from ${tenantName || 'tenant'}`,
+          description: `Loaded ${fetchedLicenses.length} license types from ${effectiveTenantName || 'tenant'}`,
         });
       } else {
         toast({
