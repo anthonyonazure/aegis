@@ -345,7 +345,7 @@ export function LicenseOptimizer({ selectedTenants }: LicenseOptimizerProps) {
         analysisType: 'license-optimizer',
         result: data,
         score: data.summary?.optimizationScore,
-        tenantConnectionId: connectionId || undefined,
+        tenantConnectionId: effectiveConnectionId || undefined,
       });
 
       toast({
