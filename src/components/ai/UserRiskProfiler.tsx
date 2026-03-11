@@ -129,6 +129,8 @@ interface UserRiskProfilerProps {
 }
 
 export const UserRiskProfiler: React.FC<UserRiskProfilerProps> = ({ selectedTenants }) => {
+  const effectiveTenantId = selectedTenants?.[0]?.id;
+  const effectiveTenantName = selectedTenants?.[0]?.name;
   const [analysis, setAnalysis] = useState<RiskAnalysis | null>(null);
   const [loading, setLoading] = useState(false);
   const [userEmail, setUserEmail] = useState('');
