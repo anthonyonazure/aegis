@@ -184,7 +184,7 @@ export function LicenseOptimizer({ selectedTenants }: LicenseOptimizerProps) {
       setIsLoading(true);
       try {
         // Load last analysis for this specific tenant (or global if no tenant selected)
-        const lastAnalysis = await getLastAnalysis('license-optimizer', connectionId || undefined);
+        const lastAnalysis = await getLastAnalysis('license-optimizer', effectiveConnectionId || undefined);
         if (lastAnalysis?.result) {
           setResult(lastAnalysis.result as unknown as OptimizationResult);
           setLastAnalyzedAt(lastAnalysis.createdAt);
