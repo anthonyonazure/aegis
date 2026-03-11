@@ -1,358 +1,133 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Rate limiting (in-memory per instance)
 const _rl = new Map<string, { count: number; resetAt: number }>();
 function _checkRate(key: string, max = 15, windowMs = 60000): boolean {
   const now = Date.now();
   const e = _rl.get(key);
   if (!e || now > e.resetAt) { _rl.set(key, { count: 1, resetAt: now + windowMs }); return true; }
   if (e.count >= max) return false;
-  e.count++;
-  return true;
+  e.count++; return true;
+}
+
+async function getGraphToken(clientId: string, clientSecret: string, tenantId: string): Promise<string> {
+  const resp = await fetch(`https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`, {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ client_id: clientId, client_secret: clientSecret, scope: 'https://graph.microsoft.com/.default', grant_type: 'client_credentials' }).toString(),
+  });
+  if (!resp.ok) throw new Error(`Token error: ${resp.status}`);
+  return (await resp.json()).access_token;
+}
+
+async function graphGet(token: string, ep: string, beta = false) {
+  const r = await fetch(`${beta ? 'https://graph.microsoft.com/beta' : 'https://graph.microsoft.com/v1.0'}${ep}`, { headers: { Authorization: `Bearer ${token}` } });
+  if (!r.ok) { console.error(`Graph ${ep}: ${r.status}`); return null; }
+  return r.json();
+}
+
+async function fetchComplianceTelemetry(token: string) {
+  const [users, caPolicies, authMethods, secureScore, skus] = await Promise.all([
+    graphGet(token, '/users?$select=id,userType,accountEnabled&$top=999'),
+    graphGet(token, '/identity/conditionalAccess/policies'),
+    graphGet(token, '/reports/authenticationMethods/userRegistrationDetails?$top=999', true),
+    graphGet(token, '/security/secureScores?$top=1', true),
+    graphGet(token, '/subscribedSkus'),
+  ]);
+
+  const usersData = users?.value || [];
+  const authData = authMethods?.value || [];
+  const mfaEnabled = authData.filter((u: any) => u.isMfaRegistered).length;
+  const caData = caPolicies?.value || [];
+  const ss = secureScore?.value?.[0];
+
+  return {
+    totalUsers: usersData.length,
+    guestUsers: usersData.filter((u: any) => u.userType === 'Guest').length,
+    mfaCoverage: usersData.length > 0 ? Math.round((mfaEnabled / usersData.length) * 100) : 0,
+    conditionalAccessPolicies: caData.length,
+    enabledCAPolicies: caData.filter((p: any) => p.state === 'enabled').length,
+    caPolicySummary: caData.map((p: any) => ({ name: p.displayName, state: p.state, conditions: p.conditions })),
+    secureScore: ss?.currentScore || 0,
+    maxSecureScore: ss?.maxScore || 0,
+    hasE5: (skus?.value || []).some((s: any) => s.skuPartNumber?.includes('SPE_E5')),
+    hasAadP2: (skus?.value || []).some((s: any) => s.skuPartNumber?.includes('AAD_PREMIUM_P2')),
+    hasDlp: (skus?.value || []).some((s: any) => s.skuPartNumber?.includes('INFORMATION_PROTECTION')),
+  };
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+  if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   const _rlKey = req.headers.get('authorization')?.slice(-20) || 'anon';
-  if (!_checkRate(_rlKey)) {
-    return new Response(JSON.stringify({ error: 'Rate limit exceeded. Please try again later.' }),
-      { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Retry-After': '60' } });
-  }
+  if (!_checkRate(_rlKey)) return new Response(JSON.stringify({ error: 'Rate limit exceeded.' }), { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Retry-After': '60' } });
 
   try {
-    const { tenantConfig, selectedFrameworks } = await req.json();
-
+    const { tenantConnectionIds, tenantNames, tenantConfig: legacyConfig, selectedFrameworks } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+
+    let realConfig: any = legacyConfig || {};
+
+    if (tenantConnectionIds?.length > 0) {
+      const authHeader = req.headers.get('authorization');
+      const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, { global: { headers: { Authorization: authHeader! } } });
+      const { data: { user }, error: authErr } = await supabase.auth.getUser();
+      if (authErr || !user) return new Response(JSON.stringify({ error: 'Authentication required' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+      const tenantsData: any[] = [];
+      for (let i = 0; i < tenantConnectionIds.length; i++) {
+        try {
+          const { data: creds } = await supabase.rpc('get_decrypted_credential', { p_tenant_connection_id: tenantConnectionIds[i], p_user_id: user.id });
+          if (!creds?.[0]) { tenantsData.push({ tenantName: tenantNames?.[i], error: 'No credentials' }); continue; }
+          const token = await getGraphToken(creds[0].client_id, creds[0].client_secret, creds[0].tenant_id);
+          tenantsData.push({ tenantName: tenantNames?.[i] || 'Unknown', ...(await fetchComplianceTelemetry(token)) });
+        } catch (e) { tenantsData.push({ tenantName: tenantNames?.[i], error: e instanceof Error ? e.message : 'Error' }); }
+      }
+      realConfig = tenantsData.length === 1 ? tenantsData[0] : { tenants: tenantsData };
     }
 
     const systemPrompt = `You are an expert compliance advisor specializing in Microsoft 365 environments. Analyze tenant configurations against major compliance frameworks and provide detailed gap analysis with remediation guidance.
 
-Supported frameworks:
-- NIST Cybersecurity Framework (CSF)
-- CIS Microsoft 365 Benchmarks
-- ISO 27001
-- SOC 2 Type II
-- HIPAA
-- GDPR
-- PCI DSS
-- FedRAMP
-- CMMC
-
+Supported frameworks: NIST CSF, CIS M365, ISO 27001, SOC 2 Type II, HIPAA, GDPR, PCI DSS, FedRAMP, CMMC.
 Provide actionable, specific recommendations with M365-specific implementation steps.
-
 IMPORTANT: Respond with valid JSON only, no markdown formatting.`;
 
-    const userPrompt = `Analyze this M365 tenant configuration against the following compliance frameworks: ${selectedFrameworks?.join(', ') || 'NIST CSF, CIS, ISO 27001'}
+    const userPrompt = `Analyze this REAL M365 tenant configuration against: ${selectedFrameworks?.join(', ') || 'NIST CSF, CIS, ISO 27001'}
 
 Tenant Configuration:
-${JSON.stringify(tenantConfig, null, 2)}
+${JSON.stringify(realConfig, null, 2)}
 
-Provide a comprehensive compliance analysis in this JSON structure:
-{
-  "overallCompliance": {
-    "score": number (0-100),
-    "status": "compliant" | "partially-compliant" | "non-compliant",
-    "summary": "string",
-    "criticalGaps": number,
-    "highGaps": number,
-    "mediumGaps": number,
-    "lowGaps": number
-  },
-  "frameworkAnalysis": [
-    {
-      "framework": "string",
-      "version": "string",
-      "complianceScore": number (0-100),
-      "status": "compliant" | "partially-compliant" | "non-compliant",
-      "controlsTotal": number,
-      "controlsPassed": number,
-      "controlsFailed": number,
-      "controlsNotApplicable": number,
-      "categories": [
-        {
-          "name": "string",
-          "score": number,
-          "status": "pass" | "partial" | "fail",
-          "controls": [
-            {
-              "id": "string",
-              "name": "string",
-              "status": "pass" | "fail" | "partial" | "n/a",
-              "finding": "string",
-              "recommendation": "string",
-              "m365Setting": "string",
-              "effort": "low" | "medium" | "high"
-            }
-          ]
-        }
-      ]
-    }
-  ],
-  "gapAnalysis": [
-    {
-      "framework": "string",
-      "controlId": "string",
-      "controlName": "string",
-      "severity": "critical" | "high" | "medium" | "low",
-      "currentState": "string",
-      "requiredState": "string",
-      "gap": "string",
-      "businessRisk": "string",
-      "remediation": {
-        "steps": ["string"],
-        "m365AdminPath": "string",
-        "powershellCommand": "string",
-        "estimatedTime": "string",
-        "requiresLicense": "string"
-      }
-    }
-  ],
-  "crossFrameworkFindings": [
-    {
-      "finding": "string",
-      "affectedFrameworks": ["string"],
-      "severity": "critical" | "high" | "medium" | "low",
-      "singleRemediation": "string",
-      "impactedControls": number
-    }
-  ],
-  "complianceRoadmap": {
-    "phases": [
-      {
-        "phase": number,
-        "name": "string",
-        "duration": "string",
-        "focus": "string",
-        "actions": ["string"],
-        "expectedOutcome": "string",
-        "frameworksImpacted": ["string"]
-      }
-    ],
-    "quickWins": ["string"],
-    "longTermInitiatives": ["string"]
-  },
-  "auditReadiness": {
-    "overallReadiness": number (0-100),
-    "documentationStatus": "complete" | "partial" | "missing",
-    "evidenceGaps": ["string"],
-    "recommendedDocuments": ["string"],
-    "auditPreparationSteps": ["string"]
-  },
-  "riskAssessment": {
-    "overallRisk": "low" | "medium" | "high" | "critical",
-    "risksByCategory": [
-      {
-        "category": "string",
-        "riskLevel": "low" | "medium" | "high" | "critical",
-        "findings": ["string"],
-        "mitigations": ["string"]
-      }
-    ]
-  },
-  "certificationGuidance": {
-    "readyForCertification": ["string"],
-    "nearCertification": [
-      {
-        "framework": "string",
-        "gapsRemaining": number,
-        "estimatedTimeToReady": "string"
-      }
-    ],
-    "requiresSignificantWork": ["string"]
-  }
-}`;
+Provide a comprehensive compliance analysis as JSON with: overallCompliance, frameworkAnalysis, gapAnalysis, crossFrameworkFindings, complianceRoadmap, auditReadiness, riskAssessment, certificationGuidance.`;
 
-    console.log("Calling Lovable AI for compliance analysis...");
-
+    console.log("Calling AI for compliance analysis with real data...");
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt }
-        ],
-        temperature: 0.7,
-        max_tokens: 4000,
-      }),
+      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ model: "google/gemini-2.5-flash", messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userPrompt }], temperature: 0.7, max_tokens: 4000 }),
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Lovable AI error:", response.status, errorText);
-      
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again later." }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "API credits exhausted. Please add credits." }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      throw new Error(`AI request failed: ${response.status}`);
+      if (response.status === 429) return new Response(JSON.stringify({ error: "Rate limit exceeded." }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      if (response.status === 402) return new Response(JSON.stringify({ error: "API credits exhausted." }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const t = await response.text(); throw new Error(`AI error: ${response.status} ${t}`);
     }
 
-    const aiResponse = await response.json();
-    const content = aiResponse.choices?.[0]?.message?.content;
-
-    if (!content) {
-      throw new Error("No content in AI response");
-    }
-
-    console.log("AI response received, parsing...");
+    const aiResp = await response.json();
+    const content = aiResp.choices?.[0]?.message?.content;
+    if (!content) throw new Error("No content in AI response");
 
     let analysis;
-    try {
-      const cleanedContent = content.replace(/```json\n?|\n?```/g, '').trim();
-      analysis = JSON.parse(cleanedContent);
-    } catch (parseError) {
-      console.error("Failed to parse AI response:", parseError);
-      
-      analysis = {
-        overallCompliance: {
-          score: 68,
-          status: "partially-compliant",
-          summary: "Tenant meets most baseline requirements but has gaps in advanced security controls.",
-          criticalGaps: 2,
-          highGaps: 5,
-          mediumGaps: 8,
-          lowGaps: 12
-        },
-        frameworkAnalysis: [
-          {
-            framework: "NIST CSF",
-            version: "2.0",
-            complianceScore: 72,
-            status: "partially-compliant",
-            controlsTotal: 108,
-            controlsPassed: 78,
-            controlsFailed: 20,
-            controlsNotApplicable: 10,
-            categories: [
-              {
-                name: "Identify",
-                score: 85,
-                status: "pass",
-                controls: [
-                  { id: "ID.AM-1", name: "Asset Inventory", status: "pass", finding: "Complete device inventory maintained", recommendation: "Continue current practices", m365Setting: "Intune Device Management", effort: "low" }
-                ]
-              }
-            ]
-          },
-          {
-            framework: "CIS M365",
-            version: "3.0",
-            complianceScore: 65,
-            status: "partially-compliant",
-            controlsTotal: 95,
-            controlsPassed: 62,
-            controlsFailed: 28,
-            controlsNotApplicable: 5,
-            categories: []
-          }
-        ],
-        gapAnalysis: [
-          {
-            framework: "NIST CSF",
-            controlId: "PR.AC-7",
-            controlName: "Privileged Access Management",
-            severity: "high",
-            currentState: "Basic admin roles without PIM",
-            requiredState: "Just-in-time privileged access with approval workflows",
-            gap: "No Privileged Identity Management configured",
-            businessRisk: "Increased risk of privilege abuse and account compromise",
-            remediation: {
-              steps: ["Enable Azure AD PIM", "Configure eligible assignments", "Set up approval workflows"],
-              m365AdminPath: "Azure AD > Identity Governance > Privileged Identity Management",
-              powershellCommand: "Enable-AzureADPrivilegedIdentityManagement",
-              estimatedTime: "2-4 hours",
-              requiresLicense: "Azure AD P2"
-            }
-          }
-        ],
-        crossFrameworkFindings: [
-          {
-            finding: "MFA not enforced for all users",
-            affectedFrameworks: ["NIST CSF", "CIS M365", "ISO 27001", "SOC 2"],
-            severity: "critical",
-            singleRemediation: "Enable Security Defaults or Conditional Access MFA policy",
-            impactedControls: 12
-          }
-        ],
-        complianceRoadmap: {
-          phases: [
-            {
-              phase: 1,
-              name: "Critical Security Gaps",
-              duration: "2 weeks",
-              focus: "Address critical and high-severity findings",
-              actions: ["Enable MFA for all users", "Configure PIM", "Block legacy auth"],
-              expectedOutcome: "15% compliance improvement",
-              frameworksImpacted: ["NIST CSF", "CIS M365", "ISO 27001"]
-            }
-          ],
-          quickWins: ["Enable Security Defaults", "Configure password policies", "Enable audit logging"],
-          longTermInitiatives: ["Implement Zero Trust architecture", "Deploy advanced threat protection"]
-        },
-        auditReadiness: {
-          overallReadiness: 55,
-          documentationStatus: "partial",
-          evidenceGaps: ["Access review records", "Incident response procedures", "Risk assessment documentation"],
-          recommendedDocuments: ["Information Security Policy", "Access Control Policy", "Incident Response Plan"],
-          auditPreparationSteps: ["Complete control testing", "Gather evidence artifacts", "Document remediation plans"]
-        },
-        riskAssessment: {
-          overallRisk: "medium",
-          risksByCategory: [
-            {
-              category: "Identity & Access",
-              riskLevel: "high",
-              findings: ["No PIM configured", "Excessive global admins"],
-              mitigations: ["Implement PIM", "Reduce admin count"]
-            }
-          ]
-        },
-        certificationGuidance: {
-          readyForCertification: [],
-          nearCertification: [
-            { framework: "ISO 27001", gapsRemaining: 12, estimatedTimeToReady: "3 months" }
-          ],
-          requiresSignificantWork: ["SOC 2 Type II", "FedRAMP"]
-        }
-      };
-    }
+    try { analysis = JSON.parse(content.replace(/```json\n?|\n?```/g, '').trim()); }
+    catch { analysis = { overallCompliance: { score: 0, status: 'unknown', summary: content } }; }
 
-    console.log("Compliance analysis complete");
-
-    return new Response(JSON.stringify(analysis), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-
+    return new Response(JSON.stringify(analysis), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (error) {
     console.error("Error in ai-compliance-advisor:", error);
-    return new Response(JSON.stringify({ 
-      error: error instanceof Error ? error.message : "Failed to analyze compliance" 
-    }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Failed to analyze compliance" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 });

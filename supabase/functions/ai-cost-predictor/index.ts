@@ -1,252 +1,123 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const COST_PREDICTOR_PROMPT = `You are an expert Microsoft 365 licensing and cost optimization analyst. Analyze the provided tenant data and provide comprehensive cost predictions, savings opportunities, and budget forecasting.
-
-Return a JSON object with this exact structure:
-{
-  "summary": {
-    "currentMonthlyCost": number,
-    "projectedMonthlyCost": number,
-    "annualCost": number,
-    "projectedAnnualCost": number,
-    "potentialMonthlySavings": number,
-    "potentialAnnualSavings": number,
-    "savingsPercentage": number,
-    "costTrend": "increasing" | "stable" | "decreasing",
-    "riskLevel": "low" | "medium" | "high"
-  },
-  "licenseAnalysis": {
-    "totalLicenses": number,
-    "assignedLicenses": number,
-    "unusedLicenses": number,
-    "utilizationRate": number,
-    "licenses": [
-      {
-        "name": string,
-        "sku": string,
-        "total": number,
-        "assigned": number,
-        "unused": number,
-        "monthlyPerUserCost": number,
-        "totalMonthlyCost": number,
-        "unusedMonthlyCost": number,
-        "recommendation": string
-      }
-    ]
-  },
-  "savingsOpportunities": [
-    {
-      "id": string,
-      "category": "unused_licenses" | "license_optimization" | "feature_consolidation" | "tier_adjustment" | "term_optimization",
-      "title": string,
-      "description": string,
-      "currentCost": number,
-      "optimizedCost": number,
-      "monthlySavings": number,
-      "annualSavings": number,
-      "effort": "low" | "medium" | "high",
-      "risk": "low" | "medium" | "high",
-      "implementationSteps": string[],
-      "timeToImplement": string,
-      "affectedUsers": number
-    }
-  ],
-  "costForecast": {
-    "monthlyProjections": [
-      {
-        "month": string,
-        "baselineCost": number,
-        "optimizedCost": number,
-        "growthAdjustedCost": number
-      }
-    ],
-    "scenarios": {
-      "conservative": {
-        "annualCost": number,
-        "growthRate": number,
-        "assumptions": string[]
-      },
-      "moderate": {
-        "annualCost": number,
-        "growthRate": number,
-        "assumptions": string[]
-      },
-      "aggressive": {
-        "annualCost": number,
-        "growthRate": number,
-        "assumptions": string[]
-      }
-    }
-  },
-  "copilotROI": {
-    "currentCopilotSpend": number,
-    "licensedUsers": number,
-    "activeUsers": number,
-    "adoptionRate": number,
-    "estimatedProductivityGain": number,
-    "estimatedValueGenerated": number,
-    "roi": number,
-    "recommendations": string[],
-    "optimizationPotential": string
-  },
-  "budgetRecommendations": [
-    {
-      "category": string,
-      "currentBudget": number,
-      "recommendedBudget": number,
-      "variance": number,
-      "rationale": string,
-      "priority": "high" | "medium" | "low"
-    }
-  ],
-  "vendorComparison": {
-    "currentVendorCost": number,
-    "alternatives": [
-      {
-        "vendor": string,
-        "estimatedCost": number,
-        "savings": number,
-        "tradeoffs": string[],
-        "migrationComplexity": "low" | "medium" | "high"
-      }
-    ]
-  },
-  "actionPlan": {
-    "immediate": [
-      {
-        "action": string,
-        "savings": number,
-        "deadline": string
-      }
-    ],
-    "shortTerm": [
-      {
-        "action": string,
-        "savings": number,
-        "deadline": string
-      }
-    ],
-    "longTerm": [
-      {
-        "action": string,
-        "savings": number,
-        "deadline": string
-      }
-    ]
-  }
-}
-
-Provide realistic cost estimates based on current Microsoft 365 pricing. Consider:
-- License tier optimization (E5 to E3 where features aren't used)
-- Unused license reclamation
-- Annual vs monthly billing savings
-- Bundle opportunities
-- Copilot adoption and ROI
-- Growth projections based on historical data`;
-
-// Rate limiting (in-memory per instance)
 const _rl = new Map<string, { count: number; resetAt: number }>();
 function _checkRate(key: string, max = 15, windowMs = 60000): boolean {
   const now = Date.now();
   const e = _rl.get(key);
   if (!e || now > e.resetAt) { _rl.set(key, { count: 1, resetAt: now + windowMs }); return true; }
   if (e.count >= max) return false;
-  e.count++;
-  return true;
+  e.count++; return true;
 }
 
-serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+async function getGraphToken(clientId: string, clientSecret: string, tenantId: string): Promise<string> {
+  const resp = await fetch(`https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`, {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ client_id: clientId, client_secret: clientSecret, scope: 'https://graph.microsoft.com/.default', grant_type: 'client_credentials' }).toString(),
+  });
+  if (!resp.ok) throw new Error(`Token error: ${resp.status}`);
+  return (await resp.json()).access_token;
+}
 
+async function graphGet(token: string, ep: string) {
+  const r = await fetch(`https://graph.microsoft.com/v1.0${ep}`, { headers: { Authorization: `Bearer ${token}` } });
+  if (!r.ok) { console.error(`Graph ${ep}: ${r.status}`); return null; }
+  return r.json();
+}
+
+async function fetchLicenseData(token: string) {
+  const [skus, users] = await Promise.all([
+    graphGet(token, '/subscribedSkus'),
+    graphGet(token, '/users?$select=id&$top=999'),
+  ]);
+
+  const skusData = skus?.value || [];
+  // Known M365 monthly per-user prices (approximate)
+  const priceMap: Record<string, number> = {
+    'SPE_E5': 57, 'SPE_E3': 36, 'SPE_E1': 10, 'ENTERPRISEPREMIUM': 57, 'ENTERPRISEPACK': 36, 'STANDARDPACK': 10,
+    'POWER_BI_PRO': 10, 'PROJECTPREMIUM': 55, 'PROJECTPROFESSIONAL': 30, 'VISIOCLIENT': 15,
+    'EMSPREMIUM': 16, 'EMS': 11, 'AAD_PREMIUM_P2': 9, 'AAD_PREMIUM': 6,
+    'MICROSOFT_365_COPILOT': 30, 'Microsoft_365_Copilot': 30,
+  };
+
+  const licenses = skusData.map((s: any) => {
+    const total = s.prepaidUnits?.enabled || 0;
+    const assigned = s.consumedUnits || 0;
+    const name = s.skuPartNumber || 'Unknown';
+    const price = priceMap[name] || 0;
+    return { name, total, assigned, unused: total - assigned, monthlyPerUserCost: price, totalMonthlyCost: total * price, unusedMonthlyCost: (total - assigned) * price };
+  }).filter((l: any) => l.total > 0);
+
+  return {
+    totalUsers: users?.value?.length || 0,
+    licenses,
+    totalMonthlyCost: licenses.reduce((acc: number, l: any) => acc + l.totalMonthlyCost, 0),
+    totalUnusedCost: licenses.reduce((acc: number, l: any) => acc + l.unusedMonthlyCost, 0),
+    totalLicenses: licenses.reduce((acc: number, l: any) => acc + l.total, 0),
+    assignedLicenses: licenses.reduce((acc: number, l: any) => acc + l.assigned, 0),
+  };
+}
+
+const COST_PROMPT = `You are an expert Microsoft 365 licensing and cost optimization analyst. Analyze REAL license data and provide cost predictions, savings opportunities, and budget forecasting.
+
+Return JSON with: summary, licenseAnalysis, savingsOpportunities, costForecast, copilotROI, budgetRecommendations, vendorComparison, actionPlan.
+
+Provide realistic cost estimates based on current Microsoft 365 pricing.`;
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   const _rlKey = req.headers.get('authorization')?.slice(-20) || 'anon';
-  if (!_checkRate(_rlKey)) {
-    return new Response(JSON.stringify({ error: 'Rate limit exceeded. Please try again later.' }),
-      { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Retry-After': '60' } });
-  }
+  if (!_checkRate(_rlKey)) return new Response(JSON.stringify({ error: 'Rate limit exceeded.' }), { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Retry-After': '60' } });
 
   try {
-    const { tenantData, historicalCosts, growthRate } = await req.json();
-
+    const { tenantConnectionIds, tenantNames, tenantData: legacyData, historicalCosts, growthRate } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      throw new Error('LOVABLE_API_KEY is not configured');
+    if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY is not configured');
+
+    let realData: any = legacyData || {};
+
+    if (tenantConnectionIds?.length > 0) {
+      const authHeader = req.headers.get('authorization');
+      const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, { global: { headers: { Authorization: authHeader! } } });
+      const { data: { user }, error: authErr } = await supabase.auth.getUser();
+      if (authErr || !user) return new Response(JSON.stringify({ error: 'Authentication required' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+      const connId = tenantConnectionIds[0];
+      const { data: creds } = await supabase.rpc('get_decrypted_credential', { p_tenant_connection_id: connId, p_user_id: user.id });
+      if (creds?.[0]) {
+        const token = await getGraphToken(creds[0].client_id, creds[0].client_secret, creds[0].tenant_id);
+        realData = { tenantName: tenantNames?.[0] || 'Unknown', ...(await fetchLicenseData(token)) };
+      }
     }
 
-    const contextData = {
-      tenant: tenantData || {},
-      historicalCosts: historicalCosts || [],
-      projectedGrowthRate: growthRate || 5,
-      analysisDate: new Date().toISOString(),
-    };
-
-    console.log('Analyzing costs for tenant:', tenantData?.tenantId || 'unknown');
+    const contextData = { tenant: realData, historicalCosts: historicalCosts || [], projectedGrowthRate: growthRate || 5, analysisDate: new Date().toISOString() };
+    console.log('Analyzing costs with real data');
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-3-flash-preview',
-        messages: [
-          { role: 'system', content: COST_PREDICTOR_PROMPT },
-          { role: 'user', content: `Analyze the following tenant data for cost optimization and predictions:\n\n${JSON.stringify(contextData, null, 2)}` }
-        ],
-        temperature: 0.3,
-        max_tokens: 8000,
-      }),
+      headers: { 'Authorization': `Bearer ${LOVABLE_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'google/gemini-3-flash-preview', messages: [{ role: 'system', content: COST_PROMPT }, { role: 'user', content: `Analyze this REAL tenant license data:\n\n${JSON.stringify(contextData, null, 2)}` }], temperature: 0.3, max_tokens: 8000 }),
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('AI API error:', response.status, errorText);
-      
-      if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: 'Rate limit exceeded. Please try again later.' }),
-          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      
-      throw new Error(`AI API error: ${response.status}`);
+      if (response.status === 429) return new Response(JSON.stringify({ error: 'Rate limit exceeded.' }), { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      const t = await response.text(); throw new Error(`AI error: ${response.status} ${t}`);
     }
 
-    const aiResponse = await response.json();
-    const content = aiResponse.choices?.[0]?.message?.content || '';
+    const aiResp = await response.json();
+    const content = aiResp.choices?.[0]?.message?.content || '';
+    let result;
+    try { const m = content.match(/\{[\s\S]*\}/); result = m ? JSON.parse(m[0]) : { error: 'No JSON' }; }
+    catch { result = { error: 'Parse failed', raw: content }; }
 
-    let analysisResult;
-    try {
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        analysisResult = JSON.parse(jsonMatch[0]);
-      } else {
-        throw new Error('No JSON found in response');
-      }
-    } catch (parseError) {
-      console.error('Failed to parse AI response:', parseError);
-      analysisResult = { error: 'Failed to parse analysis', raw: content };
-    }
-
-    console.log('Cost prediction completed successfully');
-
-    return new Response(
-      JSON.stringify({ success: true, analysis: analysisResult }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-
+    return new Response(JSON.stringify({ success: true, analysis: result }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (error) {
     console.error('Cost predictor error:', error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 });
