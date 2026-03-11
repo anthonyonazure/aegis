@@ -46,8 +46,15 @@ import {
   HealthTrend,
 } from '@/lib/permissionHealthDatabase';
 import { useToast } from '@/hooks/use-toast';
+import { useTenant } from '@/contexts/TenantContext';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Filter } from 'lucide-react';
 
 export const PermissionHealthView = () => {
+  const { selectedCustomerId, selectedTenantId, customers } = useTenant();
+  const selectedCustomerName = selectedCustomerId
+    ? customers.find(c => c.id === selectedCustomerId)?.name
+    : null;
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState<Awaited<ReturnType<typeof getHealthSummary>> | null>(null);
   const [recentChecks, setRecentChecks] = useState<PermissionHealthCheck[]>([]);
