@@ -355,16 +355,19 @@ export async function exportResourcesHybrid(
   onProgress?: (progress: number, message: string) => void,
   selectedSubscriptionIds?: string[]
 ): Promise<HybridExportResult> {
-  const { graphResources, powerShellResources, azureResources } = categorizeResources(resources);
+  const { graphResources, powerShellResources, azureResources, exoResources } = categorizeResources(resources);
   
   let graphResults: ExportResult['results'] = [];
   let azureResults: HybridExportResult['azureResults'] = [];
   let automationResults: HybridExportResult['automationResults'] = [];
+  let exoResults: HybridExportResult['exoResults'] = [];
   let automationSkipped = false;
   let automationSkipReason: string | undefined;
   let automationJobId: string | undefined;
   let azureSkipped = false;
   let azureSkipReason: string | undefined;
+  let exoSkipped = false;
+  let exoSkipReason: string | undefined;
 
   const totalResources = resources.length;
   let completedResources = 0;
