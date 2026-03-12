@@ -263,12 +263,24 @@ serve(async (req) => {
     };
 
     if (exoPolicyActions[action]) {
-      const { cmdlet, mapper } = exoPolicyActions[action];
+      const { cmdlet, mapper, secondaryCmdlet } = exoPolicyActions[action];
       try {
         const exoToken = await getExoToken(client_id, client_secret, tenant_id);
         const raw = await exoInvokeCommand(exoToken, tenant_id, cmdlet);
         if (raw) {
-          responseData = mapper(raw);
+          let result = mapper(raw);
+          // For connectors, also fetch outbound connectors and merge
+          if (secondaryCmdlet) {
+            const secondaryRaw = await exoInvokeCommand(exoToken, tenant_id, secondaryCmdlet);
+            if (secondaryRaw) {
+              const secondaryResult = mapper(secondaryRaw).map((item: any) => ({
+                ...item,
+                connectorType: secondaryCmdlet.includes('Outbound') ? 'Outbound' : 'Inbound',
+              }));
+              result = result.map((item: any) => ({ ...item, connectorType: 'Inbound' })).concat(secondaryResult);
+            }
+          }
+          responseData = result;
         } else {
           responseData = exoFallback(action);
         }

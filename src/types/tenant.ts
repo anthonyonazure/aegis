@@ -171,6 +171,9 @@ export const RESOURCE_CATEGORIES: ResourceCategory[] = [
       { id: 'directory-settings', name: 'Directory Settings', graphEndpoint: '/settings' },
       { id: 'admin-units', name: 'Administrative Units', graphEndpoint: '/administrativeUnits' },
       { id: 'roles', name: 'Directory Roles', graphEndpoint: '/directoryRoles' },
+      { id: 'auth-methods-policy', name: 'Authentication Methods Policy', graphEndpoint: '/policies/authenticationMethodsPolicy' },
+      { id: 'cross-tenant-access', name: 'Cross-Tenant Access Policy', graphEndpoint: '/policies/crossTenantAccessPolicy' },
+      { id: 'permission-grant-policies', name: 'Permission Grant Policies', graphEndpoint: '/policies/permissionGrantPolicies' },
     ],
     exportFormats: [
       { id: 'json', name: 'JSON', extension: '.json', supported: true },

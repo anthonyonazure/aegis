@@ -126,6 +126,15 @@ export const EXO_RESOURCE_TYPES: Record<string, string> = {
   'exchange/anti-malware': 'fetch-anti-malware',
   'exchange/safe-links': 'fetch-safe-links',
   'exchange/safe-attachments': 'fetch-safe-attachments',
+  'exchange/transport-rules': 'fetch-transport-rules',
+  'exchange/connectors': 'fetch-connectors',
+  'exchange/org-config': 'fetch-org-config',
+  'exchange/owa-policies': 'fetch-owa-policies',
+  'exchange/mobile-device-policies': 'fetch-mobile-device-policies',
+  'exchange/dlp-policies': 'fetch-dlp-policies',
+  'exchange/mailbox-policies': 'fetch-mailbox-policies',
+  'exchange/retention-policies': 'fetch-retention-policies',
+  'exchange/accepted-domains': 'fetch-accepted-domains',
 };
 
 export function isPowerShellResource(resourceType: string): boolean {
