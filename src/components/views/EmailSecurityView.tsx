@@ -15,6 +15,7 @@ import { Mail } from 'lucide-react';
 
 const breadcrumbMap: Record<EmailSecuritySectionId, string[]> = {
   overview: ['Email Security'],
+  'setup-guide': ['Configuration', 'Setup Guide'],
   'anti-phishing': ['Protection Policies', 'Anti-Phishing'],
   'anti-spam': ['Protection Policies', 'Anti-Spam'],
   'anti-malware': ['Protection Policies', 'Anti-Malware'],
