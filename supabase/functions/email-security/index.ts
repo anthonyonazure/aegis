@@ -147,11 +147,8 @@ serve(async (req) => {
 
     switch (action) {
       case "fetch-overview": {
-        // Fetch domains and security policies in parallel
-        const [domains, securityPolicies] = await Promise.all([
-          graphGet(token, "/domains"),
-          graphGetBeta(token, "/security/attackSimulation/simulationAutomations"),
-        ]);
+        // Only fetch what we can actually verify: domains
+        const domains = await graphGet(token, "/domains");
 
         const domainList = domains?.value || [];
         const domainAuth = parseDomainAuth(domainList);
@@ -159,31 +156,25 @@ serve(async (req) => {
           (d: any) => d.spf.status === 'pass' && d.dkim.status === 'pass'
         ).length;
 
-        // Count policies (using beta endpoints where available)
-        const [antiPhish, antiSpam, antiMalware, safeLinks, safeAttach] = await Promise.all([
-          graphGetBeta(token, "/security/attackSimulation/simulationAutomations?$top=0&$count=true"),
-          graphGetBeta(token, "/security/attackSimulation/simulationAutomations?$top=0&$count=true"),
-          graphGetBeta(token, "/security/attackSimulation/simulationAutomations?$top=0&$count=true"),
-          graphGetBeta(token, "/security/attackSimulation/simulationAutomations?$top=0&$count=true"),
-          graphGetBeta(token, "/security/attackSimulation/simulationAutomations?$top=0&$count=true"),
-        ]);
-
-        // Since EOP policies have limited Graph API coverage, provide estimates
-        const totalPolicies = (antiPhish?.value?.length || 0) + (antiSpam?.value?.length || 0);
-        const protectionScore = Math.min(100, Math.round(
-          (domainsWithFullAuth / Math.max(domainList.length, 1)) * 50 + 50
-        ));
+        // Protection score based ONLY on verifiable data (domain auth)
+        // We cannot verify EOP/Defender policy status via Graph API
+        const domainAuthScore = domainList.length > 0
+          ? Math.round((domainsWithFullAuth / domainList.length) * 100)
+          : 0;
 
         responseData = {
-          totalPolicies,
-          antiPhishingCount: 1, // Default policy always exists
-          antiSpamCount: 1,
-          antiMalwareCount: 1,
-          safeLinksCount: 0,
-          safeAttachmentsCount: 0,
+          // These are NOT verifiable via Graph API — marked as null
+          antiPhishingCount: null,
+          antiSpamCount: null,
+          antiMalwareCount: null,
+          safeLinksCount: null,
+          safeAttachmentsCount: null,
+          policyDataAvailable: false,
+          // These ARE verifiable
           domainCount: domainList.length,
           domainsWithFullAuth,
-          protectionScore,
+          protectionScore: domainAuthScore,
+          protectionScoreNote: "Based on domain authentication (SPF/DKIM) only. EOP and Defender policy status cannot be verified via Microsoft Graph API.",
         };
         break;
       }
