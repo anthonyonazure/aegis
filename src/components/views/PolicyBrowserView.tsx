@@ -584,7 +584,7 @@ export const PolicyBrowserView = () => {
               c => c.categoryId === categoryId && c.policyTypeId === policyType.id
             );
             if (!existing) {
-              fetchPolicies(categoryId, policyType.id, policyType.endpoint, policyType.useBeta, (policyType as any).isExo);
+              fetchPolicies(categoryId, policyType.id, policyType.endpoint, (policyType as any).useBeta, (policyType as any).isExo);
             }
           }
         }
