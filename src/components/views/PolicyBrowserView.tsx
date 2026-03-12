@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Shield,
+  ShieldCheck,
   Lock,
   Laptop,
   Settings,
@@ -27,6 +28,10 @@ import {
   Cloud,
   History,
   Upload,
+  Mail,
+  MessageSquare,
+  Users,
+  Sparkles,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
