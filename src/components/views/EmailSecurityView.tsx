@@ -33,6 +33,7 @@ export const EmailSecurityView = () => {
   const renderSection = () => {
     switch (activeSection) {
       case 'overview': return <OverviewSection />;
+      case 'setup-guide': return <SetupGuideSection />;
       case 'anti-phishing': return <AntiPhishingSection />;
       case 'anti-spam': return <AntiSpamSection />;
       case 'anti-malware': return <AntiMalwareSection />;

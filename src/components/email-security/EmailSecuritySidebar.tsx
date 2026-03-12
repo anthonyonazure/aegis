@@ -32,6 +32,7 @@ const sidebarGroups: SidebarGroup[] = [
     collapsible: false,
     items: [
       { id: 'overview', label: 'Overview', icon: 'layout' },
+      { id: 'setup-guide', label: 'Setup Guide', icon: 'book-open' },
     ],
   },
   {
