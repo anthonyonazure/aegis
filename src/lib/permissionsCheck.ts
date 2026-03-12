@@ -118,6 +118,24 @@ export const PERMISSION_REQUIREMENTS: PermissionRequirement[] = [
     requiredPermissions: ['RoleManagement.Read.Directory'],
     alternativePermissions: ['Directory.Read.All'],
   },
+  {
+    resourceId: 'entra-id/auth-methods-policy',
+    resourceName: 'Authentication Methods Policy',
+    requiredPermissions: ['Policy.Read.All'],
+    alternativePermissions: ['Policy.ReadWrite.AuthenticationMethod'],
+  },
+  {
+    resourceId: 'entra-id/cross-tenant-access',
+    resourceName: 'Cross-Tenant Access Policy',
+    requiredPermissions: ['Policy.Read.All'],
+    alternativePermissions: ['CrossTenantInformation.ReadBasic.All'],
+  },
+  {
+    resourceId: 'entra-id/permission-grant-policies',
+    resourceName: 'Permission Grant Policies',
+    requiredPermissions: ['Policy.Read.PermissionGrant'],
+    alternativePermissions: ['Policy.ReadWrite.PermissionGrant'],
+  },
   
   // Defender
   {
