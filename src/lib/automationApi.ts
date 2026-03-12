@@ -69,12 +69,12 @@ export const POWERSHELL_RESOURCE_TYPES = [
   'exchange/transport-rules',
   'exchange/connectors',
   'exchange/mailbox-policies',
-  'exchange/anti-spam',
   'exchange/dlp-policies',
-  'exchange/anti-phishing',
   'exchange/org-config',
   'exchange/owa-policies',
   'exchange/mobile-device-policies',
+  // Note: anti-spam, anti-phishing, anti-malware, safe-links, safe-attachments
+  // are now handled via EXO REST API (InvokeCommand) - see isExoResource()
   
   // Purview / Compliance - DLP and Insider Risk
   'purview/dlp-policies',
