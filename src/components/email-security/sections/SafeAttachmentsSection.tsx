@@ -23,7 +23,7 @@ export const SafeAttachmentsSection = () => {
 
   useEffect(() => { fetchData(); }, []);
 
-  const isGraphUnavailable = data?.some(p => p.source === 'graph-api-unavailable');
+  const isApiUnavailable = data?.some(p => isUnavailable(p));
 
   return (
     <div>
