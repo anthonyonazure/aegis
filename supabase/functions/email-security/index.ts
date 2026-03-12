@@ -177,6 +177,34 @@ function mapSafeAttachmentsPolicies(raw: any): any[] {
   }));
 }
 
+// ── Generic EXO policy mapper (for transport rules, connectors, etc.) ──
+function mapGenericExoPolicies(raw: any): any[] {
+  const items = raw?.value || [];
+  return items.map((p: any) => ({
+    id: p.Identity || p.Guid || p.Name,
+    displayName: p.Name || p.Identity || 'Unnamed',
+    description: p.AdminDisplayName || p.Description || null,
+    isEnabled: p.State === 'Enabled' || p.Enabled ?? true,
+    priority: p.Priority ?? null,
+    rawData: p,
+    source: 'exchange-online-rest',
+  }));
+}
+
+// ── Singleton EXO policy mapper (for org config - single object returned) ──
+function mapSingletonExoPolicy(raw: any): any[] {
+  const items = raw?.value || [];
+  if (items.length === 0) return [];
+  const p = items[0];
+  return [{
+    id: p.Identity || p.Guid || 'org-config',
+    displayName: p.Name || 'Organization Configuration',
+    description: null,
+    rawData: p,
+    source: 'exchange-online-rest',
+  }];
+}
+
 // ── Fallback for when EXO REST API is unavailable ──────────────────────
 function exoFallback(action: string): any[] {
   const policyName = action.replace('fetch-', '').replace(/-/g, ' ');
@@ -245,21 +273,42 @@ serve(async (req) => {
     let responseData: any = null;
 
     // ── EXO policy fetch actions ───────────────────────────────────────
-    const exoPolicyActions: Record<string, { cmdlet: string; mapper: (raw: any) => any[] }> = {
+    const exoPolicyActions: Record<string, { cmdlet: string; mapper: (raw: any) => any[]; secondaryCmdlet?: string }> = {
       "fetch-anti-phishing": { cmdlet: "Get-AntiPhishPolicy", mapper: mapAntiPhishPolicies },
       "fetch-anti-spam": { cmdlet: "Get-HostedContentFilterPolicy", mapper: mapAntiSpamPolicies },
       "fetch-anti-malware": { cmdlet: "Get-MalwareFilterPolicy", mapper: mapAntiMalwarePolicies },
       "fetch-safe-links": { cmdlet: "Get-SafeLinksPolicy", mapper: mapSafeLinksPolicies },
       "fetch-safe-attachments": { cmdlet: "Get-SafeAttachmentPolicy", mapper: mapSafeAttachmentsPolicies },
+      "fetch-transport-rules": { cmdlet: "Get-TransportRule", mapper: mapGenericExoPolicies },
+      "fetch-connectors": { cmdlet: "Get-InboundConnector", mapper: mapGenericExoPolicies, secondaryCmdlet: "Get-OutboundConnector" },
+      "fetch-org-config": { cmdlet: "Get-OrganizationConfig", mapper: mapSingletonExoPolicy },
+      "fetch-owa-policies": { cmdlet: "Get-OwaMailboxPolicy", mapper: mapGenericExoPolicies },
+      "fetch-mobile-device-policies": { cmdlet: "Get-MobileDeviceMailboxPolicy", mapper: mapGenericExoPolicies },
+      "fetch-dlp-policies": { cmdlet: "Get-DlpCompliancePolicy", mapper: mapGenericExoPolicies },
+      "fetch-mailbox-policies": { cmdlet: "Get-MailboxPolicy", mapper: mapGenericExoPolicies },
+      "fetch-retention-policies": { cmdlet: "Get-RetentionPolicy", mapper: mapGenericExoPolicies },
+      "fetch-accepted-domains": { cmdlet: "Get-AcceptedDomain", mapper: mapGenericExoPolicies },
     };
 
     if (exoPolicyActions[action]) {
-      const { cmdlet, mapper } = exoPolicyActions[action];
+      const { cmdlet, mapper, secondaryCmdlet } = exoPolicyActions[action];
       try {
         const exoToken = await getExoToken(client_id, client_secret, tenant_id);
         const raw = await exoInvokeCommand(exoToken, tenant_id, cmdlet);
         if (raw) {
-          responseData = mapper(raw);
+          let result = mapper(raw);
+          // For connectors, also fetch outbound connectors and merge
+          if (secondaryCmdlet) {
+            const secondaryRaw = await exoInvokeCommand(exoToken, tenant_id, secondaryCmdlet);
+            if (secondaryRaw) {
+              const secondaryResult = mapper(secondaryRaw).map((item: any) => ({
+                ...item,
+                connectorType: secondaryCmdlet.includes('Outbound') ? 'Outbound' : 'Inbound',
+              }));
+              result = result.map((item: any) => ({ ...item, connectorType: 'Inbound' })).concat(secondaryResult);
+            }
+          }
+          responseData = result;
         } else {
           responseData = exoFallback(action);
         }

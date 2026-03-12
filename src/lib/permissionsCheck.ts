@@ -118,6 +118,24 @@ export const PERMISSION_REQUIREMENTS: PermissionRequirement[] = [
     requiredPermissions: ['RoleManagement.Read.Directory'],
     alternativePermissions: ['Directory.Read.All'],
   },
+  {
+    resourceId: 'entra-id/auth-methods-policy',
+    resourceName: 'Authentication Methods Policy',
+    requiredPermissions: ['Policy.Read.All'],
+    alternativePermissions: ['Policy.ReadWrite.AuthenticationMethod'],
+  },
+  {
+    resourceId: 'entra-id/cross-tenant-access',
+    resourceName: 'Cross-Tenant Access Policy',
+    requiredPermissions: ['Policy.Read.All'],
+    alternativePermissions: ['CrossTenantInformation.ReadBasic.All'],
+  },
+  {
+    resourceId: 'entra-id/permission-grant-policies',
+    resourceName: 'Permission Grant Policies',
+    requiredPermissions: ['Policy.Read.PermissionGrant'],
+    alternativePermissions: ['Policy.ReadWrite.PermissionGrant'],
+  },
   
   // Defender
   {
@@ -154,42 +172,57 @@ export const PERMISSION_REQUIREMENTS: PermissionRequirement[] = [
     alternativePermissions: ['InformationProtectionPolicy.Read'],
   },
   
-  // Exchange Online
+  // Exchange Online - EXO resources require Exchange.ManageAsApp + Exchange Administrator role
   {
     resourceId: 'exchange/transport-rules',
     resourceName: 'Transport Rules',
-    requiredPermissions: ['Mail.Read'],
-    alternativePermissions: ['Mail.ReadWrite', 'MailboxSettings.Read'],
+    requiredPermissions: ['Exchange.ManageAsApp'],
   },
   {
     resourceId: 'exchange/connectors',
     resourceName: 'Connectors',
-    requiredPermissions: ['Mail.Read'],
-    alternativePermissions: ['Mail.ReadWrite'],
+    requiredPermissions: ['Exchange.ManageAsApp'],
   },
   {
     resourceId: 'exchange/accepted-domains',
     resourceName: 'Accepted Domains',
-    requiredPermissions: ['Domain.Read.All'],
-    alternativePermissions: ['Directory.Read.All'],
+    requiredPermissions: ['Exchange.ManageAsApp'],
+    alternativePermissions: ['Domain.Read.All'],
   },
   {
     resourceId: 'exchange/mailbox-policies',
     resourceName: 'Mailbox Policies',
-    requiredPermissions: ['MailboxSettings.Read'],
-    alternativePermissions: ['MailboxSettings.ReadWrite'],
+    requiredPermissions: ['Exchange.ManageAsApp'],
   },
   {
     resourceId: 'exchange/anti-spam',
     resourceName: 'Anti-Spam Policies',
-    requiredPermissions: ['SecurityEvents.Read.All'],
-    alternativePermissions: ['SecurityEvents.ReadWrite.All'],
+    requiredPermissions: ['Exchange.ManageAsApp'],
   },
   {
     resourceId: 'exchange/dlp-policies',
     resourceName: 'DLP Policies',
-    requiredPermissions: ['InformationProtectionPolicy.Read.All'],
-    alternativePermissions: ['InformationProtectionPolicy.Read'],
+    requiredPermissions: ['Exchange.ManageAsApp'],
+  },
+  {
+    resourceId: 'exchange/org-config',
+    resourceName: 'Organization Config',
+    requiredPermissions: ['Exchange.ManageAsApp'],
+  },
+  {
+    resourceId: 'exchange/owa-policies',
+    resourceName: 'OWA Mailbox Policies',
+    requiredPermissions: ['Exchange.ManageAsApp'],
+  },
+  {
+    resourceId: 'exchange/mobile-device-policies',
+    resourceName: 'Mobile Device Policies',
+    requiredPermissions: ['Exchange.ManageAsApp'],
+  },
+  {
+    resourceId: 'exchange/retention-policies',
+    resourceName: 'Retention Policies',
+    requiredPermissions: ['Exchange.ManageAsApp'],
   },
   
   // SharePoint
