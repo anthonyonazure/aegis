@@ -567,14 +567,76 @@ export async function exportResourcesHybrid(
     }
   }
 
+  // Step 4: Export EXO resources via email-security edge function (InvokeCommand)
+  if (exoResources.length > 0) {
+    onProgress?.(
+      Math.round((completedResources / totalResources) * 100),
+      `Exporting ${exoResources.length} Exchange Online policies via EXO API...`
+    );
+
+    if (!tenantConnectionId) {
+      exoSkipped = true;
+      exoSkipReason = 'Tenant connection required for EXO policy export.';
+      exoResults = exoResources.map(resource => ({
+        resource,
+        success: false,
+        error: 'Tenant connection required',
+      }));
+    } else {
+      for (const resource of exoResources) {
+        const action = EXO_RESOURCE_TYPES[resource];
+        if (!action) continue;
+
+        try {
+          const { data, error } = await supabase.functions.invoke('email-security', {
+            body: { action, tenantConnectionId },
+          });
+
+          if (error || !data?.data) {
+            exoResults.push({ resource, success: false, error: error?.message || 'EXO fetch failed' });
+            continue;
+          }
+
+          const policyData = data.data;
+          const [category, resourceType] = resource.split('/');
+
+          // Store each policy as an exported resource
+          if (Array.isArray(policyData)) {
+            for (const policy of policyData) {
+              await supabase.from('exported_resources').insert([{
+                export_job_id: exportJobId,
+                category,
+                resource_type: resourceType,
+                resource_name: policy.displayName || `${resourceType} policy`,
+                resource_id: policy.id || policy.displayName,
+                data: JSON.parse(JSON.stringify({ ...policy, source: 'exchange-online-rest' })),
+              }]);
+            }
+          }
+
+          exoResults.push({ resource, success: true, count: Array.isArray(policyData) ? policyData.length : 0 });
+          completedResources++;
+        } catch (err) {
+          exoResults.push({ resource, success: false, error: err instanceof Error ? err.message : 'Unknown error' });
+        }
+      }
+    }
+  }
+
   onProgress?.(100, 'Export complete');
 
   return {
     success: true,
     graphResults,
+    azureResults,
     automationResults,
+    exoResults,
     automationJobId,
     automationSkipped,
     automationSkipReason,
+    azureSkipped,
+    azureSkipReason,
+    exoSkipped,
+    exoSkipReason,
   };
 }
