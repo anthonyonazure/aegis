@@ -63,6 +63,7 @@ interface NavItem {
   id: string;
   label: string;
   icon: React.ElementType;
+  description: string;
   isAI?: boolean;
 }
 
@@ -75,106 +76,106 @@ const navGroups: NavGroup[] = [
   {
     title: 'Overview',
     items: [
-      { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-      { id: 'governance', label: 'Governance Center', icon: Gauge },
-      { id: 'nl-query', label: 'AI Query', icon: Search, isAI: true },
-      { id: 'ai-chat', label: 'AI Chat', icon: MessageCircle, isAI: true },
-      { id: 'cross-tenant-insights', label: 'Cross-Tenant Insights', icon: GitPullRequestDraft, isAI: true },
-      { id: 'customers', label: 'Customers', icon: Building2 },
+      { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, description: 'Main overview with key metrics and recent activity' },
+      { id: 'governance', label: 'Governance Center', icon: Gauge, description: 'Centralized governance dashboard and metrics' },
+      { id: 'nl-query', label: 'AI Query', icon: Search, isAI: true, description: 'Ask natural language questions about your tenant data' },
+      { id: 'ai-chat', label: 'AI Chat', icon: MessageCircle, isAI: true, description: 'Interactive AI assistant for policy and configuration help' },
+      { id: 'cross-tenant-insights', label: 'Cross-Tenant Insights', icon: GitPullRequestDraft, isAI: true, description: 'Compare and analyze data across multiple tenants' },
+      { id: 'customers', label: 'Customers', icon: Building2, description: 'Manage customer organizations and tenant assignments' },
     ],
   },
   {
     title: 'Intune',
     items: [
-      { id: 'intune', label: 'Intune Manager', icon: Monitor },
+      { id: 'intune', label: 'Intune Manager', icon: Monitor, description: 'Manage Intune devices, policies, and configurations' },
     ],
   },
   {
     title: 'Email Security',
     items: [
-      { id: 'email-security', label: 'Email Security', icon: Mail },
+      { id: 'email-security', label: 'Email Security', icon: Mail, description: 'Review EOP policies, anti-phishing, and domain authentication' },
     ],
   },
   {
     title: 'Tenant Health',
     items: [
-      { id: 'health-dashboard', label: 'Health Dashboard', icon: Activity },
-      { id: 'tenant-analyzer', label: 'Tenant Analyzer', icon: BarChart3, isAI: true },
-      { id: 'secure-score', label: 'Secure Score', icon: Shield },
-      { id: 'security-predictor', label: 'Security Predictor', icon: Eye, isAI: true },
-      { id: 'security-benchmark', label: 'Security Benchmark', icon: Award, isAI: true },
-      { id: 'permission-health', label: 'Permission Health', icon: HeartPulse },
-      { id: 'copilot-agents', label: 'Copilot Agents', icon: Bot },
-      { id: 'copilot-advisor', label: 'Copilot Advisor', icon: Brain, isAI: true },
+      { id: 'health-dashboard', label: 'Health Dashboard', icon: Activity, description: 'Monitor tenant health status and issues' },
+      { id: 'tenant-analyzer', label: 'Tenant Analyzer', icon: BarChart3, isAI: true, description: 'AI-powered analysis of tenant configuration and security' },
+      { id: 'secure-score', label: 'Secure Score', icon: Shield, description: 'View and track Microsoft Secure Score recommendations' },
+      { id: 'security-predictor', label: 'Security Predictor', icon: Eye, isAI: true, description: 'AI predictions of future security posture and risks' },
+      { id: 'security-benchmark', label: 'Security Benchmark', icon: Award, isAI: true, description: 'Compare your security against industry standards' },
+      { id: 'permission-health', label: 'Permission Health', icon: HeartPulse, description: 'Check API permissions and access health' },
+      { id: 'copilot-agents', label: 'Copilot Agents', icon: Bot, description: 'Manage and deploy Copilot agents and plugins' },
+      { id: 'copilot-advisor', label: 'Copilot Advisor', icon: Brain, isAI: true, description: 'AI guidance for Copilot readiness and optimization' },
     ],
   },
   {
     title: 'Configuration',
     items: [
-      { id: 'resources', label: 'Resources', icon: FolderTree },
-      { id: 'policy-browser', label: 'Policy Browser', icon: Eye },
-      { id: 'config-optimizer', label: 'Config Optimizer', icon: SlidersHorizontal, isAI: true },
-      { id: 'migration-planner', label: 'Migration Planner', icon: ArrowRightLeft, isAI: true },
-      { id: 'export', label: 'Export', icon: Download },
-      { id: 'import', label: 'Import / Restore', icon: Upload },
-      { id: 'jobs', label: 'Export Jobs', icon: History },
+      { id: 'resources', label: 'Resources', icon: FolderTree, description: 'Browse and manage all tenant resources' },
+      { id: 'policy-browser', label: 'Policy Browser', icon: Eye, description: 'View and search through all policies' },
+      { id: 'config-optimizer', label: 'Config Optimizer', icon: SlidersHorizontal, isAI: true, description: 'AI recommendations to optimize configurations' },
+      { id: 'migration-planner', label: 'Migration Planner', icon: ArrowRightLeft, isAI: true, description: 'AI-assisted planning for tenant migrations' },
+      { id: 'export', label: 'Export', icon: Download, description: 'Export tenant data and configurations' },
+      { id: 'import', label: 'Import / Restore', icon: Upload, description: 'Import or restore configurations from backup' },
+      { id: 'jobs', label: 'Export Jobs', icon: History, description: 'View history of export and import operations' },
     ],
   },
   {
     title: 'Policy Management',
     items: [
-      { id: 'policy-templates', label: 'Policy Templates', icon: FileCheck },
-      { id: 'policy-generator', label: 'Policy Generator', icon: Wand2, isAI: true },
-      { id: 'remediation-scripts', label: 'Remediation Scripts', icon: Wrench, isAI: true },
-      { id: 'change-impact', label: 'Change Impact', icon: GitCompare, isAI: true },
-      { id: 'policy-deployment', label: 'Policy Deployment', icon: Rocket },
-      { id: 'scheduled-deployments', label: 'Scheduled Deployments', icon: CalendarClock },
+      { id: 'policy-templates', label: 'Policy Templates', icon: FileCheck, description: 'Browse and apply policy templates' },
+      { id: 'policy-generator', label: 'Policy Generator', icon: Wand2, isAI: true, description: 'AI-powered policy creation and customization' },
+      { id: 'remediation-scripts', label: 'Remediation Scripts', icon: Wrench, isAI: true, description: 'Generate scripts to fix configuration issues' },
+      { id: 'change-impact', label: 'Change Impact', icon: GitCompare, isAI: true, description: 'AI analysis of impact before making changes' },
+      { id: 'policy-deployment', label: 'Policy Deployment', icon: Rocket, description: 'Deploy policies to multiple tenants' },
+      { id: 'scheduled-deployments', label: 'Scheduled Deployments', icon: CalendarClock, description: 'Schedule policy deployments for later' },
     ],
   },
   {
     title: 'Monitoring',
     items: [
-      { id: 'anomaly-detection', label: 'Anomaly Detection', icon: Radar, isAI: true },
-      { id: 'incident-responder', label: 'Incident Responder', icon: AlertOctagon, isAI: true },
-      { id: 'user-risk-profiler', label: 'User Risk Profiler', icon: UserCheck, isAI: true },
-      { id: 'drift', label: 'Drift Detection', icon: GitCompare },
-      { id: 'drift-explainer', label: 'Drift Explainer', icon: MessageSquareText, isAI: true },
-      { id: 'scheduled-drift', label: 'Scheduled Drift', icon: CalendarClock },
-      { id: 'validation', label: 'Validation', icon: ShieldCheck },
-      { id: 'compliance', label: 'Compliance Checks', icon: AlertTriangle },
-      { id: 'compliance-advisor', label: 'Compliance Advisor', icon: Scale, isAI: true },
-      { id: 'compliance-dashboard', label: 'Compliance Dashboard', icon: BarChart3 },
+      { id: 'anomaly-detection', label: 'Anomaly Detection', icon: Radar, isAI: true, description: 'AI-powered detection of unusual configuration changes' },
+      { id: 'incident-responder', label: 'Incident Responder', icon: AlertOctagon, isAI: true, description: 'AI-guided incident response and remediation' },
+      { id: 'user-risk-profiler', label: 'User Risk Profiler', icon: UserCheck, isAI: true, description: 'AI analysis of user security risk profiles' },
+      { id: 'drift', label: 'Drift Detection', icon: GitCompare, description: 'Detect configuration drift from baselines' },
+      { id: 'drift-explainer', label: 'Drift Explainer', icon: MessageSquareText, isAI: true, description: 'AI explanations of detected configuration drift' },
+      { id: 'scheduled-drift', label: 'Scheduled Drift', icon: CalendarClock, description: 'Schedule automated drift detection runs' },
+      { id: 'validation', label: 'Validation', icon: ShieldCheck, description: 'Validate configurations against best practices' },
+      { id: 'compliance', label: 'Compliance Checks', icon: AlertTriangle, description: 'Run compliance verification checks' },
+      { id: 'compliance-advisor', label: 'Compliance Advisor', icon: Scale, isAI: true, description: 'AI recommendations for compliance improvements' },
+      { id: 'compliance-dashboard', label: 'Compliance Dashboard', icon: BarChart3, description: 'Compliance status dashboard and reports' },
     ],
   },
   {
     title: 'Automation',
     items: [
-      { id: 'ai-schedules', label: 'AI Schedules & Trends', icon: CalendarClock, isAI: true },
-      { id: 'schedules', label: 'Scheduled Exports', icon: Calendar },
-      { id: 'automated-backups', label: 'Automated Backups', icon: HardDrive },
-      { id: 'webhooks', label: 'Webhooks', icon: Webhook },
-      { id: 'psa-integrations', label: 'PSA Integrations', icon: Ticket },
+      { id: 'ai-schedules', label: 'AI Schedules & Trends', icon: CalendarClock, isAI: true, description: 'AI-powered scheduled analysis and trend detection' },
+      { id: 'schedules', label: 'Scheduled Exports', icon: Calendar, description: 'Schedule automated data exports' },
+      { id: 'automated-backups', label: 'Automated Backups', icon: HardDrive, description: 'Configure automatic backup schedules' },
+      { id: 'webhooks', label: 'Webhooks', icon: Webhook, description: 'Manage webhook integrations and notifications' },
+      { id: 'psa-integrations', label: 'PSA Integrations', icon: Ticket, description: 'Connect with PSA tools like ConnectWise' },
     ],
   },
   {
     title: 'Reporting',
     items: [
-      { id: 'reports', label: 'Reports', icon: FileText },
-      { id: 'executive-report', label: 'Executive Report', icon: ClipboardList, isAI: true },
-      { id: 'license-optimizer', label: 'License Optimizer', icon: Wallet, isAI: true },
-      { id: 'cost-predictor', label: 'Cost Predictor', icon: Calculator, isAI: true },
-      { id: 'billing', label: 'Billing & Usage', icon: BarChart3 },
-      { id: 'audit', label: 'Audit Trail', icon: FileText },
+      { id: 'reports', label: 'Reports', icon: FileText, description: 'Generate and view reports' },
+      { id: 'executive-report', label: 'Executive Report', icon: ClipboardList, isAI: true, description: 'AI-generated executive summary reports' },
+      { id: 'license-optimizer', label: 'License Optimizer', icon: Wallet, isAI: true, description: 'AI recommendations for license optimization' },
+      { id: 'cost-predictor', label: 'Cost Predictor', icon: Calculator, isAI: true, description: 'AI-powered cost forecasting and budgeting' },
+      { id: 'billing', label: 'Billing & Usage', icon: BarChart3, description: 'View billing and usage metrics' },
+      { id: 'audit', label: 'Audit Trail', icon: FileText, description: 'Review audit logs and activity history' },
     ],
   },
   {
     title: 'System',
     items: [
-      { id: 'permissions-reference', label: 'Permissions Reference', icon: FileKey },
-      { id: 'documentation', label: 'Documentation', icon: Book },
-      { id: 'git', label: 'Git & CI/CD', icon: GitBranch },
-      { id: 'auth', label: 'Authentication', icon: Key },
-      { id: 'settings', label: 'Settings', icon: Settings },
+      { id: 'permissions-reference', label: 'Permissions Reference', icon: FileKey, description: 'Reference guide for API permissions' },
+      { id: 'documentation', label: 'Documentation', icon: Book, description: 'Access help documentation and guides' },
+      { id: 'git', label: 'Git & CI/CD', icon: GitBranch, description: 'Manage Git integration and CI/CD pipelines' },
+      { id: 'auth', label: 'Authentication', icon: Key, description: 'Configure authentication and credentials' },
+      { id: 'settings', label: 'Settings', icon: Settings, description: 'Application settings and preferences' },
     ],
   },
 ];
@@ -259,8 +260,8 @@ export const Sidebar = ({ activeTab, onTabChange, isConnected = false }: Sidebar
                 const Icon = item.icon;
                 const isActive = activeTab === item.id;
                 
-                 const tooltipText = item.isAI ? `${item.label} (AI-powered)` : item.label;
-                
+                 const tooltipText = item.isAI ? `${item.description} (AI-powered)` : item.description;
+                 
                  return (
                   <Tooltip key={item.id} delayDuration={300}>
                     <TooltipTrigger asChild>
@@ -307,8 +308,9 @@ export const Sidebar = ({ activeTab, onTabChange, isConnected = false }: Sidebar
                         )}
                       </motion.button>
                     </TooltipTrigger>
-                    <TooltipContent side="right" className="text-xs">
-                      {tooltipText}
+                    <TooltipContent side="right" className="max-w-xs">
+                      <p className="font-medium text-xs">{item.label}</p>
+                      <p className="text-xs text-muted-foreground">{tooltipText}</p>
                     </TooltipContent>
                   </Tooltip>
                 );
