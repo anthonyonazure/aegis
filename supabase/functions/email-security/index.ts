@@ -246,11 +246,11 @@ serve(async (req) => {
 
     // ── EXO policy fetch actions ───────────────────────────────────────
     const exoPolicyActions: Record<string, { cmdlet: string; mapper: (raw: any) => any[] }> = {
-      "fetch-anti-phishing": { cmdlet: "AntiPhishPolicy", mapper: mapAntiPhishPolicies },
-      "fetch-anti-spam": { cmdlet: "HostedContentFilterPolicy", mapper: mapAntiSpamPolicies },
-      "fetch-anti-malware": { cmdlet: "MalwareFilterPolicy", mapper: mapAntiMalwarePolicies },
-      "fetch-safe-links": { cmdlet: "SafeLinksPolicy", mapper: mapSafeLinksPolicies },
-      "fetch-safe-attachments": { cmdlet: "SafeAttachmentPolicy", mapper: mapSafeAttachmentsPolicies },
+      "fetch-anti-phishing": { cmdlet: "Get-AntiPhishPolicy", mapper: mapAntiPhishPolicies },
+      "fetch-anti-spam": { cmdlet: "Get-HostedContentFilterPolicy", mapper: mapAntiSpamPolicies },
+      "fetch-anti-malware": { cmdlet: "Get-MalwareFilterPolicy", mapper: mapAntiMalwarePolicies },
+      "fetch-safe-links": { cmdlet: "Get-SafeLinksPolicy", mapper: mapSafeLinksPolicies },
+      "fetch-safe-attachments": { cmdlet: "Get-SafeAttachmentPolicy", mapper: mapSafeAttachmentsPolicies },
     };
 
     if (exoPolicyActions[action]) {
