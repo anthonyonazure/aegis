@@ -195,8 +195,28 @@ export const PERMISSION_REQUIREMENTS: PermissionRequirement[] = [
     requiredPermissions: ['Exchange.ManageAsApp'],
   },
   {
+    resourceId: 'exchange/anti-phishing',
+    resourceName: 'Anti-Phishing Policies',
+    requiredPermissions: ['Exchange.ManageAsApp'],
+  },
+  {
     resourceId: 'exchange/anti-spam',
     resourceName: 'Anti-Spam Policies',
+    requiredPermissions: ['Exchange.ManageAsApp'],
+  },
+  {
+    resourceId: 'exchange/anti-malware',
+    resourceName: 'Anti-Malware Policies',
+    requiredPermissions: ['Exchange.ManageAsApp'],
+  },
+  {
+    resourceId: 'exchange/safe-links',
+    resourceName: 'Safe Links Policies',
+    requiredPermissions: ['Exchange.ManageAsApp'],
+  },
+  {
+    resourceId: 'exchange/safe-attachments',
+    resourceName: 'Safe Attachments Policies',
     requiredPermissions: ['Exchange.ManageAsApp'],
   },
   {
@@ -278,6 +298,30 @@ export const PERMISSION_REQUIREMENTS: PermissionRequirement[] = [
   {
     resourceId: 'teams/live-event-policies',
     resourceName: 'Live Event Policies',
+    requiredPermissions: ['TeamSettings.Read.All'],
+    alternativePermissions: ['TeamSettings.ReadWrite.All'],
+  },
+  {
+    resourceId: 'teams/guest-policies',
+    resourceName: 'Guest Access Settings',
+    requiredPermissions: ['TeamSettings.Read.All'],
+    alternativePermissions: ['TeamSettings.ReadWrite.All'],
+  },
+  {
+    resourceId: 'teams/external-access',
+    resourceName: 'External Access Settings',
+    requiredPermissions: ['TeamSettings.Read.All'],
+    alternativePermissions: ['TeamSettings.ReadWrite.All'],
+  },
+  {
+    resourceId: 'teams/app-setup-policies',
+    resourceName: 'App Setup Policies',
+    requiredPermissions: ['AppCatalog.Read.All'],
+    alternativePermissions: ['AppCatalog.ReadWrite.All'],
+  },
+  {
+    resourceId: 'teams/channel-policies',
+    resourceName: 'Channel Policies',
     requiredPermissions: ['TeamSettings.Read.All'],
     alternativePermissions: ['TeamSettings.ReadWrite.All'],
   },

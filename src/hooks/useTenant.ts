@@ -344,8 +344,9 @@ export function useExport() {
 
     try {
       // Check what resources we're dealing with
-      const { graphResources, powerShellResources } = categorizeResources(resources);
+      const { graphResources, powerShellResources, exoResources } = categorizeResources(resources);
       const hasPowerShellResources = powerShellResources.length > 0;
+      const hasExoResources = exoResources.length > 0;
       
       // Check for automation config if we have PowerShell resources
       let automationAvailable = false;
@@ -417,7 +418,7 @@ export function useExport() {
       });
 
       // Use hybrid export if we have PowerShell resources and automation is available
-      const useHybrid = hasPowerShellResources && automationAvailable && connectionId;
+      const useHybrid = ((hasPowerShellResources && automationAvailable) || hasExoResources) && !!connectionId;
       
       let graphSuccessCount = 0;
       let graphFailedCount = 0;

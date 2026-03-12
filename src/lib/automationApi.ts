@@ -75,12 +75,11 @@ export const POWERSHELL_RESOURCE_TYPES = [
   'copilot/copilot-data-controls',
   
   // Teams resources that require MicrosoftTeams PowerShell module
+  // NOTE: guest-policies and external-access now use Graph beta /teamwork/teamSettings
   'teams/messaging-policies',
   'teams/meeting-policies',
   'teams/calling-policies',
   'teams/live-event-policies',
-  'teams/guest-policies',
-  'teams/external-access',
   'teams/app-setup-policies',
   'teams/channel-policies',
   
