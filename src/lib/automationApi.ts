@@ -121,8 +121,6 @@ export const POWERSHELL_IMPORT_RESOURCE_TYPES = [
   'exchange/transport-rules',
   'exchange/connectors',
   'exchange/mailbox-policies',
-  'exchange/anti-spam',
-  'exchange/anti-phishing',
   
   // SharePoint
   'sharepoint/site-scripts',
