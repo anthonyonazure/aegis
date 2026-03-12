@@ -2,14 +2,26 @@ import { useEffect } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { RefreshCw } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { RefreshCw, AlertTriangle } from 'lucide-react';
 import { useEmailSecurityData } from '@/hooks/useEmailSecurityData';
 import { AntiSpamPolicy } from '../EmailSecurityTypes';
 
+type PolicyWithSource = AntiSpamPolicy & { source?: string };
+
+const PolicyStatusBadge = ({ policy }: { policy: PolicyWithSource }) => {
+  if (policy.source === 'graph-api-unavailable' || policy.isEnabled === undefined) {
+    return <Badge variant="outline" className="border-yellow-500/50 text-yellow-600">Unverifiable</Badge>;
+  }
+  return <Badge variant={policy.isEnabled ? 'default' : 'secondary'}>{policy.isEnabled ? 'Enabled' : 'Disabled'}</Badge>;
+};
+
 export const AntiSpamSection = () => {
-  const { data, isLoading, fetchData } = useEmailSecurityData<AntiSpamPolicy[]>({ action: 'fetch-anti-spam' });
+  const { data, isLoading, fetchData } = useEmailSecurityData<PolicyWithSource[]>({ action: 'fetch-anti-spam' });
 
   useEffect(() => { fetchData(); }, []);
+
+  const isGraphUnavailable = data?.some(p => p.source === 'graph-api-unavailable');
 
   return (
     <div>
@@ -25,6 +37,17 @@ export const AntiSpamSection = () => {
         </Button>
       </div>
 
+      {isGraphUnavailable && (
+        <Alert className="mb-4 border-yellow-500/30 bg-yellow-500/5">
+          <AlertTriangle className="h-4 w-4 text-yellow-600" />
+          <AlertDescription className="text-sm">
+            Anti-spam policy details are not available via Microsoft Graph API. To view full configuration, use the
+            <strong> Microsoft 365 Defender portal</strong> or <strong>Exchange Online PowerShell</strong>.
+            Use the <strong>AI Recommendations</strong> tab for an analysis based on available tenant data.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {isLoading && !data ? (
         <div className="space-y-3">{Array.from({ length: 3 }).map((_, i) => <Card key={i} className="h-24 animate-pulse bg-muted/30" />)}</div>
       ) : data && data.length > 0 ? (
@@ -35,21 +58,23 @@ export const AntiSpamSection = () => {
                 <h3 className="font-medium text-foreground">{policy.displayName || policy.name || 'Unnamed Policy'}</h3>
                 <div className="flex gap-2">
                   {policy.direction && <Badge variant="outline">{policy.direction}</Badge>}
-                  <Badge variant={policy.isEnabled ? 'default' : 'secondary'}>{policy.isEnabled ? 'Enabled' : 'Disabled'}</Badge>
+                  <PolicyStatusBadge policy={policy} />
                 </div>
               </div>
               {policy.description && <p className="text-sm text-muted-foreground mb-2">{policy.description}</p>}
-              <div className="flex flex-wrap gap-2 text-xs">
-                {policy.spamAction && <Badge variant="outline">Spam: {policy.spamAction}</Badge>}
-                {policy.highConfidenceSpamAction && <Badge variant="outline">High-confidence: {policy.highConfidenceSpamAction}</Badge>}
-                {policy.bulkThreshold !== undefined && <Badge variant="outline">Bulk threshold: {policy.bulkThreshold}</Badge>}
-                {policy.allowedSenders && policy.allowedSenders.length > 0 && (
-                  <Badge variant="outline">{policy.allowedSenders.length} allowed senders</Badge>
-                )}
-                {policy.blockedSenders && policy.blockedSenders.length > 0 && (
-                  <Badge variant="outline">{policy.blockedSenders.length} blocked senders</Badge>
-                )}
-              </div>
+              {policy.source !== 'graph-api-unavailable' && (
+                <div className="flex flex-wrap gap-2 text-xs">
+                  {policy.spamAction && <Badge variant="outline">Spam: {policy.spamAction}</Badge>}
+                  {policy.highConfidenceSpamAction && <Badge variant="outline">High-confidence: {policy.highConfidenceSpamAction}</Badge>}
+                  {policy.bulkThreshold !== undefined && <Badge variant="outline">Bulk threshold: {policy.bulkThreshold}</Badge>}
+                  {policy.allowedSenders && policy.allowedSenders.length > 0 && (
+                    <Badge variant="outline">{policy.allowedSenders.length} allowed senders</Badge>
+                  )}
+                  {policy.blockedSenders && policy.blockedSenders.length > 0 && (
+                    <Badge variant="outline">{policy.blockedSenders.length} blocked senders</Badge>
+                  )}
+                </div>
+              )}
             </Card>
           ))}
         </div>
