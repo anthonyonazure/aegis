@@ -17,6 +17,7 @@ async function getExoToken(clientId: string, clientSecret: string, tenantId: str
 
 async function getOAuthToken(clientId: string, clientSecret: string, tenantId: string, scope: string): Promise<string> {
   const tokenUrl = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`;
+  console.log(`Token request: scope=${scope} tenant=${tenantId} clientId=${clientId}`);
   const resp = await fetch(tokenUrl, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -24,9 +25,11 @@ async function getOAuthToken(clientId: string, clientSecret: string, tenantId: s
   });
   if (!resp.ok) {
     const t = await resp.text();
+    console.error(`Token error (${scope}): ${resp.status} ${t}`);
     throw new Error(`Token error (${scope}): ${resp.status} ${t}`);
   }
   const data = await resp.json();
+  console.log(`Token acquired for ${scope}, expires_in=${data.expires_in}`);
   return data.access_token;
 }
 
