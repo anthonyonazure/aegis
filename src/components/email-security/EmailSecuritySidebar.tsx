@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import {
   Layout, Shield, ShieldAlert, Bug, Link2,
-  Paperclip, Globe, Sparkles, ChevronDown, ChevronRight,
+  Paperclip, Globe, Sparkles, ChevronDown, ChevronRight, BookOpen,
 } from 'lucide-react';
 import { EmailSecuritySectionId } from './EmailSecurityTypes';
 
