@@ -59,7 +59,7 @@ export const SafeLinksSection = () => {
                 <PolicyStatusBadge policy={policy} />
               </div>
               {policy.description && <p className="text-sm text-muted-foreground mb-2">{policy.description}</p>}
-              {policy.source !== 'graph-api-unavailable' && (
+              {!isUnavailable(policy) && (
                 <div className="flex flex-wrap gap-2 text-xs">
                   {policy.scanUrls !== undefined && <Badge variant="outline">URL scanning: {policy.scanUrls ? 'On' : 'Off'}</Badge>}
                   {policy.deliverMessageAfterScan !== undefined && <Badge variant="outline">Wait for scan: {policy.deliverMessageAfterScan ? 'Yes' : 'No'}</Badge>}

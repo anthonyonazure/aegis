@@ -59,7 +59,7 @@ export const SafeAttachmentsSection = () => {
                 <PolicyStatusBadge policy={policy} />
               </div>
               {policy.description && <p className="text-sm text-muted-foreground mb-2">{policy.description}</p>}
-              {policy.source !== 'graph-api-unavailable' && (
+              {!isUnavailable(policy) && (
                 <div className="flex flex-wrap gap-2 text-xs">
                   {policy.action && <Badge variant="outline">Action: {policy.action}</Badge>}
                   {policy.redirect !== undefined && <Badge variant="outline">Redirect: {policy.redirect ? 'On' : 'Off'}</Badge>}

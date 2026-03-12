@@ -62,7 +62,7 @@ export const AntiSpamSection = () => {
                 </div>
               </div>
               {policy.description && <p className="text-sm text-muted-foreground mb-2">{policy.description}</p>}
-              {policy.source !== 'graph-api-unavailable' && (
+              {!isUnavailable(policy) && (
                 <div className="flex flex-wrap gap-2 text-xs">
                   {policy.spamAction && <Badge variant="outline">Spam: {policy.spamAction}</Badge>}
                   {policy.highConfidenceSpamAction && <Badge variant="outline">High-confidence: {policy.highConfidenceSpamAction}</Badge>}
