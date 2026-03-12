@@ -184,7 +184,7 @@ function mapGenericExoPolicies(raw: any): any[] {
     id: p.Identity || p.Guid || p.Name,
     displayName: p.Name || p.Identity || 'Unnamed',
     description: p.AdminDisplayName || p.Description || null,
-    isEnabled: p.State === 'Enabled' || p.Enabled ?? true,
+    isEnabled: p.State === 'Enabled' || (p.Enabled ?? true),
     priority: p.Priority ?? null,
     rawData: p,
     source: 'exchange-online-rest',
