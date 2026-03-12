@@ -88,6 +88,12 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
+    title: 'Email Security',
+    items: [
+      { id: 'email-security', label: 'Email Security', icon: Mail },
+    ],
+  },
+  {
     title: 'Tenant Health',
     items: [
       { id: 'health-dashboard', label: 'Health Dashboard', icon: Activity },
