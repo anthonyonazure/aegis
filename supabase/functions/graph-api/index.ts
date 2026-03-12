@@ -157,9 +157,10 @@ const GRAPH_ENDPOINTS: Record<string, { endpoint: string; useBeta?: boolean; cre
   'teams/app-policies': { endpoint: '/appCatalogs/teamsApps', useBeta: false, supportsImport: false },
   'teams/calling-policies': { endpoint: '/communications/callRecords', useBeta: true, supportsImport: false },
   'teams/live-event-policies': { endpoint: '/solutions/virtualEvents/townhalls', useBeta: true, supportsImport: false },
+  // Graph beta Teams settings endpoints (previously PowerShell-only)
+  'teams/guest-policies': { endpoint: '/teamwork/teamSettings', useBeta: true, supportsImport: false },
+  'teams/external-access': { endpoint: '/teamwork/teamSettings', useBeta: true, supportsImport: false },
   // PowerShell-only Teams resources (require Azure Automation)
-  'teams/guest-policies': { endpoint: '/teams', useBeta: false, supportsImport: false }, // Limited via Graph
-  'teams/external-access': { endpoint: '/teams', useBeta: false, supportsImport: false }, // Limited via Graph
   'teams/app-setup-policies': { endpoint: '/appCatalogs/teamsApps', useBeta: false, supportsImport: false }, // Limited via Graph
   'teams/channel-policies': { endpoint: '/teams', useBeta: false, supportsImport: false }, // Limited via Graph
 

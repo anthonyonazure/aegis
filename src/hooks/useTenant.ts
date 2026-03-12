@@ -418,7 +418,7 @@ export function useExport() {
       });
 
       // Use hybrid export if we have PowerShell resources and automation is available
-      const useHybrid = hasPowerShellResources && automationAvailable && connectionId;
+      const useHybrid = ((hasPowerShellResources && automationAvailable) || hasExoResources) && !!connectionId;
       
       let graphSuccessCount = 0;
       let graphFailedCount = 0;

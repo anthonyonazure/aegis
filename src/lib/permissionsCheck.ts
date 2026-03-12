@@ -301,6 +301,30 @@ export const PERMISSION_REQUIREMENTS: PermissionRequirement[] = [
     requiredPermissions: ['TeamSettings.Read.All'],
     alternativePermissions: ['TeamSettings.ReadWrite.All'],
   },
+  {
+    resourceId: 'teams/guest-policies',
+    resourceName: 'Guest Access Settings',
+    requiredPermissions: ['TeamSettings.Read.All'],
+    alternativePermissions: ['TeamSettings.ReadWrite.All'],
+  },
+  {
+    resourceId: 'teams/external-access',
+    resourceName: 'External Access Settings',
+    requiredPermissions: ['TeamSettings.Read.All'],
+    alternativePermissions: ['TeamSettings.ReadWrite.All'],
+  },
+  {
+    resourceId: 'teams/app-setup-policies',
+    resourceName: 'App Setup Policies',
+    requiredPermissions: ['AppCatalog.Read.All'],
+    alternativePermissions: ['AppCatalog.ReadWrite.All'],
+  },
+  {
+    resourceId: 'teams/channel-policies',
+    resourceName: 'Channel Policies',
+    requiredPermissions: ['TeamSettings.Read.All'],
+    alternativePermissions: ['TeamSettings.ReadWrite.All'],
+  },
 
   // Copilot Readiness
   {
