@@ -9,9 +9,11 @@ import { SafeLinksPolicy } from '../EmailSecurityTypes';
 
 type PolicyWithSource = SafeLinksPolicy & { source?: string };
 
+const isUnavailable = (p: PolicyWithSource) => p.source === 'graph-api-unavailable' || p.source === 'exo-api-unavailable';
+
 const PolicyStatusBadge = ({ policy }: { policy: PolicyWithSource }) => {
-  if (policy.source === 'graph-api-unavailable' || policy.isEnabled === undefined) {
-    return <Badge variant="outline" className="border-yellow-500/50 text-yellow-600">Unverifiable</Badge>;
+  if (isUnavailable(policy) || policy.isEnabled === undefined) {
+    return <Badge variant="outline" className="border-yellow-500/50 text-yellow-600">Setup Required</Badge>;
   }
   return <Badge variant={policy.isEnabled ? 'default' : 'secondary'}>{policy.isEnabled ? 'Enabled' : 'Disabled'}</Badge>;
 };
@@ -21,7 +23,7 @@ export const SafeLinksSection = () => {
 
   useEffect(() => { fetchData(); }, []);
 
-  const isGraphUnavailable = data?.some(p => p.source === 'graph-api-unavailable');
+  const isApiUnavailable = data?.some(p => isUnavailable(p));
 
   return (
     <div>
@@ -37,12 +39,11 @@ export const SafeLinksSection = () => {
         </Button>
       </div>
 
-      {isGraphUnavailable && (
+      {isApiUnavailable && (
         <Alert className="mb-4 border-yellow-500/30 bg-yellow-500/5">
           <AlertTriangle className="h-4 w-4 text-yellow-600" />
           <AlertDescription className="text-sm">
-            Safe Links requires <strong>Microsoft Defender for Office 365</strong> and cannot be verified via Microsoft Graph API.
-            Check the <strong>Microsoft 365 Defender portal</strong> to confirm whether Safe Links policies are active.
+            To read Safe Links policies, your service principal needs the <strong>Exchange.ManageAsApp</strong> permission and <strong>Exchange Administrator</strong> role. Safe Links also requires a <strong>Defender for Office 365</strong> license.
           </AlertDescription>
         </Alert>
       )}
@@ -58,7 +59,7 @@ export const SafeLinksSection = () => {
                 <PolicyStatusBadge policy={policy} />
               </div>
               {policy.description && <p className="text-sm text-muted-foreground mb-2">{policy.description}</p>}
-              {policy.source !== 'graph-api-unavailable' && (
+              {!isUnavailable(policy) && (
                 <div className="flex flex-wrap gap-2 text-xs">
                   {policy.scanUrls !== undefined && <Badge variant="outline">URL scanning: {policy.scanUrls ? 'On' : 'Off'}</Badge>}
                   {policy.deliverMessageAfterScan !== undefined && <Badge variant="outline">Wait for scan: {policy.deliverMessageAfterScan ? 'Yes' : 'No'}</Badge>}

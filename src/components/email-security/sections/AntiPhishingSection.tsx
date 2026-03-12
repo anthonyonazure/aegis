@@ -9,9 +9,11 @@ import { AntiPhishingPolicy } from '../EmailSecurityTypes';
 
 type PolicyWithSource = AntiPhishingPolicy & { source?: string };
 
+const isUnavailable = (p: PolicyWithSource) => p.source === 'graph-api-unavailable' || p.source === 'exo-api-unavailable';
+
 const PolicyStatusBadge = ({ policy }: { policy: PolicyWithSource }) => {
-  if (policy.source === 'graph-api-unavailable' || policy.isEnabled === undefined) {
-    return <Badge variant="outline" className="border-yellow-500/50 text-yellow-600">Unverifiable</Badge>;
+  if (isUnavailable(policy) || policy.isEnabled === undefined) {
+    return <Badge variant="outline" className="border-yellow-500/50 text-yellow-600">Setup Required</Badge>;
   }
   return <Badge variant={policy.isEnabled ? 'default' : 'secondary'}>{policy.isEnabled ? 'Enabled' : 'Disabled'}</Badge>;
 };
@@ -21,7 +23,7 @@ export const AntiPhishingSection = () => {
 
   useEffect(() => { fetchData(); }, []);
 
-  const isGraphUnavailable = data?.some(p => p.source === 'graph-api-unavailable');
+  const isApiUnavailable = data?.some(p => isUnavailable(p));
 
   return (
     <div>
@@ -37,13 +39,11 @@ export const AntiPhishingSection = () => {
         </Button>
       </div>
 
-      {isGraphUnavailable && (
+      {isApiUnavailable && (
         <Alert className="mb-4 border-yellow-500/30 bg-yellow-500/5">
           <AlertTriangle className="h-4 w-4 text-yellow-600" />
           <AlertDescription className="text-sm">
-            Anti-phishing policy details are not available via Microsoft Graph API. To view full configuration, use the
-            <strong> Microsoft 365 Defender portal</strong> or <strong>Exchange Online PowerShell</strong>.
-            Use the <strong>AI Recommendations</strong> tab for an analysis based on available tenant data.
+            To read anti-phishing policies, your service principal needs the <strong>Exchange.ManageAsApp</strong> application permission and <strong>Exchange Administrator</strong> role in Azure AD.
           </AlertDescription>
         </Alert>
       )}
@@ -59,7 +59,7 @@ export const AntiPhishingSection = () => {
                 <PolicyStatusBadge policy={policy} />
               </div>
               {policy.description && <p className="text-sm text-muted-foreground mb-2">{policy.description}</p>}
-              {policy.source !== 'graph-api-unavailable' && (
+              {!isUnavailable(policy) && (
                 <div className="flex flex-wrap gap-2 text-xs">
                   {policy.impersonationProtectionEnabled !== undefined && (
                     <Badge variant="outline">Impersonation: {policy.impersonationProtectionEnabled ? 'On' : 'Off'}</Badge>
