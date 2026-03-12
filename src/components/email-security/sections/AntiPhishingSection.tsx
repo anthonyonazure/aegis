@@ -9,9 +9,11 @@ import { AntiPhishingPolicy } from '../EmailSecurityTypes';
 
 type PolicyWithSource = AntiPhishingPolicy & { source?: string };
 
+const isUnavailable = (p: PolicyWithSource) => p.source === 'graph-api-unavailable' || p.source === 'exo-api-unavailable';
+
 const PolicyStatusBadge = ({ policy }: { policy: PolicyWithSource }) => {
-  if (policy.source === 'graph-api-unavailable' || policy.isEnabled === undefined) {
-    return <Badge variant="outline" className="border-yellow-500/50 text-yellow-600">Unverifiable</Badge>;
+  if (isUnavailable(policy) || policy.isEnabled === undefined) {
+    return <Badge variant="outline" className="border-yellow-500/50 text-yellow-600">Setup Required</Badge>;
   }
   return <Badge variant={policy.isEnabled ? 'default' : 'secondary'}>{policy.isEnabled ? 'Enabled' : 'Disabled'}</Badge>;
 };
