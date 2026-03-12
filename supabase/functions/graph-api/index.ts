@@ -120,6 +120,9 @@ const GRAPH_ENDPOINTS: Record<string, { endpoint: string; useBeta?: boolean; cre
   'entra-id/directory-settings': { endpoint: '/settings', supportsImport: false },
   'entra-id/admin-units': { endpoint: '/administrativeUnits', createEndpoint: '/administrativeUnits', supportsImport: true },
   'entra-id/roles': { endpoint: '/directoryRoles', supportsImport: false },
+  'entra-id/auth-methods-policy': { endpoint: '/policies/authenticationMethodsPolicy', supportsImport: false },
+  'entra-id/cross-tenant-access': { endpoint: '/policies/crossTenantAccessPolicy', supportsImport: false },
+  'entra-id/permission-grant-policies': { endpoint: '/policies/permissionGrantPolicies', supportsImport: false },
 
   // Defender - Using configurationPolicies with $expand to get settings
   // These endpoints fetch actual deployed policies, not template definitions
