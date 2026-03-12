@@ -230,7 +230,7 @@ const EXPORT_FORMATS: { id: ExportFormat; name: string; icon: React.ElementType;
 ];
 
 export const PolicyBrowserView = () => {
-  const { selectedTenantId, tenants, isConnected, tenantName, accessToken } = useTenant();
+  const { selectedTenantId, tenants, isConnected, tenantName, accessToken, connectionId } = useTenant();
   const selectedTenant = tenants.find(t => t.id === selectedTenantId);
   const displayTenantName = tenantName || selectedTenant?.displayName || selectedTenant?.tenantName;
   // Customer name will come from loaded export source info or we'll fetch it separately
