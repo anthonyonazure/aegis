@@ -54,6 +54,7 @@ import AIChatView from '@/components/views/AIChatView';
 import CrossTenantInsightsView from '@/components/views/CrossTenantInsightsView';
 import { AISchedulesView } from '@/components/views/AISchedulesView';
 import { IntuneView } from '@/components/views/IntuneView';
+import { EmailSecurityView } from '@/components/views/EmailSecurityView';
 import { SettingsView } from '@/components/views/SettingsView';
 import { PreflightCheckDialog } from '@/components/PreflightCheckDialog';
 import { filterSupportedResourceIds } from '@/lib/resourceSupport';
