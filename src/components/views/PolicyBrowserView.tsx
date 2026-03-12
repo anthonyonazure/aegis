@@ -450,8 +450,11 @@ export const PolicyBrowserView = () => {
     setSelectedExportJobId(null);
   };
 
-  const fetchPolicies = async (categoryId: string, policyTypeId: string, endpoint: string, useBeta = false) => {
-    if (!accessToken || !selectedTenantId) return;
+  const fetchPolicies = async (categoryId: string, policyTypeId: string, endpoint: string, useBeta = false, isExo = false) => {
+    if (!selectedTenantId) return;
+    // EXO policies need connectionId, Graph policies need accessToken
+    if (!isExo && !accessToken) return;
+    if (isExo && !connectionId) return;
 
     const key = `${categoryId}/${policyTypeId}`;
     
@@ -472,47 +475,77 @@ export const PolicyBrowserView = () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
 
-      const response = await supabase.functions.invoke('graph-api', {
-        body: {
-          action: 'fetch',
-          accessToken,
-          resources: [`${categoryId}/${policyTypeId}`],
-        },
-      });
+      let policies: PolicyItem[] = [];
 
-      if (response.error) {
-        throw new Error(response.error.message || 'Failed to fetch policies');
-      }
+      if (isExo) {
+        // Route through email-security edge function
+        const exoAction = `fetch-${policyTypeId}`;
+        const response = await supabase.functions.invoke('email-security', {
+          body: {
+            action: exoAction,
+            tenantConnectionId: connectionId,
+          },
+        });
 
-      const results = response.data?.results || [];
-      const policies: PolicyItem[] = [];
-      
-      for (const result of results) {
-        if (result.success && result.data?.value) {
-          for (const item of result.data.value) {
+        if (response.error) {
+          throw new Error(response.error.message || 'Failed to fetch EXO policies');
+        }
+
+        const items = response.data?.data ?? response.data;
+        if (Array.isArray(items)) {
+          for (const item of items) {
             policies.push({
-              id: item.id,
-              displayName: item.displayName || item.name || item.id,
-              description: item.description,
-              createdDateTime: item.createdDateTime,
-              modifiedDateTime: item.modifiedDateTime || item.lastModifiedDateTime,
-              state: item.state,
-              data: item,
+              id: item.id || `exo-${policies.length}`,
+              displayName: item.displayName || item.name || item.Name || 'Unnamed Policy',
+              description: item.description || item.adminDisplayName || undefined,
+              state: item.isEnabled === false ? 'disabled' : item.isEnabled === true ? 'enabled' : undefined,
+              data: item.rawData || item,
             });
           }
-        } else if (result.success && result.data && !result.data.value) {
-          // Single object response
-          const item = result.data;
-          if (item.id) {
-            policies.push({
-              id: item.id,
-              displayName: item.displayName || item.name || item.id,
-              description: item.description,
-              createdDateTime: item.createdDateTime,
-              modifiedDateTime: item.modifiedDateTime,
-              state: item.state,
-              data: item,
-            });
+        }
+      } else {
+        // Route through graph-api edge function
+        const response = await supabase.functions.invoke('graph-api', {
+          body: {
+            action: 'fetch',
+            accessToken,
+            resources: [`${categoryId}/${policyTypeId}`],
+          },
+        });
+
+        if (response.error) {
+          throw new Error(response.error.message || 'Failed to fetch policies');
+        }
+
+        const results = response.data?.results || [];
+        
+        for (const result of results) {
+          if (result.success && result.data?.value) {
+            for (const item of result.data.value) {
+              policies.push({
+                id: item.id,
+                displayName: item.displayName || item.name || item.id,
+                description: item.description,
+                createdDateTime: item.createdDateTime,
+                modifiedDateTime: item.modifiedDateTime || item.lastModifiedDateTime,
+                state: item.state,
+                data: item,
+              });
+            }
+          } else if (result.success && result.data && !result.data.value) {
+            // Single object response
+            const item = result.data;
+            if (item.id) {
+              policies.push({
+                id: item.id,
+                displayName: item.displayName || item.name || item.id,
+                description: item.description,
+                createdDateTime: item.createdDateTime,
+                modifiedDateTime: item.modifiedDateTime,
+                state: item.state,
+                data: item,
+              });
+            }
           }
         }
       }
