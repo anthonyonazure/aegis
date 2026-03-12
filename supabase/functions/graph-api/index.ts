@@ -139,12 +139,11 @@ const GRAPH_ENDPOINTS: Record<string, { endpoint: string; useBeta?: boolean; cre
   'exchange/connectors': { endpoint: '/organization', useBeta: false, supportsImport: false },
   'exchange/accepted-domains': { endpoint: '/domains', supportsImport: false },
   'exchange/mailbox-policies': { endpoint: '/policies/mobileDeviceManagementPolicies', useBeta: true, supportsImport: false },
-  'exchange/anti-spam': { endpoint: '/security/threatIntelligence/hostComponents', useBeta: true, supportsImport: false },
+  // EXO policies (anti-spam, anti-phishing, anti-malware, safe-links, safe-attachments)
+  // are handled client-side via email-security edge function InvokeCommand - not through graph-api
   'exchange/dlp-policies': { endpoint: '/security/informationProtection/sensitivityLabels', useBeta: true, supportsImport: false },
-  // PowerShell-only Exchange resources (require Azure Automation)
-  'exchange/anti-phishing': { endpoint: '/admin/serviceAnnouncement/messages', useBeta: true, supportsImport: false }, // Placeholder - use PowerShell
   'exchange/org-config': { endpoint: '/organization', useBeta: false, supportsImport: false },
-  'exchange/owa-policies': { endpoint: '/policies/mobileDeviceManagementPolicies', useBeta: true, supportsImport: false }, // Limited via Graph
+  'exchange/owa-policies': { endpoint: '/policies/mobileDeviceManagementPolicies', useBeta: true, supportsImport: false },
   'exchange/mobile-device-policies': { endpoint: '/policies/mobileDeviceManagementPolicies', useBeta: true, supportsImport: false },
 
   // SharePoint & OneDrive - Graph API supported endpoints
