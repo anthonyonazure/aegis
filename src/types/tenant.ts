@@ -46,6 +46,7 @@ export interface ResourceSubcategory {
   count?: number;
   graphEndpoint?: string;
   azureResourceType?: string; // Azure ARM resource type
+  exoEndpoint?: string; // Exchange Online InvokeCommand cmdlet name
   powershellModule?: string;
   supported?: boolean; // false = "Coming Soon", defaults to true if graphEndpoint exists
   comingSoonReason?: string;
