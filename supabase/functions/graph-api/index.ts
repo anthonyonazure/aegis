@@ -137,17 +137,9 @@ const GRAPH_ENDPOINTS: Record<string, { endpoint: string; useBeta?: boolean; cre
   'purview/sensitivity-labels': { endpoint: '/security/informationProtection/sensitivityLabels', useBeta: true, supportsImport: false },
   'purview/retention-policies': { endpoint: '/security/labels/retentionLabels', useBeta: true, supportsImport: false },
 
-  // Exchange Online - Graph API supported endpoints
-  'exchange/transport-rules': { endpoint: '/security/attackSimulation/simulationAutomations', useBeta: true, supportsImport: false },
-  'exchange/connectors': { endpoint: '/organization', useBeta: false, supportsImport: false },
+  // Exchange Online - EXO-backed resources are handled by email-security edge function
+  // Only keep Graph-backed exchange endpoints here
   'exchange/accepted-domains': { endpoint: '/domains', supportsImport: false },
-  'exchange/mailbox-policies': { endpoint: '/policies/mobileDeviceManagementPolicies', useBeta: true, supportsImport: false },
-  // EXO policies (anti-spam, anti-phishing, anti-malware, safe-links, safe-attachments)
-  // are handled client-side via email-security edge function InvokeCommand - not through graph-api
-  'exchange/dlp-policies': { endpoint: '/security/informationProtection/sensitivityLabels', useBeta: true, supportsImport: false },
-  'exchange/org-config': { endpoint: '/organization', useBeta: false, supportsImport: false },
-  'exchange/owa-policies': { endpoint: '/policies/mobileDeviceManagementPolicies', useBeta: true, supportsImport: false },
-  'exchange/mobile-device-policies': { endpoint: '/policies/mobileDeviceManagementPolicies', useBeta: true, supportsImport: false },
 
   // SharePoint & OneDrive - Graph API supported endpoints
   'sharepoint/tenant-settings': { endpoint: '/sites/root', useBeta: false, supportsImport: false },

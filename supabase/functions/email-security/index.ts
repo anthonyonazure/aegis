@@ -177,6 +177,34 @@ function mapSafeAttachmentsPolicies(raw: any): any[] {
   }));
 }
 
+// ── Generic EXO policy mapper (for transport rules, connectors, etc.) ──
+function mapGenericExoPolicies(raw: any): any[] {
+  const items = raw?.value || [];
+  return items.map((p: any) => ({
+    id: p.Identity || p.Guid || p.Name,
+    displayName: p.Name || p.Identity || 'Unnamed',
+    description: p.AdminDisplayName || p.Description || null,
+    isEnabled: p.State === 'Enabled' || p.Enabled ?? true,
+    priority: p.Priority ?? null,
+    rawData: p,
+    source: 'exchange-online-rest',
+  }));
+}
+
+// ── Singleton EXO policy mapper (for org config - single object returned) ──
+function mapSingletonExoPolicy(raw: any): any[] {
+  const items = raw?.value || [];
+  if (items.length === 0) return [];
+  const p = items[0];
+  return [{
+    id: p.Identity || p.Guid || 'org-config',
+    displayName: p.Name || 'Organization Configuration',
+    description: null,
+    rawData: p,
+    source: 'exchange-online-rest',
+  }];
+}
+
 // ── Fallback for when EXO REST API is unavailable ──────────────────────
 function exoFallback(action: string): any[] {
   const policyName = action.replace('fetch-', '').replace(/-/g, ' ');
