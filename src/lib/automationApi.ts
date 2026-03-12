@@ -104,9 +104,7 @@ export const POWERSHELL_RESOURCE_TYPES = [
   'sharepoint/site-designs',
   
   // Defender resources that require PowerShell
-  'defender/safe-attachments',
-  'defender/safe-links',
-  'defender/anti-phishing',
+  // Note: safe-attachments, safe-links, anti-phishing are now EXO resources
   
   // License optimization reports that need Reports.Read.All or PowerShell
   'license-optimization/inactive-users',
