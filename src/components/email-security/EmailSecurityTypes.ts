@@ -1,5 +1,6 @@
 export type EmailSecuritySectionId =
   | 'overview'
+  | 'setup-guide'
   | 'anti-phishing'
   | 'anti-spam'
   | 'anti-malware'

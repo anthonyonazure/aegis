@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import {
   Layout, Shield, ShieldAlert, Bug, Link2,
-  Paperclip, Globe, Sparkles, ChevronDown, ChevronRight,
+  Paperclip, Globe, Sparkles, ChevronDown, ChevronRight, BookOpen,
 } from 'lucide-react';
 import { EmailSecuritySectionId } from './EmailSecurityTypes';
 
@@ -15,6 +15,7 @@ const iconMap: Record<string, React.ElementType> = {
   paperclip: Paperclip,
   globe: Globe,
   sparkles: Sparkles,
+  'book-open': BookOpen,
 };
 
 interface SidebarGroup {
@@ -31,6 +32,7 @@ const sidebarGroups: SidebarGroup[] = [
     collapsible: false,
     items: [
       { id: 'overview', label: 'Overview', icon: 'layout' },
+      { id: 'setup-guide', label: 'Setup Guide', icon: 'book-open' },
     ],
   },
   {

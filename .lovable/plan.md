@@ -1,27 +1,28 @@
 
 
-## Plan: Add Permissions Setup Guide to Email Security UI
+## Problem Identified
 
-### What
-Add a new "Setup Guide" section to the Email Security sidebar that walks users through configuring `Exchange.ManageAsApp` permission and assigning the Exchange Administrator role to their service principal.
+The secure score fetch **is working** -- it successfully retrieves data from Microsoft Graph. However, it **fails to save** for one tenant ("Tesoro XP, Inc.") because of a database column overflow.
 
-### Changes
+**Root cause:** The `current_score` and `max_score` columns in both `tenant_secure_scores` and `secure_score_history` are defined as `NUMERIC(5,2)`, which caps at **999.99**. Microsoft Graph returned `currentScore: 574.75` and `maxScore: 1170` for this tenant -- the `max_score` of 1170 exceeds the limit.
 
-**1. Update `EmailSecurityTypes.ts`**
-- Add `'setup-guide'` to `EmailSecuritySectionId` union type.
+The other two tenants (scores ~88 and ~122) saved fine because their values fit within 999.99.
 
-**2. Update `EmailSecuritySidebar.tsx`**
-- Add a new sidebar group "Configuration" with a "Setup Guide" item (using a `Settings` or `BookOpen` icon).
-- Add the icon to `iconMap`.
+Edge function log confirms:
+```
+numeric field overflow
+A field with precision 5, scale 2 must round to an absolute value less than 10^3.
+```
 
-**3. Create `src/components/email-security/sections/SetupGuideSection.tsx`**
-- Step-by-step walkthrough with 3 collapsible steps:
-  1. **Register Exchange.ManageAsApp permission** — Instructions to go to Azure AD > App Registrations > API Permissions > "APIs my organization uses" > search "Office 365 Exchange Online" > Application permissions > `Exchange.ManageAsApp`. Include the manifest JSON fallback with the resource ID and permission GUID.
-  2. **Grant Admin Consent** — Click "Grant admin consent" on the API Permissions page.
-  3. **Assign Exchange Administrator role** — Navigate to Entra ID > Roles and administrators > Exchange Administrator > Add assignments > switch filter to "Enterprise applications" / "Service principals". Include the PowerShell fallback script.
-- Each step has a copyable code/JSON block where relevant.
-- A "Verify Connection" button at the bottom that calls `fetchData` on the overview endpoint to test if EXO policies load.
+## Fix
 
-**4. Update `EmailSecurityView.tsx`**
-- Import `SetupGuideSection`, add case to `renderSection` switch, add breadcrumb mapping.
+**Database migration** -- widen the numeric columns to `NUMERIC(10,2)` (supports up to 99,999,999.99):
+
+1. `tenant_secure_scores.current_score` -- ALTER to `NUMERIC(10,2)`
+2. `tenant_secure_scores.max_score` -- ALTER to `NUMERIC(10,2)`
+3. `tenant_secure_scores.score_percentage` -- keep or widen to `NUMERIC(7,2)` (percentage could theoretically exceed 999 in edge cases with bad data)
+4. `secure_score_history.score` -- ALTER to `NUMERIC(10,2)`
+5. `secure_score_history.max_score` -- ALTER to `NUMERIC(10,2)`
+
+No code changes needed -- the edge function and client code are correct. Only the column precision is too small.
 

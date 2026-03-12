@@ -10,10 +10,12 @@ import { SafeLinksSection } from '@/components/email-security/sections/SafeLinks
 import { SafeAttachmentsSection } from '@/components/email-security/sections/SafeAttachmentsSection';
 import { DomainAuthSection } from '@/components/email-security/sections/DomainAuthSection';
 import { RecommendationsSection } from '@/components/email-security/sections/RecommendationsSection';
+import { SetupGuideSection } from '@/components/email-security/sections/SetupGuideSection';
 import { Mail } from 'lucide-react';
 
 const breadcrumbMap: Record<EmailSecuritySectionId, string[]> = {
   overview: ['Email Security'],
+  'setup-guide': ['Configuration', 'Setup Guide'],
   'anti-phishing': ['Protection Policies', 'Anti-Phishing'],
   'anti-spam': ['Protection Policies', 'Anti-Spam'],
   'anti-malware': ['Protection Policies', 'Anti-Malware'],
@@ -31,6 +33,7 @@ export const EmailSecurityView = () => {
   const renderSection = () => {
     switch (activeSection) {
       case 'overview': return <OverviewSection />;
+      case 'setup-guide': return <SetupGuideSection />;
       case 'anti-phishing': return <AntiPhishingSection />;
       case 'anti-spam': return <AntiSpamSection />;
       case 'anti-malware': return <AntiMalwareSection />;
