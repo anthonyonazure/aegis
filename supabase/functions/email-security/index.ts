@@ -193,33 +193,19 @@ serve(async (req) => {
       case "fetch-anti-malware":
       case "fetch-safe-links":
       case "fetch-safe-attachments": {
-        // EOP policies are not directly accessible via Graph API
-        // Return info indicating these require Exchange Online PowerShell
-        responseData = [];
-
-        // Try beta endpoints for any available security policy data
-        const securityData = await graphGetBeta(token, "/security/threatIntelligence/hosts?$top=5");
+        const policyName = action.replace('fetch-', '').replace(/-/g, ' ');
+        const isDefenderFeature = action === "fetch-safe-links" || action === "fetch-safe-attachments";
         
-        if (securityData?.value) {
-          responseData = securityData.value.map((item: any, idx: number) => ({
-            id: item.id || `policy-${idx}`,
-            displayName: item.displayName || `Default ${action.replace('fetch-', '')} policy`,
-            description: `Retrieved from tenant security configuration`,
-            isEnabled: true,
-            settings: item,
-          }));
-        }
-
-        // If no data from Graph, indicate this requires PowerShell
-        if (responseData.length === 0) {
-          responseData = [{
-            id: `default-${action}`,
-            displayName: `Default ${action.replace('fetch-', '').replace(/-/g, ' ')} policy`,
-            description: "EOP policies require Exchange Online PowerShell for full details. The default policy is always active. Use the AI Recommendations tab for a comprehensive analysis.",
-            isEnabled: true,
-            priority: 0,
-          }];
-        }
+        responseData = [{
+          id: `default-${action}`,
+          displayName: `Default ${policyName} policy`,
+          description: isDefenderFeature
+            ? "Safe Links and Safe Attachments require a Microsoft Defender for Office 365 license. These policies cannot be read via Microsoft Graph API — use the Microsoft 365 Defender portal or PowerShell to verify configuration."
+            : "EOP policy details are not available via Microsoft Graph API. Use the Microsoft 365 Defender portal or Exchange Online PowerShell to view and manage this policy. Run AI Recommendations for a configuration analysis based on available tenant data.",
+          isEnabled: undefined, // Status unknown — cannot be verified via Graph API
+          source: "graph-api-unavailable",
+          priority: 0,
+        }];
         break;
       }
 
