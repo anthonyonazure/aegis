@@ -10,6 +10,7 @@ import { SafeLinksSection } from '@/components/email-security/sections/SafeLinks
 import { SafeAttachmentsSection } from '@/components/email-security/sections/SafeAttachmentsSection';
 import { DomainAuthSection } from '@/components/email-security/sections/DomainAuthSection';
 import { RecommendationsSection } from '@/components/email-security/sections/RecommendationsSection';
+import { SetupGuideSection } from '@/components/email-security/sections/SetupGuideSection';
 import { Mail } from 'lucide-react';
 
 const breadcrumbMap: Record<EmailSecuritySectionId, string[]> = {
