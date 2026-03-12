@@ -257,7 +257,7 @@ serve(async (req) => {
       const { cmdlet, mapper } = exoPolicyActions[action];
       try {
         const exoToken = await getExoToken(client_id, client_secret, tenant_id);
-        const raw = await exoGet(exoToken, tenant_id, cmdlet);
+        const raw = await exoInvokeCommand(exoToken, tenant_id, cmdlet);
         if (raw) {
           responseData = mapper(raw);
         } else {
