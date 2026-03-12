@@ -63,6 +63,7 @@ interface NavItem {
   id: string;
   label: string;
   icon: React.ElementType;
+  description: string;
   isAI?: boolean;
 }
 
