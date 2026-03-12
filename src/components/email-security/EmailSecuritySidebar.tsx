@@ -15,6 +15,7 @@ const iconMap: Record<string, React.ElementType> = {
   paperclip: Paperclip,
   globe: Globe,
   sparkles: Sparkles,
+  'book-open': BookOpen,
 };
 
 interface SidebarGroup {
