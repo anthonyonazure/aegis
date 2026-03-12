@@ -40,7 +40,7 @@ export const RecommendationsSection = () => {
       });
 
       if (error) throw error;
-      setRecommendations(data?.recommendations || []);
+      setRecommendations(data?.data?.recommendations || data?.recommendations || []);
     } catch (err: any) {
       toast({ title: 'Analysis failed', description: err?.message, variant: 'destructive' });
     } finally {
