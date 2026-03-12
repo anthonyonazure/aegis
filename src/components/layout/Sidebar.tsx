@@ -54,6 +54,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { TenantSelector } from '@/components/TenantSelector';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
