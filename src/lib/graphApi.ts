@@ -287,19 +287,23 @@ export async function getAvailableAutomationConfig(): Promise<AutomationConfig |
   }
 }
 
-// Split resources into Graph API, PowerShell, and Azure categories
+// Split resources into Graph API, PowerShell, Azure, and EXO categories
 export function categorizeResources(resources: string[]): {
   graphResources: string[];
   powerShellResources: string[];
   azureResources: string[];
+  exoResources: string[];
 } {
   const graphResources: string[] = [];
   const powerShellResources: string[] = [];
   const azureResources: string[] = [];
+  const exoResources: string[] = [];
 
   for (const resource of resources) {
     if (isAzureResource(resource)) {
       azureResources.push(resource);
+    } else if (isExoResource(resource)) {
+      exoResources.push(resource);
     } else if (isPowerShellResource(resource)) {
       powerShellResources.push(resource);
     } else {
@@ -307,7 +311,7 @@ export function categorizeResources(resources: string[]): {
     }
   }
 
-  return { graphResources, powerShellResources, azureResources };
+  return { graphResources, powerShellResources, azureResources, exoResources };
 }
 
 // Hybrid export that uses Graph API for standard resources, Azure API for Azure resources, and Azure Automation for PowerShell resources
