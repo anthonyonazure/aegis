@@ -16,8 +16,8 @@ export function isSupportedResourceId(resourceId: string): boolean {
   if (sub.supported === false) return false;
   if (sub.supported === true) return true;
 
-  // Default rule: Graph-backed OR Azure ARM-backed resources are supported
-  return !!sub.graphEndpoint || !!sub.azureResourceType;
+  // Default rule: Graph-backed, Azure ARM-backed, or EXO-backed resources are supported
+  return !!sub.graphEndpoint || !!sub.azureResourceType || !!sub.exoEndpoint;
 }
 
 export function filterSupportedResourceIds(resourceIds: string[]) {

@@ -2,6 +2,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { z } from 'zod';
 import { 
   isPowerShellResource, 
+  isExoResource,
+  EXO_RESOURCE_TYPES,
   getAutomationConfigs, 
   startAutomationJob, 
   pollJobUntilComplete,
@@ -285,19 +287,23 @@ export async function getAvailableAutomationConfig(): Promise<AutomationConfig |
   }
 }
 
-// Split resources into Graph API, PowerShell, and Azure categories
+// Split resources into Graph API, PowerShell, Azure, and EXO categories
 export function categorizeResources(resources: string[]): {
   graphResources: string[];
   powerShellResources: string[];
   azureResources: string[];
+  exoResources: string[];
 } {
   const graphResources: string[] = [];
   const powerShellResources: string[] = [];
   const azureResources: string[] = [];
+  const exoResources: string[] = [];
 
   for (const resource of resources) {
     if (isAzureResource(resource)) {
       azureResources.push(resource);
+    } else if (isExoResource(resource)) {
+      exoResources.push(resource);
     } else if (isPowerShellResource(resource)) {
       powerShellResources.push(resource);
     } else {
@@ -305,7 +311,7 @@ export function categorizeResources(resources: string[]): {
     }
   }
 
-  return { graphResources, powerShellResources, azureResources };
+  return { graphResources, powerShellResources, azureResources, exoResources };
 }
 
 // Hybrid export that uses Graph API for standard resources, Azure API for Azure resources, and Azure Automation for PowerShell resources
@@ -325,11 +331,19 @@ export interface HybridExportResult {
     data?: unknown;
     error?: string;
   }>;
+  exoResults?: Array<{
+    resource: string;
+    success: boolean;
+    count?: number;
+    error?: string;
+  }>;
   automationJobId?: string;
   automationSkipped?: boolean;
   automationSkipReason?: string;
   azureSkipped?: boolean;
   azureSkipReason?: string;
+  exoSkipped?: boolean;
+  exoSkipReason?: string;
   error?: string;
 }
 
@@ -341,16 +355,19 @@ export async function exportResourcesHybrid(
   onProgress?: (progress: number, message: string) => void,
   selectedSubscriptionIds?: string[]
 ): Promise<HybridExportResult> {
-  const { graphResources, powerShellResources, azureResources } = categorizeResources(resources);
+  const { graphResources, powerShellResources, azureResources, exoResources } = categorizeResources(resources);
   
   let graphResults: ExportResult['results'] = [];
   let azureResults: HybridExportResult['azureResults'] = [];
   let automationResults: HybridExportResult['automationResults'] = [];
+  let exoResults: HybridExportResult['exoResults'] = [];
   let automationSkipped = false;
   let automationSkipReason: string | undefined;
   let automationJobId: string | undefined;
   let azureSkipped = false;
   let azureSkipReason: string | undefined;
+  let exoSkipped = false;
+  let exoSkipReason: string | undefined;
 
   const totalResources = resources.length;
   let completedResources = 0;
@@ -550,14 +567,76 @@ export async function exportResourcesHybrid(
     }
   }
 
+  // Step 4: Export EXO resources via email-security edge function (InvokeCommand)
+  if (exoResources.length > 0) {
+    onProgress?.(
+      Math.round((completedResources / totalResources) * 100),
+      `Exporting ${exoResources.length} Exchange Online policies via EXO API...`
+    );
+
+    if (!tenantConnectionId) {
+      exoSkipped = true;
+      exoSkipReason = 'Tenant connection required for EXO policy export.';
+      exoResults = exoResources.map(resource => ({
+        resource,
+        success: false,
+        error: 'Tenant connection required',
+      }));
+    } else {
+      for (const resource of exoResources) {
+        const action = EXO_RESOURCE_TYPES[resource];
+        if (!action) continue;
+
+        try {
+          const { data, error } = await supabase.functions.invoke('email-security', {
+            body: { action, tenantConnectionId },
+          });
+
+          if (error || !data?.data) {
+            exoResults.push({ resource, success: false, error: error?.message || 'EXO fetch failed' });
+            continue;
+          }
+
+          const policyData = data.data;
+          const [category, resourceType] = resource.split('/');
+
+          // Store each policy as an exported resource
+          if (Array.isArray(policyData)) {
+            for (const policy of policyData) {
+              await supabase.from('exported_resources').insert([{
+                export_job_id: exportJobId,
+                category,
+                resource_type: resourceType,
+                resource_name: policy.displayName || `${resourceType} policy`,
+                resource_id: policy.id || policy.displayName,
+                data: JSON.parse(JSON.stringify({ ...policy, source: 'exchange-online-rest' })),
+              }]);
+            }
+          }
+
+          exoResults.push({ resource, success: true, count: Array.isArray(policyData) ? policyData.length : 0 });
+          completedResources++;
+        } catch (err) {
+          exoResults.push({ resource, success: false, error: err instanceof Error ? err.message : 'Unknown error' });
+        }
+      }
+    }
+  }
+
   onProgress?.(100, 'Export complete');
 
   return {
     success: true,
     graphResults,
+    azureResults,
     automationResults,
+    exoResults,
     automationJobId,
     automationSkipped,
     automationSkipReason,
+    azureSkipped,
+    azureSkipReason,
+    exoSkipped,
+    exoSkipReason,
   };
 }

@@ -69,12 +69,12 @@ export const POWERSHELL_RESOURCE_TYPES = [
   'exchange/transport-rules',
   'exchange/connectors',
   'exchange/mailbox-policies',
-  'exchange/anti-spam',
   'exchange/dlp-policies',
-  'exchange/anti-phishing',
   'exchange/org-config',
   'exchange/owa-policies',
   'exchange/mobile-device-policies',
+  // Note: anti-spam, anti-phishing, anti-malware, safe-links, safe-attachments
+  // are now handled via EXO REST API (InvokeCommand) - see isExoResource()
   
   // Purview / Compliance - DLP and Insider Risk
   'purview/dlp-policies',
@@ -104,9 +104,7 @@ export const POWERSHELL_RESOURCE_TYPES = [
   'sharepoint/site-designs',
   
   // Defender resources that require PowerShell
-  'defender/safe-attachments',
-  'defender/safe-links',
-  'defender/anti-phishing',
+  // Note: safe-attachments, safe-links, anti-phishing are now EXO resources
   
   // License optimization reports that need Reports.Read.All or PowerShell
   'license-optimization/inactive-users',
@@ -123,8 +121,6 @@ export const POWERSHELL_IMPORT_RESOURCE_TYPES = [
   'exchange/transport-rules',
   'exchange/connectors',
   'exchange/mailbox-policies',
-  'exchange/anti-spam',
-  'exchange/anti-phishing',
   
   // SharePoint
   'sharepoint/site-scripts',
@@ -136,8 +132,21 @@ export const POWERSHELL_IMPORT_RESOURCE_TYPES = [
   'teams/app-setup-policies',
 ];
 
+// EXO REST API resource types (fetched via email-security InvokeCommand)
+export const EXO_RESOURCE_TYPES: Record<string, string> = {
+  'exchange/anti-spam': 'fetch-anti-spam',
+  'exchange/anti-phishing': 'fetch-anti-phishing',
+  'exchange/anti-malware': 'fetch-anti-malware',
+  'exchange/safe-links': 'fetch-safe-links',
+  'exchange/safe-attachments': 'fetch-safe-attachments',
+};
+
 export function isPowerShellResource(resourceType: string): boolean {
   return POWERSHELL_RESOURCE_TYPES.includes(resourceType);
+}
+
+export function isExoResource(resourceType: string): boolean {
+  return resourceType in EXO_RESOURCE_TYPES;
 }
 
 export function isPowerShellImportResource(resourceType: string): boolean {
