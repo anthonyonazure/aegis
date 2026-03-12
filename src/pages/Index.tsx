@@ -107,6 +107,7 @@ const SIMPLE_VIEWS: Record<string, React.ComponentType> = {
   'copilot-agents': CopilotAgentsView,
   'copilot-advisor': CopilotReadinessAdvisorView,
   'permissions-reference': PermissionsReferenceView,
+  'permissions-checklist': PermissionsChecklistView,
   'schedules': ScheduledExportsView,
   'automated-backups': AutomatedBackupsView,
   'webhooks': WebhooksView,

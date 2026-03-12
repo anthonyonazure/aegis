@@ -172,6 +172,7 @@ const navGroups: NavGroup[] = [
     title: 'System',
     items: [
       { id: 'permissions-reference', label: 'Permissions Reference', icon: FileKey, description: 'Reference guide for API permissions' },
+      { id: 'permissions-checklist', label: 'Permissions Checklist', icon: ClipboardList, description: 'Check configured vs missing permissions per resource category' },
       { id: 'documentation', label: 'Documentation', icon: Book, description: 'Access help documentation and guides' },
       { id: 'git', label: 'Git & CI/CD', icon: GitBranch, description: 'Manage Git integration and CI/CD pipelines' },
       { id: 'auth', label: 'Authentication', icon: Key, description: 'Configure authentication and credentials' },
