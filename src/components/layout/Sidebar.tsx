@@ -260,8 +260,8 @@ export const Sidebar = ({ activeTab, onTabChange, isConnected = false }: Sidebar
                 const Icon = item.icon;
                 const isActive = activeTab === item.id;
                 
-                 const tooltipText = item.isAI ? `${item.label} (AI-powered)` : item.label;
-                
+                 const tooltipText = item.isAI ? `${item.description} (AI-powered)` : item.description;
+                 
                  return (
                   <Tooltip key={item.id} delayDuration={300}>
                     <TooltipTrigger asChild>
@@ -308,8 +308,9 @@ export const Sidebar = ({ activeTab, onTabChange, isConnected = false }: Sidebar
                         )}
                       </motion.button>
                     </TooltipTrigger>
-                    <TooltipContent side="right" className="text-xs">
-                      {tooltipText}
+                    <TooltipContent side="right" className="max-w-xs">
+                      <p className="font-medium text-xs">{item.label}</p>
+                      <p className="text-xs text-muted-foreground">{tooltipText}</p>
                     </TooltipContent>
                   </Tooltip>
                 );
