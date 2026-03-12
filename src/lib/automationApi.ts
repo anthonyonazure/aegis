@@ -64,19 +64,9 @@ export interface StartImportJobResult {
 }
 
 // PowerShell resource types that require Azure Automation for EXPORT
+// NOTE: Exchange resources previously here are now handled via EXO REST API (InvokeCommand)
 export const POWERSHELL_RESOURCE_TYPES = [
-  // Exchange resources that require PowerShell
-  'exchange/transport-rules',
-  'exchange/connectors',
-  'exchange/mailbox-policies',
-  'exchange/dlp-policies',
-  'exchange/org-config',
-  'exchange/owa-policies',
-  'exchange/mobile-device-policies',
-  // Note: anti-spam, anti-phishing, anti-malware, safe-links, safe-attachments
-  // are now handled via EXO REST API (InvokeCommand) - see isExoResource()
-  
-  // Purview / Compliance - DLP and Insider Risk
+  // Purview / Compliance - DLP and Insider Risk (require Security & Compliance PowerShell)
   'purview/dlp-policies',
   'purview/insider-risk',
   
@@ -84,7 +74,7 @@ export const POWERSHELL_RESOURCE_TYPES = [
   'copilot/semantic-index',
   'copilot/copilot-data-controls',
   
-  // Teams resources that require PowerShell
+  // Teams resources that require MicrosoftTeams PowerShell module
   'teams/messaging-policies',
   'teams/meeting-policies',
   'teams/calling-policies',
@@ -94,7 +84,7 @@ export const POWERSHELL_RESOURCE_TYPES = [
   'teams/app-setup-policies',
   'teams/channel-policies',
   
-  // SharePoint resources that require PowerShell
+  // SharePoint resources that require PnP.PowerShell
   'sharepoint/tenant-settings',
   'sharepoint/sharing-policies',
   'sharepoint/access-control',
@@ -102,9 +92,6 @@ export const POWERSHELL_RESOURCE_TYPES = [
   'sharepoint/onedrive-settings',
   'sharepoint/site-scripts',
   'sharepoint/site-designs',
-  
-  // Defender resources that require PowerShell
-  // Note: safe-attachments, safe-links, anti-phishing are now EXO resources
   
   // License optimization reports that need Reports.Read.All or PowerShell
   'license-optimization/inactive-users',
