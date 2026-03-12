@@ -45,20 +45,31 @@ async function graphGet(token: string, endpoint: string) {
   return resp.json();
 }
 
-// ── Exchange Online REST API helper ────────────────────────────────────
-async function exoGet(token: string, tenantId: string, cmdlet: string) {
-  const url = `https://outlook.office365.com/adminapi/beta/${tenantId}/${cmdlet}`;
-  console.log(`EXO GET: ${url}`);
+// ── Exchange Online InvokeCommand helper ──────────────────────────────
+async function exoInvokeCommand(token: string, tenantId: string, cmdletName: string) {
+  const url = `https://outlook.office365.com/adminapi/beta/${tenantId}/InvokeCommand`;
+  console.log(`EXO InvokeCommand: ${cmdletName}`);
   const resp = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}` },
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      "X-AnchorMailbox": `UPN:SystemMailbox{bb558c35-97f1-4cb9-8ff7-d53741dc928c}@${tenantId}`,
+    },
+    body: JSON.stringify({
+      CmdletInput: {
+        CmdletName: cmdletName,
+      },
+    }),
   });
   if (!resp.ok) {
     const t = await resp.text();
-    console.error(`EXO REST error ${cmdlet}: ${resp.status} headers=${JSON.stringify(Object.fromEntries(resp.headers.entries()))} body=${t}`);
+    console.error(`EXO InvokeCommand error ${cmdletName}: ${resp.status} body=${t}`);
     return null;
   }
   const data = await resp.json();
-  console.log(`EXO ${cmdlet}: got ${data?.value?.length ?? 0} items`);
+  const items = data?.value || [];
+  console.log(`EXO ${cmdletName}: got ${items.length} items`);
   return data;
 }
 
