@@ -73,9 +73,7 @@ export const OverviewSection = () => {
             <Alert className="mb-4 border-yellow-500/30 bg-yellow-500/5">
               <AlertTriangle className="h-4 w-4 text-yellow-600" />
               <AlertDescription className="text-sm">
-                EOP and Defender for Office 365 policy details are <strong>not available via Microsoft Graph API</strong>.
-                Use the <strong>Microsoft 365 Defender portal</strong> or <strong>Exchange Online PowerShell</strong> to view policy configurations.
-                The <strong>AI Recommendations</strong> tab can provide guidance based on available data.
+                EOP and Defender policy counts are unavailable. To enable this, add the <strong>Exchange.ManageAsApp</strong> application permission and assign the <strong>Exchange Administrator</strong> role to your service principal in Azure AD.
               </AlertDescription>
             </Alert>
           )}
