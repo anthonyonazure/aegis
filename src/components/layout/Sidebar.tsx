@@ -50,6 +50,7 @@ import {
   SlidersHorizontal,
   MessageCircle,
   GitPullRequestDraft,
+  Mail,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -85,6 +86,12 @@ const navGroups: NavGroup[] = [
     title: 'Intune',
     items: [
       { id: 'intune', label: 'Intune Manager', icon: Monitor },
+    ],
+  },
+  {
+    title: 'Email Security',
+    items: [
+      { id: 'email-security', label: 'Email Security', icon: Mail },
     ],
   },
   {

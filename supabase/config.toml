@@ -134,3 +134,6 @@ verify_jwt = false
 
 [functions.store-credentials]
 verify_jwt = false
+
+[functions.email-security]
+verify_jwt = false
