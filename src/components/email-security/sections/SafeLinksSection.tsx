@@ -39,12 +39,11 @@ export const SafeLinksSection = () => {
         </Button>
       </div>
 
-      {isGraphUnavailable && (
+      {isApiUnavailable && (
         <Alert className="mb-4 border-yellow-500/30 bg-yellow-500/5">
           <AlertTriangle className="h-4 w-4 text-yellow-600" />
           <AlertDescription className="text-sm">
-            Safe Links requires <strong>Microsoft Defender for Office 365</strong> and cannot be verified via Microsoft Graph API.
-            Check the <strong>Microsoft 365 Defender portal</strong> to confirm whether Safe Links policies are active.
+            To read Safe Links policies, your service principal needs the <strong>Exchange.ManageAsApp</strong> permission and <strong>Exchange Administrator</strong> role. Safe Links also requires a <strong>Defender for Office 365</strong> license.
           </AlertDescription>
         </Alert>
       )}
