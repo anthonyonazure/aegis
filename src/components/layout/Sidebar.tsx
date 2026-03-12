@@ -54,6 +54,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { TenantSelector } from '@/components/TenantSelector';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
@@ -258,51 +259,58 @@ export const Sidebar = ({ activeTab, onTabChange, isConnected = false }: Sidebar
                 const Icon = item.icon;
                 const isActive = activeTab === item.id;
                 
-                return (
-                  <motion.button
-                    key={item.id}
-                    onClick={() => onTabChange(item.id)}
-                    whileHover={{ x: 2 }}
-                    whileTap={{ scale: 0.98 }}
-                    className={cn(
-                      "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200",
-                      "hover:bg-sidebar-accent/80 group relative overflow-hidden",
-                      isActive 
-                        ? "bg-gradient-to-r from-primary/20 to-accent/10 text-primary" 
-                        : "text-muted-foreground hover:text-foreground"
-                    )}
-                    title={collapsed ? item.label : undefined}
-                  >
-                    {/* Active indicator */}
-                    {isActive && (
-                      <motion.div 
-                        layoutId="activeIndicator"
-                        className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-gradient-to-b from-primary to-accent rounded-r-full"
-                        transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
-                      />
-                    )}
-                    
-                    <div className="relative flex-shrink-0">
-                      <Icon className={cn(
-                        "w-4 h-4 transition-all duration-200",
-                        isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
-                      )} />
-                      {item.isAI && collapsed && (
-                        <Sparkles className="w-2.5 h-2.5 text-accent absolute -top-1 -right-1" />
-                      )}
-                    </div>
-                    {!collapsed && (
-                      <>
-                        <span className="text-sm font-medium truncate flex-1 text-left">{item.label}</span>
-                        {item.isAI && (
-                          <span className="ai-badge flex items-center gap-0.5">
-                            <Sparkles className="w-2.5 h-2.5" />
-                            AI
-                          </span>
+                 const tooltipText = item.isAI ? `${item.label} (AI-powered)` : item.label;
+                
+                 return (
+                  <Tooltip key={item.id} delayDuration={300}>
+                    <TooltipTrigger asChild>
+                      <motion.button
+                        onClick={() => onTabChange(item.id)}
+                        whileHover={{ x: 2 }}
+                        whileTap={{ scale: 0.98 }}
+                        className={cn(
+                          "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200",
+                          "hover:bg-sidebar-accent/80 group relative overflow-hidden",
+                          isActive 
+                            ? "bg-gradient-to-r from-primary/20 to-accent/10 text-primary" 
+                            : "text-muted-foreground hover:text-foreground"
                         )}
-                      </>
-                    )}
-                  </motion.button>
+                      >
+                        {/* Active indicator */}
+                        {isActive && (
+                          <motion.div 
+                            layoutId="activeIndicator"
+                            className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-gradient-to-b from-primary to-accent rounded-r-full"
+                            transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                          />
+                        )}
+                        
+                        <div className="relative flex-shrink-0">
+                          <Icon className={cn(
+                            "w-4 h-4 transition-all duration-200",
+                            isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
+                          )} />
+                          {item.isAI && collapsed && (
+                            <Sparkles className="w-2.5 h-2.5 text-accent absolute -top-1 -right-1" />
+                          )}
+                        </div>
+                        {!collapsed && (
+                          <>
+                            <span className="text-sm font-medium truncate flex-1 text-left">{item.label}</span>
+                            {item.isAI && (
+                              <span className="ai-badge flex items-center gap-0.5">
+                                <Sparkles className="w-2.5 h-2.5" />
+                                AI
+                              </span>
+                            )}
+                          </>
+                        )}
+                      </motion.button>
+                    </TooltipTrigger>
+                    <TooltipContent side="right" className="text-xs">
+                      {tooltipText}
+                    </TooltipContent>
+                  </Tooltip>
                 );
               })}
             </div>
