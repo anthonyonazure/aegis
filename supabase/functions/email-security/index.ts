@@ -45,20 +45,31 @@ async function graphGet(token: string, endpoint: string) {
   return resp.json();
 }
 
-// ── Exchange Online REST API helper ────────────────────────────────────
-async function exoGet(token: string, tenantId: string, cmdlet: string) {
-  const url = `https://outlook.office365.com/adminapi/beta/${tenantId}/${cmdlet}`;
-  console.log(`EXO GET: ${url}`);
+// ── Exchange Online InvokeCommand helper ──────────────────────────────
+async function exoInvokeCommand(token: string, tenantId: string, cmdletName: string) {
+  const url = `https://outlook.office365.com/adminapi/beta/${tenantId}/InvokeCommand`;
+  console.log(`EXO InvokeCommand: ${cmdletName}`);
   const resp = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}` },
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      "X-AnchorMailbox": `UPN:SystemMailbox{bb558c35-97f1-4cb9-8ff7-d53741dc928c}@${tenantId}`,
+    },
+    body: JSON.stringify({
+      CmdletInput: {
+        CmdletName: cmdletName,
+      },
+    }),
   });
   if (!resp.ok) {
     const t = await resp.text();
-    console.error(`EXO REST error ${cmdlet}: ${resp.status} headers=${JSON.stringify(Object.fromEntries(resp.headers.entries()))} body=${t}`);
+    console.error(`EXO InvokeCommand error ${cmdletName}: ${resp.status} body=${t}`);
     return null;
   }
   const data = await resp.json();
-  console.log(`EXO ${cmdlet}: got ${data?.value?.length ?? 0} items`);
+  const items = data?.value || [];
+  console.log(`EXO ${cmdletName}: got ${items.length} items`);
   return data;
 }
 
@@ -235,18 +246,18 @@ serve(async (req) => {
 
     // ── EXO policy fetch actions ───────────────────────────────────────
     const exoPolicyActions: Record<string, { cmdlet: string; mapper: (raw: any) => any[] }> = {
-      "fetch-anti-phishing": { cmdlet: "AntiPhishPolicy", mapper: mapAntiPhishPolicies },
-      "fetch-anti-spam": { cmdlet: "HostedContentFilterPolicy", mapper: mapAntiSpamPolicies },
-      "fetch-anti-malware": { cmdlet: "MalwareFilterPolicy", mapper: mapAntiMalwarePolicies },
-      "fetch-safe-links": { cmdlet: "SafeLinksPolicy", mapper: mapSafeLinksPolicies },
-      "fetch-safe-attachments": { cmdlet: "SafeAttachmentPolicy", mapper: mapSafeAttachmentsPolicies },
+      "fetch-anti-phishing": { cmdlet: "Get-AntiPhishPolicy", mapper: mapAntiPhishPolicies },
+      "fetch-anti-spam": { cmdlet: "Get-HostedContentFilterPolicy", mapper: mapAntiSpamPolicies },
+      "fetch-anti-malware": { cmdlet: "Get-MalwareFilterPolicy", mapper: mapAntiMalwarePolicies },
+      "fetch-safe-links": { cmdlet: "Get-SafeLinksPolicy", mapper: mapSafeLinksPolicies },
+      "fetch-safe-attachments": { cmdlet: "Get-SafeAttachmentPolicy", mapper: mapSafeAttachmentsPolicies },
     };
 
     if (exoPolicyActions[action]) {
       const { cmdlet, mapper } = exoPolicyActions[action];
       try {
         const exoToken = await getExoToken(client_id, client_secret, tenant_id);
-        const raw = await exoGet(exoToken, tenant_id, cmdlet);
+        const raw = await exoInvokeCommand(exoToken, tenant_id, cmdlet);
         if (raw) {
           responseData = mapper(raw);
         } else {
@@ -277,11 +288,11 @@ serve(async (req) => {
           try {
             const exoToken = await getExoToken(client_id, client_secret, tenant_id);
             const [antiPhish, antiSpam, antiMalware, safeLinks, safeAttachments] = await Promise.all([
-              exoGet(exoToken, tenant_id, "AntiPhishPolicy"),
-              exoGet(exoToken, tenant_id, "HostedContentFilterPolicy"),
-              exoGet(exoToken, tenant_id, "MalwareFilterPolicy"),
-              exoGet(exoToken, tenant_id, "SafeLinksPolicy"),
-              exoGet(exoToken, tenant_id, "SafeAttachmentPolicy"),
+              exoInvokeCommand(exoToken, tenant_id, "Get-AntiPhishPolicy"),
+              exoInvokeCommand(exoToken, tenant_id, "Get-HostedContentFilterPolicy"),
+              exoInvokeCommand(exoToken, tenant_id, "Get-MalwareFilterPolicy"),
+              exoInvokeCommand(exoToken, tenant_id, "Get-SafeLinksPolicy"),
+              exoInvokeCommand(exoToken, tenant_id, "Get-SafeAttachmentPolicy"),
             ]);
 
             policyCounts = {
@@ -349,11 +360,11 @@ serve(async (req) => {
           try {
             const exoToken = await getExoToken(client_id, client_secret, tenant_id);
             const [antiPhish, antiSpam, antiMalware, safeLinks, safeAttachments] = await Promise.all([
-              exoGet(exoToken, tenant_id, "AntiPhishPolicy"),
-              exoGet(exoToken, tenant_id, "HostedContentFilterPolicy"),
-              exoGet(exoToken, tenant_id, "MalwareFilterPolicy"),
-              exoGet(exoToken, tenant_id, "SafeLinksPolicy"),
-              exoGet(exoToken, tenant_id, "SafeAttachmentPolicy"),
+              exoInvokeCommand(exoToken, tenant_id, "Get-AntiPhishPolicy"),
+              exoInvokeCommand(exoToken, tenant_id, "Get-HostedContentFilterPolicy"),
+              exoInvokeCommand(exoToken, tenant_id, "Get-MalwareFilterPolicy"),
+              exoInvokeCommand(exoToken, tenant_id, "Get-SafeLinksPolicy"),
+              exoInvokeCommand(exoToken, tenant_id, "Get-SafeAttachmentPolicy"),
             ]);
             exoPolicyData = {
               antiPhishing: mapAntiPhishPolicies(antiPhish),

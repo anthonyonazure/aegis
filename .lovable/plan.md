@@ -1,49 +1,28 @@
 
 
-## Plan: Fix EXO API to use InvokeCommand method
+## Problem Identified
 
-### Problem
-The edge function calls `GET https://outlook.office365.com/adminapi/beta/{tenantId}/AntiPhishPolicy` etc., but these resource segments don't exist. The Exchange Admin API requires the **InvokeCommand** POST method to proxy PowerShell cmdlets.
+The secure score fetch **is working** -- it successfully retrieves data from Microsoft Graph. However, it **fails to save** for one tenant ("Tesoro XP, Inc.") because of a database column overflow.
 
-### Root Cause
-The EXO Admin REST API exposes only a handful of native REST endpoints (OrganizationConfig, Domains, Mailbox, etc.). EOP/Defender policy cmdlets like `Get-AntiPhishPolicy`, `Get-HostedContentFilterPolicy`, etc. must be called via the InvokeCommand proxy:
+**Root cause:** The `current_score` and `max_score` columns in both `tenant_secure_scores` and `secure_score_history` are defined as `NUMERIC(5,2)`, which caps at **999.99**. Microsoft Graph returned `currentScore: 574.75` and `maxScore: 1170` for this tenant -- the `max_score` of 1170 exceeds the limit.
 
-```text
-POST /adminapi/beta/{tenantId}/InvokeCommand
-Headers:
-  Authorization: Bearer {token}
-  Content-Type: application/json
-  X-AnchorMailbox: UPN:SystemMailbox{bb558c35-97f1-4cb9-8ff7-d53741dc928c}@{tenantId}
+The other two tenants (scores ~88 and ~122) saved fine because their values fit within 999.99.
 
-Body:
-{
-  "CmdletInput": {
-    "CmdletName": "Get-AntiPhishPolicy"
-  }
-}
+Edge function log confirms:
+```
+numeric field overflow
+A field with precision 5, scale 2 must round to an absolute value less than 10^3.
 ```
 
-### Changes
+## Fix
 
-**File: `supabase/functions/email-security/index.ts`**
+**Database migration** -- widen the numeric columns to `NUMERIC(10,2)` (supports up to 99,999,999.99):
 
-1. Replace the `exoGet` helper with an `exoInvokeCommand` helper that:
-   - Uses POST to `https://outlook.office365.com/adminapi/beta/{tenantId}/InvokeCommand`
-   - Sends `Content-Type: application/json` and `X-AnchorMailbox: UPN:SystemMailbox{bb558c35-97f1-4cb9-8ff7-d53741dc928c}@{tenantId}` headers
-   - Sends body: `{ "CmdletInput": { "CmdletName": "Get-AntiPhishPolicy" } }`
-   - Parses response `.value` array
+1. `tenant_secure_scores.current_score` -- ALTER to `NUMERIC(10,2)`
+2. `tenant_secure_scores.max_score` -- ALTER to `NUMERIC(10,2)`
+3. `tenant_secure_scores.score_percentage` -- keep or widen to `NUMERIC(7,2)` (percentage could theoretically exceed 999 in edge cases with bad data)
+4. `secure_score_history.score` -- ALTER to `NUMERIC(10,2)`
+5. `secure_score_history.max_score` -- ALTER to `NUMERIC(10,2)`
 
-2. Update the `exoPolicyActions` mapping to use PowerShell cmdlet names:
-   - `fetch-anti-phishing` → `Get-AntiPhishPolicy`
-   - `fetch-anti-spam` → `Get-HostedContentFilterPolicy`
-   - `fetch-anti-malware` → `Get-MalwareFilterPolicy`
-   - `fetch-safe-links` → `Get-SafeLinksPolicy`
-   - `fetch-safe-attachments` → `Get-SafeAttachmentPolicy`
-
-3. Update all call sites from `exoGet(token, tenantId, cmdlet)` to `exoInvokeCommand(token, tenantId, cmdlet)`.
-
-4. Keep the existing mappers and fallback logic unchanged.
-
-### Technical Detail
-The `X-AnchorMailbox` header is required for application-permission (client credentials) requests. The system mailbox GUID `bb558c35-97f1-4cb9-8ff7-d53741dc928c` is a well-known constant used across all Exchange Online tenants.
+No code changes needed -- the edge function and client code are correct. Only the column precision is too small.
 
