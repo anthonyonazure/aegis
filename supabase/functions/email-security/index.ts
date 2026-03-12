@@ -6,84 +6,176 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// ── Token helpers ──────────────────────────────────────────────────────
 async function getGraphToken(clientId: string, clientSecret: string, tenantId: string): Promise<string> {
+  return getOAuthToken(clientId, clientSecret, tenantId, "https://graph.microsoft.com/.default");
+}
+
+async function getExoToken(clientId: string, clientSecret: string, tenantId: string): Promise<string> {
+  return getOAuthToken(clientId, clientSecret, tenantId, "https://outlook.office365.com/.default");
+}
+
+async function getOAuthToken(clientId: string, clientSecret: string, tenantId: string, scope: string): Promise<string> {
   const tokenUrl = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`;
   const resp = await fetch(tokenUrl, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: clientId,
-      client_secret: clientSecret,
-      scope: "https://graph.microsoft.com/.default",
-      grant_type: "client_credentials",
-    }),
+    body: new URLSearchParams({ client_id: clientId, client_secret: clientSecret, scope, grant_type: "client_credentials" }),
   });
   if (!resp.ok) {
     const t = await resp.text();
-    throw new Error(`Token error: ${resp.status} ${t}`);
+    throw new Error(`Token error (${scope}): ${resp.status} ${t}`);
   }
   const data = await resp.json();
   return data.access_token;
 }
 
+// ── Graph helpers ──────────────────────────────────────────────────────
 async function graphGet(token: string, endpoint: string) {
   const resp = await fetch(`https://graph.microsoft.com/v1.0${endpoint}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!resp.ok) {
-    const t = await resp.text();
-    console.error(`Graph error ${endpoint}: ${resp.status} ${t}`);
+    console.error(`Graph error ${endpoint}: ${resp.status} ${await resp.text()}`);
     return null;
   }
   return resp.json();
 }
 
-async function graphGetBeta(token: string, endpoint: string) {
-  const resp = await fetch(`https://graph.microsoft.com/beta${endpoint}`, {
+// ── Exchange Online REST API helper ────────────────────────────────────
+async function exoGet(token: string, tenantId: string, cmdlet: string) {
+  const url = `https://outlook.office365.com/adminapi/beta/${tenantId}/${cmdlet}`;
+  const resp = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!resp.ok) {
     const t = await resp.text();
-    console.error(`Graph beta error ${endpoint}: ${resp.status} ${t}`);
+    console.error(`EXO REST error ${cmdlet}: ${resp.status} ${t}`);
     return null;
   }
   return resp.json();
 }
 
+// ── Domain auth parser ─────────────────────────────────────────────────
 function parseDomainAuth(domains: any[]): any[] {
   return domains.map((d: any) => {
     const records = d.serviceConfigurationRecords || [];
-    
-    // Check SPF
-    const spfRecord = records.find((r: any) => 
-      r.recordType === 'Txt' && r.text?.startsWith('v=spf1')
-    );
-    
-    // Check DKIM (look for CNAME selectors)
-    const dkimRecords = records.filter((r: any) => 
-      r.recordType === 'CName' && r.label?.includes('._domainkey')
-    );
-    
+    const spfRecord = records.find((r: any) => r.recordType === 'Txt' && r.text?.startsWith('v=spf1'));
+    const dkimRecords = records.filter((r: any) => r.recordType === 'CName' && r.label?.includes('._domainkey'));
     return {
       domain: d.id,
       isVerified: d.isVerified || false,
-      spf: {
-        status: spfRecord ? 'pass' : 'missing',
-        record: spfRecord?.text || null,
-      },
+      spf: { status: spfRecord ? 'pass' : 'missing', record: spfRecord?.text || null },
       dkim: {
         status: dkimRecords.length > 0 ? 'pass' : 'missing',
         selectors: dkimRecords.map((r: any) => r.label?.split('._domainkey')[0]).filter(Boolean),
       },
-      dmarc: {
-        status: 'unknown', // DMARC TXT records at _dmarc.domain aren't in Graph API
-        record: null,
-        policy: null,
-      },
+      dmarc: { status: 'unknown', record: null, policy: null },
     };
   });
 }
 
+// ── EXO policy mappers ─────────────────────────────────────────────────
+function mapAntiPhishPolicies(raw: any): any[] {
+  const items = raw?.value || [];
+  return items.map((p: any) => ({
+    id: p.Identity || p.Guid || p.Name,
+    displayName: p.Name || 'Unnamed Policy',
+    description: p.AdminDisplayName || null,
+    isEnabled: p.Enabled ?? true,
+    priority: p.Priority,
+    impersonationProtectionEnabled: p.EnableTargetedUserProtection ?? false,
+    mailboxIntelligenceEnabled: p.EnableMailboxIntelligence ?? false,
+    spoofIntelligenceEnabled: p.EnableSpoofIntelligence ?? true,
+    targetedUserProtection: p.TargetedUsersToProtect || [],
+    targetedDomainProtection: p.TargetedDomainsToProtect || [],
+    source: 'exchange-online-rest',
+  }));
+}
+
+function mapAntiSpamPolicies(raw: any): any[] {
+  const items = raw?.value || [];
+  return items.map((p: any) => ({
+    id: p.Identity || p.Guid || p.Name,
+    displayName: p.Name || 'Unnamed Policy',
+    description: p.AdminDisplayName || null,
+    isEnabled: true,
+    priority: p.Priority,
+    spamAction: p.SpamAction || null,
+    highConfidenceSpamAction: p.HighConfidenceSpamAction || null,
+    bulkThreshold: p.BulkThreshold ?? 7,
+    allowedSenders: p.AllowedSenders || [],
+    blockedSenders: p.BlockedSenders || [],
+    direction: 'inbound',
+    source: 'exchange-online-rest',
+  }));
+}
+
+function mapAntiMalwarePolicies(raw: any): any[] {
+  const items = raw?.value || [];
+  return items.map((p: any) => ({
+    id: p.Identity || p.Guid || p.Name,
+    displayName: p.Name || 'Unnamed Policy',
+    description: p.AdminDisplayName || null,
+    isEnabled: true,
+    priority: p.Priority,
+    zapEnabled: p.ZapEnabled ?? true,
+    enableFileFilter: p.EnableFileFilter ?? false,
+    fileFilterTypes: p.FileTypes || [],
+    action: p.Action || 'DeleteMessage',
+    source: 'exchange-online-rest',
+  }));
+}
+
+function mapSafeLinksPolicies(raw: any): any[] {
+  const items = raw?.value || [];
+  return items.map((p: any) => ({
+    id: p.Identity || p.Guid || p.Name,
+    displayName: p.Name || 'Unnamed Policy',
+    description: p.AdminDisplayName || null,
+    isEnabled: p.EnableSafeLinksForEmail ?? true,
+    priority: p.Priority,
+    scanUrls: p.ScanUrls ?? true,
+    deliverMessageAfterScan: p.DeliverMessageAfterScan ?? true,
+    trackUserClicks: p.TrackClicks ?? true,
+    allowClickThrough: p.AllowClickThrough ?? false,
+    doNotRewriteUrls: p.DoNotRewriteUrls || [],
+    source: 'exchange-online-rest',
+  }));
+}
+
+function mapSafeAttachmentsPolicies(raw: any): any[] {
+  const items = raw?.value || [];
+  return items.map((p: any) => ({
+    id: p.Identity || p.Guid || p.Name,
+    displayName: p.Name || 'Unnamed Policy',
+    description: p.AdminDisplayName || null,
+    isEnabled: p.Enable ?? true,
+    priority: p.Priority,
+    action: p.Action || 'Block',
+    redirect: p.Redirect ?? false,
+    redirectAddress: p.RedirectAddress || null,
+    actionOnError: p.ActionOnError ?? true,
+    source: 'exchange-online-rest',
+  }));
+}
+
+// ── Fallback for when EXO REST API is unavailable ──────────────────────
+function exoFallback(action: string): any[] {
+  const policyName = action.replace('fetch-', '').replace(/-/g, ' ');
+  const isDefender = action === "fetch-safe-links" || action === "fetch-safe-attachments";
+  return [{
+    id: `default-${action}`,
+    displayName: `Default ${policyName} policy`,
+    description: isDefender
+      ? "Safe Links/Attachments require Defender for Office 365. To read these policies via the Exchange REST API, ensure your service principal has the Exchange.ManageAsApp permission and Exchange Administrator role."
+      : "To read EOP policies via the Exchange REST API, ensure your service principal has the Exchange.ManageAsApp permission and Exchange Administrator role assigned in Azure AD.",
+    isEnabled: undefined,
+    source: "exo-api-unavailable",
+  }];
+}
+
+// ── Main handler ───────────────────────────────────────────────────────
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -98,7 +190,7 @@ serve(async (req) => {
       });
     }
 
-    // Get user from auth header
+    // Auth
     const authHeader = req.headers.get("Authorization");
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -111,29 +203,20 @@ serve(async (req) => {
       const { data: { user } } = await anonClient.auth.getUser(token);
       userId = user?.id || null;
     }
-
     if (!userId) {
-      // Try to get user from tenant connection
-      const { data: conn } = await supabase
-        .from("tenant_connections")
-        .select("user_id")
-        .eq("id", tenantConnectionId)
-        .single();
+      const { data: conn } = await supabase.from("tenant_connections").select("user_id").eq("id", tenantConnectionId).single();
       userId = conn?.user_id;
     }
-
     if (!userId) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Get credentials
+    // Credentials
     const { data: creds, error: credErr } = await supabase.rpc("get_decrypted_credential", {
-      p_tenant_connection_id: tenantConnectionId,
-      p_user_id: userId,
+      p_tenant_connection_id: tenantConnectionId, p_user_id: userId,
     });
-
     if (credErr || !creds?.length) {
       return new Response(JSON.stringify({ error: "No credentials found for this tenant" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -141,154 +224,192 @@ serve(async (req) => {
     }
 
     const { client_id, client_secret, tenant_id } = creds[0];
-    const token = await getGraphToken(client_id, client_secret, tenant_id);
 
     let responseData: any = null;
 
-    switch (action) {
-      case "fetch-overview": {
-        // Only fetch what we can actually verify: domains
-        const domains = await graphGet(token, "/domains");
+    // ── EXO policy fetch actions ───────────────────────────────────────
+    const exoPolicyActions: Record<string, { cmdlet: string; mapper: (raw: any) => any[] }> = {
+      "fetch-anti-phishing": { cmdlet: "AntiPhishPolicy", mapper: mapAntiPhishPolicies },
+      "fetch-anti-spam": { cmdlet: "HostedContentFilterPolicy", mapper: mapAntiSpamPolicies },
+      "fetch-anti-malware": { cmdlet: "MalwareFilterPolicy", mapper: mapAntiMalwarePolicies },
+      "fetch-safe-links": { cmdlet: "SafeLinksPolicy", mapper: mapSafeLinksPolicies },
+      "fetch-safe-attachments": { cmdlet: "SafeAttachmentPolicy", mapper: mapSafeAttachmentsPolicies },
+    };
 
-        const domainList = domains?.value || [];
-        const domainAuth = parseDomainAuth(domainList);
-        const domainsWithFullAuth = domainAuth.filter(
-          (d: any) => d.spf.status === 'pass' && d.dkim.status === 'pass'
-        ).length;
-
-        // Protection score based ONLY on verifiable data (domain auth)
-        // We cannot verify EOP/Defender policy status via Graph API
-        const domainAuthScore = domainList.length > 0
-          ? Math.round((domainsWithFullAuth / domainList.length) * 100)
-          : 0;
-
-        responseData = {
-          // These are NOT verifiable via Graph API — marked as null
-          antiPhishingCount: null,
-          antiSpamCount: null,
-          antiMalwareCount: null,
-          safeLinksCount: null,
-          safeAttachmentsCount: null,
-          policyDataAvailable: false,
-          // These ARE verifiable
-          domainCount: domainList.length,
-          domainsWithFullAuth,
-          protectionScore: domainAuthScore,
-          protectionScoreNote: "Based on domain authentication (SPF/DKIM) only. EOP and Defender policy status cannot be verified via Microsoft Graph API.",
-        };
-        break;
+    if (exoPolicyActions[action]) {
+      const { cmdlet, mapper } = exoPolicyActions[action];
+      try {
+        const exoToken = await getExoToken(client_id, client_secret, tenant_id);
+        const raw = await exoGet(exoToken, tenant_id, cmdlet);
+        if (raw) {
+          responseData = mapper(raw);
+        } else {
+          responseData = exoFallback(action);
+        }
+      } catch (err) {
+        console.error(`EXO token/API error for ${action}:`, err);
+        responseData = exoFallback(action);
       }
+    } else {
+      // Non-EXO actions
+      const graphToken = await getGraphToken(client_id, client_secret, tenant_id);
 
-      case "fetch-anti-phishing":
-      case "fetch-anti-spam":
-      case "fetch-anti-malware":
-      case "fetch-safe-links":
-      case "fetch-safe-attachments": {
-        const policyName = action.replace('fetch-', '').replace(/-/g, ' ');
-        const isDefenderFeature = action === "fetch-safe-links" || action === "fetch-safe-attachments";
-        
-        responseData = [{
-          id: `default-${action}`,
-          displayName: `Default ${policyName} policy`,
-          description: isDefenderFeature
-            ? "Safe Links and Safe Attachments require a Microsoft Defender for Office 365 license. These policies cannot be read via Microsoft Graph API — use the Microsoft 365 Defender portal or PowerShell to verify configuration."
-            : "EOP policy details are not available via Microsoft Graph API. Use the Microsoft 365 Defender portal or Exchange Online PowerShell to view and manage this policy. Run AI Recommendations for a configuration analysis based on available tenant data.",
-          isEnabled: undefined, // Status unknown — cannot be verified via Graph API
-          source: "graph-api-unavailable",
-          priority: 0,
-        }];
-        break;
-      }
+      switch (action) {
+        case "fetch-overview": {
+          const domains = await graphGet(graphToken, "/domains");
+          const domainList = domains?.value || [];
+          const domainAuth = parseDomainAuth(domainList);
+          const domainsWithFullAuth = domainAuth.filter((d: any) => d.spf.status === 'pass' && d.dkim.status === 'pass').length;
+          const domainAuthScore = domainList.length > 0 ? Math.round((domainsWithFullAuth / domainList.length) * 100) : 0;
 
-      case "fetch-domain-auth": {
-        const domains = await graphGet(token, "/domains");
-        const domainList = domains?.value || [];
+          // Try to get EXO policy counts
+          let policyCounts: any = {
+            antiPhishingCount: null, antiSpamCount: null, antiMalwareCount: null,
+            safeLinksCount: null, safeAttachmentsCount: null, policyDataAvailable: false,
+          };
 
-        // Fetch service config records for each domain
-        const enriched = await Promise.all(
-          domainList.map(async (d: any) => {
-            const records = await graphGet(token, `/domains/${d.id}/serviceConfigurationRecords`);
-            return { ...d, serviceConfigurationRecords: records?.value || [] };
-          })
-        );
+          try {
+            const exoToken = await getExoToken(client_id, client_secret, tenant_id);
+            const [antiPhish, antiSpam, antiMalware, safeLinks, safeAttachments] = await Promise.all([
+              exoGet(exoToken, tenant_id, "AntiPhishPolicy"),
+              exoGet(exoToken, tenant_id, "HostedContentFilterPolicy"),
+              exoGet(exoToken, tenant_id, "MalwareFilterPolicy"),
+              exoGet(exoToken, tenant_id, "SafeLinksPolicy"),
+              exoGet(exoToken, tenant_id, "SafeAttachmentPolicy"),
+            ]);
 
-        responseData = parseDomainAuth(enriched);
-        break;
-      }
+            policyCounts = {
+              antiPhishingCount: antiPhish?.value?.length ?? null,
+              antiSpamCount: antiSpam?.value?.length ?? null,
+              antiMalwareCount: antiMalware?.value?.length ?? null,
+              safeLinksCount: safeLinks?.value?.length ?? null,
+              safeAttachmentsCount: safeAttachments?.value?.length ?? null,
+              policyDataAvailable: true,
+            };
+          } catch (err) {
+            console.error("EXO overview counts unavailable:", err);
+          }
 
-      case "ai-recommendations": {
-        // Gather all available data for AI analysis
-        const [domains, securityAlerts] = await Promise.all([
-          graphGet(token, "/domains"),
-          graphGet(token, "/security/alerts_v2?$top=10"),
-        ]);
+          // Compute overall protection score including policy data if available
+          let protectionScore = domainAuthScore;
+          if (policyCounts.policyDataAvailable) {
+            const hasAntiPhish = (policyCounts.antiPhishingCount ?? 0) > 0;
+            const hasAntiSpam = (policyCounts.antiSpamCount ?? 0) > 0;
+            const hasAntiMalware = (policyCounts.antiMalwareCount ?? 0) > 0;
+            const hasSafeLinks = (policyCounts.safeLinksCount ?? 0) > 0;
+            const hasSafeAttachments = (policyCounts.safeAttachmentsCount ?? 0) > 0;
+            const policyScore = [hasAntiPhish, hasAntiSpam, hasAntiMalware, hasSafeLinks, hasSafeAttachments]
+              .filter(Boolean).length;
+            // Weighted: 50% domain auth, 50% policy coverage
+            protectionScore = Math.round((domainAuthScore * 0.5) + (policyScore / 5 * 100 * 0.5));
+          }
 
-        const domainList = domains?.value || [];
-        const domainAuth = parseDomainAuth(domainList);
-        const alerts = securityAlerts?.value || [];
-
-        // Build context for AI
-        const context = {
-          domains: domainAuth,
-          recentAlerts: alerts.slice(0, 5).map((a: any) => ({
-            title: a.title,
-            severity: a.severity,
-            category: a.category,
-          })),
-          tenantId: tenant_id,
-        };
-
-        // Call Lovable AI for recommendations
-        const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-        if (!LOVABLE_API_KEY) {
-          return new Response(JSON.stringify({ error: "AI not configured" }), {
-            status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          responseData = {
+            ...policyCounts,
+            domainCount: domainList.length,
+            domainsWithFullAuth,
+            protectionScore,
+            protectionScoreNote: policyCounts.policyDataAvailable
+              ? "Based on domain authentication (SPF/DKIM) and EOP/Defender policy coverage."
+              : "Based on domain authentication (SPF/DKIM) only. Add Exchange.ManageAsApp permission to also verify EOP/Defender policies.",
+          };
+          break;
         }
 
-        const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${LOVABLE_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "google/gemini-3-flash-preview",
-            messages: [
-              {
-                role: "system",
-                content: `You are an email security expert specializing in Microsoft 365 Exchange Online Protection and Defender for Office 365.
+        case "fetch-domain-auth": {
+          const domains = await graphGet(graphToken, "/domains");
+          const domainList = domains?.value || [];
+          const enriched = await Promise.all(
+            domainList.map(async (d: any) => {
+              const records = await graphGet(graphToken, `/domains/${d.id}/serviceConfigurationRecords`);
+              return { ...d, serviceConfigurationRecords: records?.value || [] };
+            })
+          );
+          responseData = parseDomainAuth(enriched);
+          break;
+        }
 
-CRITICAL RULES:
+        case "ai-recommendations": {
+          const [domains, securityAlerts] = await Promise.all([
+            graphGet(graphToken, "/domains"),
+            graphGet(graphToken, "/security/alerts_v2?$top=10"),
+          ]);
+          const domainList = domains?.value || [];
+          const domainAuth = parseDomainAuth(domainList);
+          const alerts = securityAlerts?.value || [];
+
+          // Also try EXO data for richer AI analysis
+          let exoPolicyData: any = null;
+          try {
+            const exoToken = await getExoToken(client_id, client_secret, tenant_id);
+            const [antiPhish, antiSpam, antiMalware, safeLinks, safeAttachments] = await Promise.all([
+              exoGet(exoToken, tenant_id, "AntiPhishPolicy"),
+              exoGet(exoToken, tenant_id, "HostedContentFilterPolicy"),
+              exoGet(exoToken, tenant_id, "MalwareFilterPolicy"),
+              exoGet(exoToken, tenant_id, "SafeLinksPolicy"),
+              exoGet(exoToken, tenant_id, "SafeAttachmentPolicy"),
+            ]);
+            exoPolicyData = {
+              antiPhishing: mapAntiPhishPolicies(antiPhish),
+              antiSpam: mapAntiSpamPolicies(antiSpam),
+              antiMalware: mapAntiMalwarePolicies(antiMalware),
+              safeLinks: mapSafeLinksPolicies(safeLinks),
+              safeAttachments: mapSafeAttachmentsPolicies(safeAttachments),
+            };
+          } catch (err) {
+            console.error("EXO data unavailable for AI analysis:", err);
+          }
+
+          const context = {
+            domains: domainAuth,
+            recentAlerts: alerts.slice(0, 5).map((a: any) => ({ title: a.title, severity: a.severity, category: a.category })),
+            tenantId: tenant_id,
+            exoPolicies: exoPolicyData,
+          };
+
+          const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+          if (!LOVABLE_API_KEY) {
+            return new Response(JSON.stringify({ error: "AI not configured" }), {
+              status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+
+          const hasExoData = exoPolicyData !== null;
+          const systemPrompt = `You are an email security expert specializing in Microsoft 365 Exchange Online Protection and Defender for Office 365.
+
+${hasExoData ? `IMPORTANT: You have FULL EXO policy data available via the Exchange Online REST API. You CAN verify EOP policy settings (anti-phishing, anti-spam, anti-malware) and Defender features (Safe Links, Safe Attachments).
+For each recommendation, set confidence to "verified" since you have the actual policy data.` : `CRITICAL RULES:
 - You can ONLY verify domain authentication (SPF, DKIM, DMARC) from the provided DNS data.
-- You CANNOT verify EOP policy settings (anti-phishing, anti-spam, anti-malware) because they are NOT available via Microsoft Graph API.
-- You CANNOT verify Defender for Office 365 features (Safe Links, Safe Attachments) because they are NOT available via Microsoft Graph API.
-- For anything you cannot verify, you MUST clearly state "Cannot be verified via Graph API" and frame it as a recommendation to CHECK/VERIFY rather than claiming it is missing or disabled.
-- NEVER state that a policy "is not configured" or "is disabled" unless you have actual data proving it.
-- DO distinguish between CONFIRMED issues (e.g., missing SPF record verified from DNS) and UNVERIFIABLE items (e.g., EOP policy settings).`,
-              },
-              {
-                role: "user",
-                content: `Analyze this M365 tenant's email security based on ONLY the verifiable data provided.
+- You CANNOT verify EOP or Defender policies because Exchange.ManageAsApp permission is not configured.
+- For unverifiable items, set confidence to "recommended" and frame as suggestions to CHECK/VERIFY.
+- NEVER state a policy "is not configured" unless you have actual data proving it.`}`;
 
-VERIFIABLE DATA (from Microsoft Graph API):
+          const userPrompt = `Analyze this M365 tenant's email security.
+
+VERIFIABLE DATA:
 ${JSON.stringify(context, null, 2)}
 
-IMPORTANT: The data above contains domain authentication records (SPF/DKIM) which ARE verifiable.
-EOP policies (anti-phishing, anti-spam, anti-malware) and Defender features (Safe Links, Safe Attachments) are NOT included because Microsoft Graph API does not expose them — do NOT assume they are missing.
+${hasExoData ? 'The exoPolicies field contains REAL policy data from Exchange Online REST API. Analyze it for misconfigurations, weak settings, and best practice gaps.' : 'EXO policy data is NOT available. Focus on domain authentication and provide best-practice recommendations for policies.'}
 
 For each recommendation include a "confidence" field:
-- "verified" = based on actual data (e.g., SPF record missing from DNS)
-- "recommended" = best practice that should be verified manually (e.g., check if Safe Links is enabled)
+- "verified" = based on actual data
+- "recommended" = best practice to verify manually
 
 Focus on:
-1. SPF/DKIM/DMARC gaps — these are VERIFIED from the data
-2. EOP policy best practices — frame as "verify in Defender portal" recommendations
-3. Defender for Office 365 features — frame as "verify licensing and configuration" recommendations`,
-              },
-            ],
-            tools: [
-              {
+1. SPF/DKIM/DMARC gaps
+2. EOP policy settings and gaps
+3. Defender for Office 365 configuration`;
+
+          const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: "google/gemini-3-flash-preview",
+              messages: [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: userPrompt },
+              ],
+              tools: [{
                 type: "function",
                 function: {
                   name: "return_recommendations",
@@ -305,7 +426,7 @@ Focus on:
                             severity: { type: "string", enum: ["critical", "high", "medium", "low"] },
                             description: { type: "string" },
                             action: { type: "string" },
-                            confidence: { type: "string", enum: ["verified", "recommended"], description: "verified = confirmed from data, recommended = best practice to check manually" },
+                            confidence: { type: "string", enum: ["verified", "recommended"] },
                           },
                           required: ["title", "severity", "description", "action", "confidence"],
                           additionalProperties: false,
@@ -316,49 +437,35 @@ Focus on:
                     additionalProperties: false,
                   },
                 },
-              },
-            ],
-            tool_choice: { type: "function", function: { name: "return_recommendations" } },
-          }),
-        });
+              }],
+              tool_choice: { type: "function", function: { name: "return_recommendations" } },
+            }),
+          });
 
-        if (!aiResp.ok) {
-          if (aiResp.status === 429) {
-            return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again later." }), {
-              status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-            });
+          if (!aiResp.ok) {
+            if (aiResp.status === 429) return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again later." }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            if (aiResp.status === 402) return new Response(JSON.stringify({ error: "AI credits exhausted. Please add funds." }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            const t = await aiResp.text();
+            console.error("AI error:", aiResp.status, t);
+            throw new Error("AI analysis failed");
           }
-          if (aiResp.status === 402) {
-            return new Response(JSON.stringify({ error: "AI credits exhausted. Please add funds." }), {
-              status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-            });
+
+          const aiResult = await aiResp.json();
+          const toolCall = aiResult.choices?.[0]?.message?.tool_calls?.[0];
+          let recommendations = [];
+          if (toolCall?.function?.arguments) {
+            try { recommendations = JSON.parse(toolCall.function.arguments).recommendations || []; } catch { console.error("Failed to parse AI response"); }
           }
-          const t = await aiResp.text();
-          console.error("AI error:", aiResp.status, t);
-          throw new Error("AI analysis failed");
+
+          responseData = { recommendations };
+          break;
         }
 
-        const aiResult = await aiResp.json();
-        const toolCall = aiResult.choices?.[0]?.message?.tool_calls?.[0];
-        let recommendations = [];
-
-        if (toolCall?.function?.arguments) {
-          try {
-            const parsed = JSON.parse(toolCall.function.arguments);
-            recommendations = parsed.recommendations || [];
-          } catch {
-            console.error("Failed to parse AI tool call response");
-          }
-        }
-
-        responseData = { recommendations };
-        break;
+        default:
+          return new Response(JSON.stringify({ error: `Unknown action: ${action}` }), {
+            status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
       }
-
-      default:
-        return new Response(JSON.stringify({ error: `Unknown action: ${action}` }), {
-          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
     }
 
     return new Response(JSON.stringify({ data: responseData }), {
