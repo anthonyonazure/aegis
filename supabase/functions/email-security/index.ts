@@ -257,23 +257,34 @@ serve(async (req) => {
             messages: [
               {
                 role: "system",
-                content: `You are an email security expert specializing in Microsoft 365 Exchange Online Protection and Defender for Office 365. Analyze the provided tenant configuration and return actionable security recommendations. You MUST use ONLY the provided data — do not fabricate or assume any configuration details not present in the input.`,
+                content: `You are an email security expert specializing in Microsoft 365 Exchange Online Protection and Defender for Office 365.
+
+CRITICAL RULES:
+- You can ONLY verify domain authentication (SPF, DKIM, DMARC) from the provided DNS data.
+- You CANNOT verify EOP policy settings (anti-phishing, anti-spam, anti-malware) because they are NOT available via Microsoft Graph API.
+- You CANNOT verify Defender for Office 365 features (Safe Links, Safe Attachments) because they are NOT available via Microsoft Graph API.
+- For anything you cannot verify, you MUST clearly state "Cannot be verified via Graph API" and frame it as a recommendation to CHECK/VERIFY rather than claiming it is missing or disabled.
+- NEVER state that a policy "is not configured" or "is disabled" unless you have actual data proving it.
+- DO distinguish between CONFIRMED issues (e.g., missing SPF record verified from DNS) and UNVERIFIABLE items (e.g., EOP policy settings).`,
               },
               {
                 role: "user",
-                content: `Analyze this M365 tenant's email security configuration and provide prioritized recommendations to strengthen email authentication and domain protection.
+                content: `Analyze this M365 tenant's email security based on ONLY the verifiable data provided.
 
-Tenant data:
+VERIFIABLE DATA (from Microsoft Graph API):
 ${JSON.stringify(context, null, 2)}
 
-Return a JSON array of recommendations, each with: title, severity (critical/high/medium/low), description, action.
-Focus on:
-1. SPF/DKIM/DMARC gaps for each domain
-2. EOP policy hardening (anti-phishing impersonation protection, anti-spam thresholds, anti-malware ZAP)
-3. Safe Links and Safe Attachments enablement
-4. General email security best practices based on the alerts seen
+IMPORTANT: The data above contains domain authentication records (SPF/DKIM) which ARE verifiable.
+EOP policies (anti-phishing, anti-spam, anti-malware) and Defender features (Safe Links, Safe Attachments) are NOT included because Microsoft Graph API does not expose them — do NOT assume they are missing.
 
-Return ONLY the JSON array, no markdown.`,
+For each recommendation include a "confidence" field:
+- "verified" = based on actual data (e.g., SPF record missing from DNS)
+- "recommended" = best practice that should be verified manually (e.g., check if Safe Links is enabled)
+
+Focus on:
+1. SPF/DKIM/DMARC gaps — these are VERIFIED from the data
+2. EOP policy best practices — frame as "verify in Defender portal" recommendations
+3. Defender for Office 365 features — frame as "verify licensing and configuration" recommendations`,
               },
             ],
             tools: [
