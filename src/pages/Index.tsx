@@ -29,6 +29,7 @@ import { SecureScoreDashboardView } from '@/components/views/SecureScoreDashboar
 import { AutomatedBackupsView } from '@/components/views/AutomatedBackupsView';
 import { PermissionHealthView } from '@/components/views/PermissionHealthView';
 import { PermissionsReferenceView } from '@/components/views/PermissionsReferenceView';
+import { PermissionsChecklistView } from '@/components/views/PermissionsChecklistView';
 import { DocumentationView } from '@/components/views/DocumentationView';
 import { GovernanceCenterView, RemediationContext } from '@/components/views/GovernanceCenterView';
 import { CopilotAgentsView } from '@/components/views/CopilotAgentsView';
@@ -106,6 +107,7 @@ const SIMPLE_VIEWS: Record<string, React.ComponentType> = {
   'copilot-agents': CopilotAgentsView,
   'copilot-advisor': CopilotReadinessAdvisorView,
   'permissions-reference': PermissionsReferenceView,
+  'permissions-checklist': PermissionsChecklistView,
   'schedules': ScheduledExportsView,
   'automated-backups': AutomatedBackupsView,
   'webhooks': WebhooksView,
