@@ -195,8 +195,28 @@ export const PERMISSION_REQUIREMENTS: PermissionRequirement[] = [
     requiredPermissions: ['Exchange.ManageAsApp'],
   },
   {
+    resourceId: 'exchange/anti-phishing',
+    resourceName: 'Anti-Phishing Policies',
+    requiredPermissions: ['Exchange.ManageAsApp'],
+  },
+  {
     resourceId: 'exchange/anti-spam',
     resourceName: 'Anti-Spam Policies',
+    requiredPermissions: ['Exchange.ManageAsApp'],
+  },
+  {
+    resourceId: 'exchange/anti-malware',
+    resourceName: 'Anti-Malware Policies',
+    requiredPermissions: ['Exchange.ManageAsApp'],
+  },
+  {
+    resourceId: 'exchange/safe-links',
+    resourceName: 'Safe Links Policies',
+    requiredPermissions: ['Exchange.ManageAsApp'],
+  },
+  {
+    resourceId: 'exchange/safe-attachments',
+    resourceName: 'Safe Attachments Policies',
     requiredPermissions: ['Exchange.ManageAsApp'],
   },
   {
