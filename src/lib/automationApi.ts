@@ -132,8 +132,21 @@ export const POWERSHELL_IMPORT_RESOURCE_TYPES = [
   'teams/app-setup-policies',
 ];
 
+// EXO REST API resource types (fetched via email-security InvokeCommand)
+export const EXO_RESOURCE_TYPES: Record<string, string> = {
+  'exchange/anti-spam': 'fetch-anti-spam',
+  'exchange/anti-phishing': 'fetch-anti-phishing',
+  'exchange/anti-malware': 'fetch-anti-malware',
+  'exchange/safe-links': 'fetch-safe-links',
+  'exchange/safe-attachments': 'fetch-safe-attachments',
+};
+
 export function isPowerShellResource(resourceType: string): boolean {
   return POWERSHELL_RESOURCE_TYPES.includes(resourceType);
+}
+
+export function isExoResource(resourceType: string): boolean {
+  return resourceType in EXO_RESOURCE_TYPES;
 }
 
 export function isPowerShellImportResource(resourceType: string): boolean {
