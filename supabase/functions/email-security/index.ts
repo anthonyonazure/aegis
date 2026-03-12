@@ -288,11 +288,11 @@ serve(async (req) => {
           try {
             const exoToken = await getExoToken(client_id, client_secret, tenant_id);
             const [antiPhish, antiSpam, antiMalware, safeLinks, safeAttachments] = await Promise.all([
-              exoGet(exoToken, tenant_id, "AntiPhishPolicy"),
-              exoGet(exoToken, tenant_id, "HostedContentFilterPolicy"),
-              exoGet(exoToken, tenant_id, "MalwareFilterPolicy"),
-              exoGet(exoToken, tenant_id, "SafeLinksPolicy"),
-              exoGet(exoToken, tenant_id, "SafeAttachmentPolicy"),
+              exoInvokeCommand(exoToken, tenant_id, "Get-AntiPhishPolicy"),
+              exoInvokeCommand(exoToken, tenant_id, "Get-HostedContentFilterPolicy"),
+              exoInvokeCommand(exoToken, tenant_id, "Get-MalwareFilterPolicy"),
+              exoInvokeCommand(exoToken, tenant_id, "Get-SafeLinksPolicy"),
+              exoInvokeCommand(exoToken, tenant_id, "Get-SafeAttachmentPolicy"),
             ]);
 
             policyCounts = {
