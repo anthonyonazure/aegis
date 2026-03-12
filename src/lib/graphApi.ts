@@ -331,11 +331,19 @@ export interface HybridExportResult {
     data?: unknown;
     error?: string;
   }>;
+  exoResults?: Array<{
+    resource: string;
+    success: boolean;
+    count?: number;
+    error?: string;
+  }>;
   automationJobId?: string;
   automationSkipped?: boolean;
   automationSkipReason?: string;
   azureSkipped?: boolean;
   azureSkipReason?: string;
+  exoSkipped?: boolean;
+  exoSkipReason?: string;
   error?: string;
 }
 
