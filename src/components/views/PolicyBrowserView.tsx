@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Shield,
+  ShieldCheck,
   Lock,
   Laptop,
   Settings,
@@ -27,6 +28,10 @@ import {
   Cloud,
   History,
   Upload,
+  Mail,
+  MessageSquare,
+  Users,
+  Sparkles,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -85,6 +90,7 @@ const POLICY_CATEGORIES = [
     policies: [
       { id: 'ca-policies', name: 'CA Policies', endpoint: '/identity/conditionalAccess/policies' },
       { id: 'named-locations', name: 'Named Locations', endpoint: '/identity/conditionalAccess/namedLocations' },
+      { id: 'auth-contexts', name: 'Auth Contexts', endpoint: '/identity/conditionalAccess/authenticationContextClassReferences' },
       { id: 'auth-strengths', name: 'Auth Strengths', endpoint: '/identity/conditionalAccess/authenticationStrengths/policies' },
     ],
   },
@@ -96,31 +102,85 @@ const POLICY_CATEGORIES = [
     policies: [
       { id: 'device-configurations', name: 'Device Configurations', endpoint: '/deviceManagement/deviceConfigurations' },
       { id: 'compliance-policies', name: 'Compliance Policies', endpoint: '/deviceManagement/deviceCompliancePolicies' },
+      { id: 'app-configurations', name: 'App Configuration Policies', endpoint: '/deviceAppManagement/mobileAppConfigurations' },
       { id: 'autopilot', name: 'Autopilot Profiles', endpoint: '/deviceManagement/windowsAutopilotDeploymentProfiles' },
+      { id: 'enrollment-restrictions', name: 'Enrollment Restrictions', endpoint: '/deviceManagement/deviceEnrollmentConfigurations' },
       { id: 'scripts', name: 'PowerShell Scripts', endpoint: '/deviceManagement/deviceManagementScripts' },
+      { id: 'win32-apps', name: 'Win32 Applications', endpoint: '/deviceAppManagement/mobileApps' },
+      { id: 'update-rings', name: 'Update Rings', endpoint: '/deviceManagement/deviceConfigurations' },
     ],
   },
   {
     id: 'defender',
     name: 'Defender',
-    icon: Shield,
+    icon: ShieldCheck,
     color: 'text-red-500',
     policies: [
       { id: 'security-baselines', name: 'Security Baselines', endpoint: '/deviceManagement/configurationPolicies', useBeta: true },
       { id: 'asr-policies', name: 'ASR Policies', endpoint: '/deviceManagement/configurationPolicies', useBeta: true },
       { id: 'antivirus-policies', name: 'Antivirus Policies', endpoint: '/deviceManagement/configurationPolicies', useBeta: true },
+      { id: 'firewall-policies', name: 'Firewall Policies', endpoint: '/deviceManagement/configurationPolicies', useBeta: true },
+      { id: 'edr-policies', name: 'EDR Policies', endpoint: '/deviceManagement/configurationPolicies', useBeta: true },
     ],
   },
   {
     id: 'entra-id',
     name: 'Entra ID',
-    icon: Building2,
+    icon: Users,
     color: 'text-purple-500',
     policies: [
       { id: 'groups', name: 'Groups', endpoint: '/groups' },
       { id: 'app-registrations', name: 'App Registrations', endpoint: '/applications' },
+      { id: 'enterprise-apps', name: 'Enterprise Applications', endpoint: '/servicePrincipals' },
       { id: 'admin-units', name: 'Admin Units', endpoint: '/administrativeUnits' },
+      { id: 'roles', name: 'Directory Roles', endpoint: '/directoryRoles' },
       { id: 'directory-settings', name: 'Directory Settings', endpoint: '/groupSettings' },
+      { id: 'auth-methods-policy', name: 'Auth Methods Policy', endpoint: '/policies/authenticationMethodsPolicy' },
+      { id: 'cross-tenant-access', name: 'Cross-Tenant Access', endpoint: '/policies/crossTenantAccessPolicy' },
+      { id: 'permission-grant-policies', name: 'Permission Grant Policies', endpoint: '/policies/permissionGrantPolicies' },
+    ],
+  },
+  {
+    id: 'exchange',
+    name: 'Exchange Online',
+    icon: Mail,
+    color: 'text-yellow-500',
+    policies: [
+      { id: 'transport-rules', name: 'Transport Rules', endpoint: '', isExo: true },
+      { id: 'connectors', name: 'Connectors', endpoint: '', isExo: true },
+      { id: 'accepted-domains', name: 'Accepted Domains', endpoint: '/domains' },
+      { id: 'anti-spam', name: 'Anti-Spam Policies', endpoint: '', isExo: true },
+      { id: 'anti-phishing', name: 'Anti-Phishing Policies', endpoint: '', isExo: true },
+      { id: 'anti-malware', name: 'Anti-Malware Policies', endpoint: '', isExo: true },
+      { id: 'safe-links', name: 'Safe Links Policies', endpoint: '', isExo: true },
+      { id: 'safe-attachments', name: 'Safe Attachments Policies', endpoint: '', isExo: true },
+      { id: 'dlp-policies', name: 'DLP Policies', endpoint: '', isExo: true },
+      { id: 'org-config', name: 'Organization Config', endpoint: '', isExo: true },
+      { id: 'owa-policies', name: 'OWA Mailbox Policies', endpoint: '', isExo: true },
+      { id: 'mobile-device-policies', name: 'Mobile Device Policies', endpoint: '', isExo: true },
+      { id: 'retention-policies', name: 'Retention Policies', endpoint: '', isExo: true },
+      { id: 'mailbox-policies', name: 'Mailbox Policies', endpoint: '', isExo: true },
+    ],
+  },
+  {
+    id: 'purview',
+    name: 'Microsoft Purview',
+    icon: Eye,
+    color: 'text-teal-500',
+    policies: [
+      { id: 'sensitivity-labels', name: 'Sensitivity Labels', endpoint: '/security/informationProtection/sensitivityLabels', useBeta: true },
+      { id: 'retention-policies', name: 'Retention Labels', endpoint: '/security/labels/retentionLabels', useBeta: true },
+    ],
+  },
+  {
+    id: 'teams',
+    name: 'Microsoft Teams',
+    icon: MessageSquare,
+    color: 'text-indigo-500',
+    policies: [
+      { id: 'app-policies', name: 'App Permission Policies', endpoint: '/appCatalogs/teamsApps' },
+      { id: 'guest-policies', name: 'Guest Access Settings', endpoint: '/teamwork/teamSettings', useBeta: true },
+      { id: 'external-access', name: 'External Access Settings', endpoint: '/teamwork/teamSettings', useBeta: true },
     ],
   },
 ];
@@ -170,7 +230,7 @@ const EXPORT_FORMATS: { id: ExportFormat; name: string; icon: React.ElementType;
 ];
 
 export const PolicyBrowserView = () => {
-  const { selectedTenantId, tenants, isConnected, tenantName, accessToken } = useTenant();
+  const { selectedTenantId, tenants, isConnected, tenantName, accessToken, connectionId } = useTenant();
   const selectedTenant = tenants.find(t => t.id === selectedTenantId);
   const displayTenantName = tenantName || selectedTenant?.displayName || selectedTenant?.tenantName;
   // Customer name will come from loaded export source info or we'll fetch it separately
@@ -390,8 +450,11 @@ export const PolicyBrowserView = () => {
     setSelectedExportJobId(null);
   };
 
-  const fetchPolicies = async (categoryId: string, policyTypeId: string, endpoint: string, useBeta = false) => {
-    if (!accessToken || !selectedTenantId) return;
+  const fetchPolicies = async (categoryId: string, policyTypeId: string, endpoint: string, useBeta = false, isExo = false) => {
+    if (!selectedTenantId) return;
+    // EXO policies need connectionId, Graph policies need accessToken
+    if (!isExo && !accessToken) return;
+    if (isExo && !connectionId) return;
 
     const key = `${categoryId}/${policyTypeId}`;
     
@@ -412,47 +475,77 @@ export const PolicyBrowserView = () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
 
-      const response = await supabase.functions.invoke('graph-api', {
-        body: {
-          action: 'fetch',
-          accessToken,
-          resources: [`${categoryId}/${policyTypeId}`],
-        },
-      });
+      let policies: PolicyItem[] = [];
 
-      if (response.error) {
-        throw new Error(response.error.message || 'Failed to fetch policies');
-      }
+      if (isExo) {
+        // Route through email-security edge function
+        const exoAction = `fetch-${policyTypeId}`;
+        const response = await supabase.functions.invoke('email-security', {
+          body: {
+            action: exoAction,
+            tenantConnectionId: connectionId,
+          },
+        });
 
-      const results = response.data?.results || [];
-      const policies: PolicyItem[] = [];
-      
-      for (const result of results) {
-        if (result.success && result.data?.value) {
-          for (const item of result.data.value) {
+        if (response.error) {
+          throw new Error(response.error.message || 'Failed to fetch EXO policies');
+        }
+
+        const items = response.data?.data ?? response.data;
+        if (Array.isArray(items)) {
+          for (const item of items) {
             policies.push({
-              id: item.id,
-              displayName: item.displayName || item.name || item.id,
-              description: item.description,
-              createdDateTime: item.createdDateTime,
-              modifiedDateTime: item.modifiedDateTime || item.lastModifiedDateTime,
-              state: item.state,
-              data: item,
+              id: item.id || `exo-${policies.length}`,
+              displayName: item.displayName || item.name || item.Name || 'Unnamed Policy',
+              description: item.description || item.adminDisplayName || undefined,
+              state: item.isEnabled === false ? 'disabled' : item.isEnabled === true ? 'enabled' : undefined,
+              data: item.rawData || item,
             });
           }
-        } else if (result.success && result.data && !result.data.value) {
-          // Single object response
-          const item = result.data;
-          if (item.id) {
-            policies.push({
-              id: item.id,
-              displayName: item.displayName || item.name || item.id,
-              description: item.description,
-              createdDateTime: item.createdDateTime,
-              modifiedDateTime: item.modifiedDateTime,
-              state: item.state,
-              data: item,
-            });
+        }
+      } else {
+        // Route through graph-api edge function
+        const response = await supabase.functions.invoke('graph-api', {
+          body: {
+            action: 'fetch',
+            accessToken,
+            resources: [`${categoryId}/${policyTypeId}`],
+          },
+        });
+
+        if (response.error) {
+          throw new Error(response.error.message || 'Failed to fetch policies');
+        }
+
+        const results = response.data?.results || [];
+        
+        for (const result of results) {
+          if (result.success && result.data?.value) {
+            for (const item of result.data.value) {
+              policies.push({
+                id: item.id,
+                displayName: item.displayName || item.name || item.id,
+                description: item.description,
+                createdDateTime: item.createdDateTime,
+                modifiedDateTime: item.modifiedDateTime || item.lastModifiedDateTime,
+                state: item.state,
+                data: item,
+              });
+            }
+          } else if (result.success && result.data && !result.data.value) {
+            // Single object response
+            const item = result.data;
+            if (item.id) {
+              policies.push({
+                id: item.id,
+                displayName: item.displayName || item.name || item.id,
+                description: item.description,
+                createdDateTime: item.createdDateTime,
+                modifiedDateTime: item.modifiedDateTime,
+                state: item.state,
+                data: item,
+              });
+            }
           }
         }
       }
@@ -491,7 +584,7 @@ export const PolicyBrowserView = () => {
               c => c.categoryId === categoryId && c.policyTypeId === policyType.id
             );
             if (!existing) {
-              fetchPolicies(categoryId, policyType.id, policyType.endpoint);
+              fetchPolicies(categoryId, policyType.id, policyType.endpoint, (policyType as any).useBeta, (policyType as any).isExo);
             }
           }
         }

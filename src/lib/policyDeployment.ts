@@ -56,18 +56,45 @@ export interface GroupedPolicy {
  */
 function getEndpointForResourceType(categoryId: string, policyTypeId: string): string {
   const endpoints: Record<string, string> = {
+    // Conditional Access
     'conditional-access/ca-policies': 'identity/conditionalAccess/policies',
     'conditional-access/named-locations': 'identity/conditionalAccess/namedLocations',
-    // Graph uses `authenticationStrength` (singular) in the path
+    'conditional-access/auth-contexts': 'identity/conditionalAccess/authenticationContextClassReferences',
     'conditional-access/auth-strengths': 'identity/conditionalAccess/authenticationStrength/policies',
+    // Intune
     'intune/device-configurations': 'deviceManagement/deviceConfigurations',
     'intune/compliance-policies': 'deviceManagement/deviceCompliancePolicies',
+    'intune/app-configurations': 'deviceAppManagement/mobileAppConfigurations',
     'intune/autopilot': 'deviceManagement/windowsAutopilotDeploymentProfiles',
+    'intune/enrollment-restrictions': 'deviceManagement/deviceEnrollmentConfigurations',
     'intune/scripts': 'deviceManagement/deviceManagementScripts',
+    'intune/win32-apps': 'deviceAppManagement/mobileApps',
+    'intune/update-rings': 'deviceManagement/deviceConfigurations',
+    // Entra ID
     'entra-id/groups': 'groups',
     'entra-id/app-registrations': 'applications',
+    'entra-id/enterprise-apps': 'servicePrincipals',
     'entra-id/admin-units': 'administrativeUnits',
+    'entra-id/roles': 'directoryRoles',
     'entra-id/directory-settings': 'groupSettings',
+    'entra-id/auth-methods-policy': 'policies/authenticationMethodsPolicy',
+    'entra-id/cross-tenant-access': 'policies/crossTenantAccessPolicy',
+    'entra-id/permission-grant-policies': 'policies/permissionGrantPolicies',
+    // Defender
+    'defender/asr-policies': 'deviceManagement/configurationPolicies',
+    'defender/antivirus-policies': 'deviceManagement/configurationPolicies',
+    'defender/firewall-policies': 'deviceManagement/configurationPolicies',
+    'defender/edr-policies': 'deviceManagement/configurationPolicies',
+    'defender/security-baselines': 'deviceManagement/configurationPolicies',
+    // Exchange (Graph-backed)
+    'exchange/accepted-domains': 'domains',
+    // Purview
+    'purview/sensitivity-labels': 'security/informationProtection/sensitivityLabels',
+    'purview/retention-policies': 'security/labels/retentionLabels',
+    // Teams
+    'teams/app-policies': 'appCatalogs/teamsApps',
+    'teams/guest-policies': 'teamwork/teamSettings',
+    'teams/external-access': 'teamwork/teamSettings',
   };
   return endpoints[`${categoryId}/${policyTypeId}`] || `${categoryId}/${policyTypeId}`;
 }
