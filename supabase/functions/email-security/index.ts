@@ -245,12 +245,21 @@ serve(async (req) => {
     let responseData: any = null;
 
     // ── EXO policy fetch actions ───────────────────────────────────────
-    const exoPolicyActions: Record<string, { cmdlet: string; mapper: (raw: any) => any[] }> = {
+    const exoPolicyActions: Record<string, { cmdlet: string; mapper: (raw: any) => any[]; secondaryCmdlet?: string }> = {
       "fetch-anti-phishing": { cmdlet: "Get-AntiPhishPolicy", mapper: mapAntiPhishPolicies },
       "fetch-anti-spam": { cmdlet: "Get-HostedContentFilterPolicy", mapper: mapAntiSpamPolicies },
       "fetch-anti-malware": { cmdlet: "Get-MalwareFilterPolicy", mapper: mapAntiMalwarePolicies },
       "fetch-safe-links": { cmdlet: "Get-SafeLinksPolicy", mapper: mapSafeLinksPolicies },
       "fetch-safe-attachments": { cmdlet: "Get-SafeAttachmentPolicy", mapper: mapSafeAttachmentsPolicies },
+      "fetch-transport-rules": { cmdlet: "Get-TransportRule", mapper: mapGenericExoPolicies },
+      "fetch-connectors": { cmdlet: "Get-InboundConnector", mapper: mapGenericExoPolicies, secondaryCmdlet: "Get-OutboundConnector" },
+      "fetch-org-config": { cmdlet: "Get-OrganizationConfig", mapper: mapSingletonExoPolicy },
+      "fetch-owa-policies": { cmdlet: "Get-OwaMailboxPolicy", mapper: mapGenericExoPolicies },
+      "fetch-mobile-device-policies": { cmdlet: "Get-MobileDeviceMailboxPolicy", mapper: mapGenericExoPolicies },
+      "fetch-dlp-policies": { cmdlet: "Get-DlpCompliancePolicy", mapper: mapGenericExoPolicies },
+      "fetch-mailbox-policies": { cmdlet: "Get-MailboxPolicy", mapper: mapGenericExoPolicies },
+      "fetch-retention-policies": { cmdlet: "Get-RetentionPolicy", mapper: mapGenericExoPolicies },
+      "fetch-accepted-domains": { cmdlet: "Get-AcceptedDomain", mapper: mapGenericExoPolicies },
     };
 
     if (exoPolicyActions[action]) {
