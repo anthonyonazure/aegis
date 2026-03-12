@@ -147,11 +147,8 @@ serve(async (req) => {
 
     switch (action) {
       case "fetch-overview": {
-        // Fetch domains and security policies in parallel
-        const [domains, securityPolicies] = await Promise.all([
-          graphGet(token, "/domains"),
-          graphGetBeta(token, "/security/attackSimulation/simulationAutomations"),
-        ]);
+        // Only fetch what we can actually verify: domains
+        const domains = await graphGet(token, "/domains");
 
         const domainList = domains?.value || [];
         const domainAuth = parseDomainAuth(domainList);
@@ -159,31 +156,25 @@ serve(async (req) => {
           (d: any) => d.spf.status === 'pass' && d.dkim.status === 'pass'
         ).length;
 
-        // Count policies (using beta endpoints where available)
-        const [antiPhish, antiSpam, antiMalware, safeLinks, safeAttach] = await Promise.all([
-          graphGetBeta(token, "/security/attackSimulation/simulationAutomations?$top=0&$count=true"),
-          graphGetBeta(token, "/security/attackSimulation/simulationAutomations?$top=0&$count=true"),
-          graphGetBeta(token, "/security/attackSimulation/simulationAutomations?$top=0&$count=true"),
-          graphGetBeta(token, "/security/attackSimulation/simulationAutomations?$top=0&$count=true"),
-          graphGetBeta(token, "/security/attackSimulation/simulationAutomations?$top=0&$count=true"),
-        ]);
-
-        // Since EOP policies have limited Graph API coverage, provide estimates
-        const totalPolicies = (antiPhish?.value?.length || 0) + (antiSpam?.value?.length || 0);
-        const protectionScore = Math.min(100, Math.round(
-          (domainsWithFullAuth / Math.max(domainList.length, 1)) * 50 + 50
-        ));
+        // Protection score based ONLY on verifiable data (domain auth)
+        // We cannot verify EOP/Defender policy status via Graph API
+        const domainAuthScore = domainList.length > 0
+          ? Math.round((domainsWithFullAuth / domainList.length) * 100)
+          : 0;
 
         responseData = {
-          totalPolicies,
-          antiPhishingCount: 1, // Default policy always exists
-          antiSpamCount: 1,
-          antiMalwareCount: 1,
-          safeLinksCount: 0,
-          safeAttachmentsCount: 0,
+          // These are NOT verifiable via Graph API — marked as null
+          antiPhishingCount: null,
+          antiSpamCount: null,
+          antiMalwareCount: null,
+          safeLinksCount: null,
+          safeAttachmentsCount: null,
+          policyDataAvailable: false,
+          // These ARE verifiable
           domainCount: domainList.length,
           domainsWithFullAuth,
-          protectionScore,
+          protectionScore: domainAuthScore,
+          protectionScoreNote: "Based on domain authentication (SPF/DKIM) only. EOP and Defender policy status cannot be verified via Microsoft Graph API.",
         };
         break;
       }
@@ -266,23 +257,34 @@ serve(async (req) => {
             messages: [
               {
                 role: "system",
-                content: `You are an email security expert specializing in Microsoft 365 Exchange Online Protection and Defender for Office 365. Analyze the provided tenant configuration and return actionable security recommendations. You MUST use ONLY the provided data — do not fabricate or assume any configuration details not present in the input.`,
+                content: `You are an email security expert specializing in Microsoft 365 Exchange Online Protection and Defender for Office 365.
+
+CRITICAL RULES:
+- You can ONLY verify domain authentication (SPF, DKIM, DMARC) from the provided DNS data.
+- You CANNOT verify EOP policy settings (anti-phishing, anti-spam, anti-malware) because they are NOT available via Microsoft Graph API.
+- You CANNOT verify Defender for Office 365 features (Safe Links, Safe Attachments) because they are NOT available via Microsoft Graph API.
+- For anything you cannot verify, you MUST clearly state "Cannot be verified via Graph API" and frame it as a recommendation to CHECK/VERIFY rather than claiming it is missing or disabled.
+- NEVER state that a policy "is not configured" or "is disabled" unless you have actual data proving it.
+- DO distinguish between CONFIRMED issues (e.g., missing SPF record verified from DNS) and UNVERIFIABLE items (e.g., EOP policy settings).`,
               },
               {
                 role: "user",
-                content: `Analyze this M365 tenant's email security configuration and provide prioritized recommendations to strengthen email authentication and domain protection.
+                content: `Analyze this M365 tenant's email security based on ONLY the verifiable data provided.
 
-Tenant data:
+VERIFIABLE DATA (from Microsoft Graph API):
 ${JSON.stringify(context, null, 2)}
 
-Return a JSON array of recommendations, each with: title, severity (critical/high/medium/low), description, action.
-Focus on:
-1. SPF/DKIM/DMARC gaps for each domain
-2. EOP policy hardening (anti-phishing impersonation protection, anti-spam thresholds, anti-malware ZAP)
-3. Safe Links and Safe Attachments enablement
-4. General email security best practices based on the alerts seen
+IMPORTANT: The data above contains domain authentication records (SPF/DKIM) which ARE verifiable.
+EOP policies (anti-phishing, anti-spam, anti-malware) and Defender features (Safe Links, Safe Attachments) are NOT included because Microsoft Graph API does not expose them — do NOT assume they are missing.
 
-Return ONLY the JSON array, no markdown.`,
+For each recommendation include a "confidence" field:
+- "verified" = based on actual data (e.g., SPF record missing from DNS)
+- "recommended" = best practice that should be verified manually (e.g., check if Safe Links is enabled)
+
+Focus on:
+1. SPF/DKIM/DMARC gaps — these are VERIFIED from the data
+2. EOP policy best practices — frame as "verify in Defender portal" recommendations
+3. Defender for Office 365 features — frame as "verify licensing and configuration" recommendations`,
               },
             ],
             tools: [
@@ -303,8 +305,9 @@ Return ONLY the JSON array, no markdown.`,
                             severity: { type: "string", enum: ["critical", "high", "medium", "low"] },
                             description: { type: "string" },
                             action: { type: "string" },
+                            confidence: { type: "string", enum: ["verified", "recommended"], description: "verified = confirmed from data, recommended = best practice to check manually" },
                           },
-                          required: ["title", "severity", "description", "action"],
+                          required: ["title", "severity", "description", "action", "confidence"],
                           additionalProperties: false,
                         },
                       },
