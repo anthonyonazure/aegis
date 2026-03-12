@@ -39,13 +39,11 @@ export const AntiSpamSection = () => {
         </Button>
       </div>
 
-      {isGraphUnavailable && (
+      {isApiUnavailable && (
         <Alert className="mb-4 border-yellow-500/30 bg-yellow-500/5">
           <AlertTriangle className="h-4 w-4 text-yellow-600" />
           <AlertDescription className="text-sm">
-            Anti-spam policy details are not available via Microsoft Graph API. To view full configuration, use the
-            <strong> Microsoft 365 Defender portal</strong> or <strong>Exchange Online PowerShell</strong>.
-            Use the <strong>AI Recommendations</strong> tab for an analysis based on available tenant data.
+            To read anti-spam policies, your service principal needs the <strong>Exchange.ManageAsApp</strong> application permission and <strong>Exchange Administrator</strong> role in Azure AD.
           </AlertDescription>
         </Alert>
       )}
