@@ -2,6 +2,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { z } from 'zod';
 import { 
   isPowerShellResource, 
+  isExoResource,
+  EXO_RESOURCE_TYPES,
   getAutomationConfigs, 
   startAutomationJob, 
   pollJobUntilComplete,
