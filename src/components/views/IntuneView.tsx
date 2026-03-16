@@ -6,6 +6,7 @@ import { OverviewSection } from '@/components/intune/sections/OverviewSection';
 import { DevicesSection } from '@/components/intune/sections/DevicesSection';
 import { AppsSection } from '@/components/intune/sections/AppsSection';
 import { AppConfigSection } from '@/components/intune/sections/AppConfigSection';
+import { AppDeploySection } from '@/components/intune/sections/AppDeploySection';
 import { CompliancePoliciesSection } from '@/components/intune/sections/CompliancePoliciesSection';
 import { ConfigurationSection } from '@/components/intune/sections/ConfigurationSection';
 import { ScriptsSection } from '@/components/intune/sections/ScriptsSection';
@@ -27,6 +28,7 @@ const breadcrumbMap: Record<IntuneSectionId, string[]> = {
   android: ['Devices', 'Android'],
   'all-apps': ['Apps', 'All apps'],
   'app-configs': ['Apps', 'App configuration'],
+  'app-deploy': ['Apps', 'AppDeploy'],
   enrollment: ['Device onboarding', 'Enrollment'],
   autopilot: ['Device onboarding', 'Windows Autopilot'],
   configuration: ['Manage devices', 'Configuration'],
@@ -61,6 +63,8 @@ export const IntuneView = () => {
         return <AppsSection />;
       case 'app-configs':
         return <AppConfigSection />;
+      case 'app-deploy':
+        return <AppDeploySection />;
       case 'enrollment':
         return <EnrollmentSection />;
       case 'autopilot':
