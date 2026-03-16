@@ -1406,6 +1406,134 @@ export type Database = {
           },
         ]
       }
+      dude_mappings: {
+        Row: {
+          admin_unit_id: string | null
+          admin_unit_name: string | null
+          created_at: string
+          defender_tag: string | null
+          device_group_id: string
+          device_group_name: string
+          enabled: boolean
+          id: string
+          last_sync_at: string | null
+          last_sync_status: string | null
+          last_sync_summary: Json | null
+          max_removal_percent: number
+          os_filter: string
+          tenant_connection_id: string | null
+          updated_at: string
+          user_group_id: string
+          user_group_name: string
+          user_id: string
+        }
+        Insert: {
+          admin_unit_id?: string | null
+          admin_unit_name?: string | null
+          created_at?: string
+          defender_tag?: string | null
+          device_group_id: string
+          device_group_name: string
+          enabled?: boolean
+          id?: string
+          last_sync_at?: string | null
+          last_sync_status?: string | null
+          last_sync_summary?: Json | null
+          max_removal_percent?: number
+          os_filter?: string
+          tenant_connection_id?: string | null
+          updated_at?: string
+          user_group_id: string
+          user_group_name: string
+          user_id: string
+        }
+        Update: {
+          admin_unit_id?: string | null
+          admin_unit_name?: string | null
+          created_at?: string
+          defender_tag?: string | null
+          device_group_id?: string
+          device_group_name?: string
+          enabled?: boolean
+          id?: string
+          last_sync_at?: string | null
+          last_sync_status?: string | null
+          last_sync_summary?: Json | null
+          max_removal_percent?: number
+          os_filter?: string
+          tenant_connection_id?: string | null
+          updated_at?: string
+          user_group_id?: string
+          user_group_name?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dude_mappings_tenant_connection_id_fkey"
+            columns: ["tenant_connection_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dude_sync_logs: {
+        Row: {
+          created_at: string
+          details: Json | null
+          devices_added: number
+          devices_removed: number
+          devices_skipped: number
+          duration_ms: number | null
+          id: string
+          mapping_id: string
+          status: string
+          tenant_connection_id: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          details?: Json | null
+          devices_added?: number
+          devices_removed?: number
+          devices_skipped?: number
+          duration_ms?: number | null
+          id?: string
+          mapping_id: string
+          status: string
+          tenant_connection_id?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          details?: Json | null
+          devices_added?: number
+          devices_removed?: number
+          devices_skipped?: number
+          duration_ms?: number | null
+          id?: string
+          mapping_id?: string
+          status?: string
+          tenant_connection_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dude_sync_logs_mapping_id_fkey"
+            columns: ["mapping_id"]
+            isOneToOne: false
+            referencedRelation: "dude_mappings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dude_sync_logs_tenant_connection_id_fkey"
+            columns: ["tenant_connection_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       export_jobs: {
         Row: {
           categories: string[]

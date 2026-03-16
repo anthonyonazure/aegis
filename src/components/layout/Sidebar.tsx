@@ -51,6 +51,7 @@ import {
   MessageCircle,
   GitPullRequestDraft,
   Mail,
+  RefreshCw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -88,6 +89,7 @@ const navGroups: NavGroup[] = [
     title: 'Intune',
     items: [
       { id: 'intune', label: 'Intune Manager', icon: Monitor, description: 'Manage Intune devices, policies, and configurations' },
+      { id: 'dude', label: 'DUDE Sync', icon: RefreshCw, description: 'Automate device group membership based on user groups' },
     ],
   },
   {
