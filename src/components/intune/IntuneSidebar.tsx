@@ -61,6 +61,7 @@ const sidebarGroups: SidebarGroup[] = [
     items: [
       { id: 'all-apps', label: 'All apps', icon: 'app-window' },
       { id: 'app-configs', label: 'App configuration', icon: 'cog' },
+      { id: 'app-deploy', label: 'AppDeploy', icon: 'app-window' },
     ],
   },
   {

@@ -63,6 +63,8 @@ export const IntuneView = () => {
         return <AppsSection />;
       case 'app-configs':
         return <AppConfigSection />;
+      case 'app-deploy':
+        return <AppDeploySection />;
       case 'enrollment':
         return <EnrollmentSection />;
       case 'autopilot':

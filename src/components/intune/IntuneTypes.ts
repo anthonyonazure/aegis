@@ -94,6 +94,7 @@ export type IntuneSectionId =
   | 'android'
   | 'all-apps'
   | 'app-configs'
+  | 'app-deploy'
   | 'enrollment'
   | 'autopilot'
   | 'configuration'
