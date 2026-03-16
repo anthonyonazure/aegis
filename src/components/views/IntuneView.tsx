@@ -9,6 +9,7 @@ import { AppConfigSection } from '@/components/intune/sections/AppConfigSection'
 import { CompliancePoliciesSection } from '@/components/intune/sections/CompliancePoliciesSection';
 import { ConfigurationSection } from '@/components/intune/sections/ConfigurationSection';
 import { ScriptsSection } from '@/components/intune/sections/ScriptsSection';
+import { RemediationSection } from '@/components/intune/sections/RemediationSection';
 import { EnrollmentSection } from '@/components/intune/sections/EnrollmentSection';
 import { AutopilotSection } from '@/components/intune/sections/AutopilotSection';
 import { EndpointSecuritySection } from '@/components/intune/sections/EndpointSecuritySection';
@@ -31,6 +32,7 @@ const breadcrumbMap: Record<IntuneSectionId, string[]> = {
   configuration: ['Manage devices', 'Configuration'],
   compliance: ['Manage devices', 'Compliance'],
   scripts: ['Manage devices', 'Scripts'],
+  remediation: ['Manage devices', 'Remediation'],
   'update-rings': ['Manage updates', 'Update rings'],
   'endpoint-security': ['Endpoint security', 'Security policies'],
   reports: ['Reports'],
@@ -69,6 +71,8 @@ export const IntuneView = () => {
         return <CompliancePoliciesSection />;
       case 'scripts':
         return <ScriptsSection />;
+      case 'remediation':
+        return <RemediationSection />;
       case 'update-rings':
         return <UpdateRingsSection />;
       case 'endpoint-security':

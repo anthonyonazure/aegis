@@ -99,6 +99,7 @@ export type IntuneSectionId =
   | 'configuration'
   | 'compliance'
   | 'scripts'
+  | 'remediation'
   | 'update-rings'
   | 'endpoint-security'
   | 'reports';

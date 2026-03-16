@@ -4,7 +4,7 @@ import {
   Monitor, Smartphone, Tablet, Laptop, Apple, 
   AppWindow, Settings2, ShieldCheck, FileCode, 
   RefreshCw, Shield, BarChart3, ChevronDown, 
-  ChevronRight, Layout, Cog
+  ChevronRight, Layout, Cog, Wrench
 } from 'lucide-react';
 import { IntuneSectionId } from './IntuneTypes';
 
@@ -23,6 +23,7 @@ const iconMap: Record<string, React.ElementType> = {
   'bar-chart': BarChart3,
   layout: Layout,
   cog: Cog,
+  wrench: Wrench,
 };
 
 interface SidebarGroup {
@@ -79,6 +80,7 @@ const sidebarGroups: SidebarGroup[] = [
       { id: 'configuration', label: 'Configuration', icon: 'settings' },
       { id: 'compliance', label: 'Compliance', icon: 'shield-check' },
       { id: 'scripts', label: 'Scripts', icon: 'file-code' },
+      { id: 'remediation', label: 'Remediation', icon: 'wrench' },
     ],
   },
   {
