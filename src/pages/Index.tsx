@@ -75,6 +75,7 @@ import { TenantSelector } from '@/components/TenantSelector';
 const SIMPLE_VIEWS: Record<string, React.ComponentType> = {
   'customers': CustomersView,
   'intune': IntuneView,
+  'dude': DudeManagerView,
   'email-security': EmailSecurityView,
   'nl-query': NaturalLanguageQueryView,
   'ai-chat': AIChatView,

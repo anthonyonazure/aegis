@@ -51,6 +51,7 @@ import {
   MessageCircle,
   GitPullRequestDraft,
   Mail,
+  RefreshCw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
