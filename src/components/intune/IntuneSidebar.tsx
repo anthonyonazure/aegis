@@ -23,6 +23,7 @@ const iconMap: Record<string, React.ElementType> = {
   'bar-chart': BarChart3,
   layout: Layout,
   cog: Cog,
+  wrench: Wrench,
 };
 
 interface SidebarGroup {
