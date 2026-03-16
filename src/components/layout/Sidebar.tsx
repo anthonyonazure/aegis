@@ -88,6 +88,7 @@ const navGroups: NavGroup[] = [
     title: 'Intune',
     items: [
       { id: 'intune', label: 'Intune Manager', icon: Monitor, description: 'Manage Intune devices, policies, and configurations' },
+      { id: 'dude', label: 'DUDE Sync', icon: RefreshCw, description: 'Automate device group membership based on user groups' },
     ],
   },
   {
