@@ -6,6 +6,7 @@ import { OverviewSection } from '@/components/intune/sections/OverviewSection';
 import { DevicesSection } from '@/components/intune/sections/DevicesSection';
 import { AppsSection } from '@/components/intune/sections/AppsSection';
 import { AppConfigSection } from '@/components/intune/sections/AppConfigSection';
+import { AppDeploySection } from '@/components/intune/sections/AppDeploySection';
 import { CompliancePoliciesSection } from '@/components/intune/sections/CompliancePoliciesSection';
 import { ConfigurationSection } from '@/components/intune/sections/ConfigurationSection';
 import { ScriptsSection } from '@/components/intune/sections/ScriptsSection';
