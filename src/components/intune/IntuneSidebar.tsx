@@ -80,6 +80,7 @@ const sidebarGroups: SidebarGroup[] = [
       { id: 'configuration', label: 'Configuration', icon: 'settings' },
       { id: 'compliance', label: 'Compliance', icon: 'shield-check' },
       { id: 'scripts', label: 'Scripts', icon: 'file-code' },
+      { id: 'remediation', label: 'Remediation', icon: 'wrench' },
     ],
   },
   {

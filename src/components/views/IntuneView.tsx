@@ -71,6 +71,8 @@ export const IntuneView = () => {
         return <CompliancePoliciesSection />;
       case 'scripts':
         return <ScriptsSection />;
+      case 'remediation':
+        return <RemediationSection />;
       case 'update-rings':
         return <UpdateRingsSection />;
       case 'endpoint-security':
