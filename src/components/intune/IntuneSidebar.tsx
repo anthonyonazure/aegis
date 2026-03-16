@@ -4,7 +4,7 @@ import {
   Monitor, Smartphone, Tablet, Laptop, Apple, 
   AppWindow, Settings2, ShieldCheck, FileCode, 
   RefreshCw, Shield, BarChart3, ChevronDown, 
-  ChevronRight, Layout, Cog
+  ChevronRight, Layout, Cog, Wrench
 } from 'lucide-react';
 import { IntuneSectionId } from './IntuneTypes';
 
