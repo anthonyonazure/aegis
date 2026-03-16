@@ -28,6 +28,7 @@ const breadcrumbMap: Record<IntuneSectionId, string[]> = {
   android: ['Devices', 'Android'],
   'all-apps': ['Apps', 'All apps'],
   'app-configs': ['Apps', 'App configuration'],
+  'app-deploy': ['Apps', 'AppDeploy'],
   enrollment: ['Device onboarding', 'Enrollment'],
   autopilot: ['Device onboarding', 'Windows Autopilot'],
   configuration: ['Manage devices', 'Configuration'],
