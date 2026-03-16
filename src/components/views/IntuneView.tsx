@@ -32,6 +32,7 @@ const breadcrumbMap: Record<IntuneSectionId, string[]> = {
   configuration: ['Manage devices', 'Configuration'],
   compliance: ['Manage devices', 'Compliance'],
   scripts: ['Manage devices', 'Scripts'],
+  remediation: ['Manage devices', 'Remediation'],
   'update-rings': ['Manage updates', 'Update rings'],
   'endpoint-security': ['Endpoint security', 'Security policies'],
   reports: ['Reports'],
