@@ -10,8 +10,10 @@ import { toast } from 'sonner';
 import {
   Search, Copy, ExternalLink, Play, Shield, Trash2, Wrench,
   Network, Monitor, Settings2, RefreshCw, HardDrive, ShieldCheck,
-  Eye, FileCode, LayoutGrid, List
+  Eye, FileCode, LayoutGrid, List, Loader2
 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useTenant } from '@/contexts/TenantContext';
 import {
   remediationScripts,
   remediationCategories,
