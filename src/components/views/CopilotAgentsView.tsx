@@ -199,7 +199,7 @@ export const CopilotAgentsView = () => {
         setAgents([]);
       }
 
-      setPolicies(getMockPolicies());
+      setPolicies([]);
       loadTenantStatuses();
 
     } catch (error) {
