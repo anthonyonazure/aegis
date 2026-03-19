@@ -1136,6 +1136,67 @@ serve(async (req) => {
       );
     }
 
+    // Handle deploy-health-script action — create a deviceHealthScript in Intune
+    if (rawBody.action === 'deploy-health-script') {
+      const accessToken = rawBody.accessToken;
+      const scriptPayload = rawBody.scriptPayload;
+
+      if (!accessToken || typeof accessToken !== 'string' || accessToken.length < 10) {
+        return new Response(
+          JSON.stringify({ error: 'Invalid access token' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      if (!scriptPayload || !scriptPayload.displayName || !scriptPayload.detectionScriptContent) {
+        return new Response(
+          JSON.stringify({ error: 'Missing required fields: displayName, detectionScriptContent' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Base64 encode the scripts for the Graph API
+      const encoder = new TextEncoder();
+      const body: Record<string, any> = {
+        displayName: scriptPayload.displayName,
+        description: scriptPayload.description || '',
+        publisher: scriptPayload.publisher || 'Lovable MSP Manager',
+        runAsAccount: scriptPayload.runAs === 'System' ? 'system' : 'user',
+        runAs32Bit: scriptPayload.runAs32Bit || false,
+        enforceSignatureCheck: false,
+        detectionScriptContent: btoa(scriptPayload.detectionScriptContent),
+      };
+
+      if (scriptPayload.remediationScriptContent) {
+        body.remediationScriptContent = btoa(scriptPayload.remediationScriptContent);
+      }
+
+      console.log(`Deploying health script: ${body.displayName}`);
+
+      const result = await createGraphResource(
+        accessToken,
+        '/deviceManagement/deviceHealthScripts',
+        body,
+        true // use beta endpoint
+      );
+
+      if (!result.success) {
+        return new Response(
+          JSON.stringify({ error: sanitizeError(result.error || 'Failed to create health script') }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          scriptId: result.data?.id,
+          displayName: result.data?.displayName,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Handle token refresh using stored credentials (no secret in request)
     if (rawBody.action === 'get-token-from-stored' || rawBody.action === 'refresh-token') {
       const parseResult = StoredCredentialRequestSchema.safeParse(rawBody);

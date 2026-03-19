@@ -350,12 +350,11 @@ export const RemediationSection = () => {
                 </Button>
                 <Button
                   size="sm"
-                  onClick={() => {
-                    toast.info('Deploy to tenant requires an active tenant connection with DeviceManagementConfiguration.ReadWrite.All permission.');
-                  }}
+                  disabled={deploying}
+                  onClick={() => deployToTenant(selectedScript)}
                 >
-                  <Play className="w-3.5 h-3.5 mr-1.5" />
-                  Deploy to Tenant
+                  {deploying ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Play className="w-3.5 h-3.5 mr-1.5" />}
+                  {deploying ? 'Deploying...' : 'Deploy to Tenant'}
                 </Button>
               </div>
             </>
