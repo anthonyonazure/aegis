@@ -223,9 +223,9 @@ export const CopilotAgentsView = () => {
         .map(c => ({
           tenantId: c.tenant_id,
           tenantName: c.display_name || c.tenant_name || c.tenant_id,
-          agentCount: Math.floor(Math.random() * 10) + 1,
-          blockedCount: Math.floor(Math.random() * 3),
-          pendingCount: Math.floor(Math.random() * 2),
+          agentCount: 0,
+          blockedCount: 0,
+          pendingCount: 0,
           policyName: 'Default Policy',
           lastSync: new Date().toISOString(),
         }));
