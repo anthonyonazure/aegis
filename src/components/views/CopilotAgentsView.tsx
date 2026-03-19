@@ -192,11 +192,11 @@ export const CopilotAgentsView = () => {
 
       if (error) {
         console.error('Failed to fetch agents:', error);
-        setAgents(getMockAgents());
+        setAgents([]);
       } else if (data?.resources?.['copilot/copilot-agents']) {
         setAgents(data.resources['copilot/copilot-agents']);
       } else {
-        setAgents(getMockAgents());
+        setAgents([]);
       }
 
       setPolicies(getMockPolicies());
