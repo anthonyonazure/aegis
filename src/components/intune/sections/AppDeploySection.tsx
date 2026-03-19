@@ -10,8 +10,10 @@ import { toast } from 'sonner';
 import {
   Search, Copy, ExternalLink, Play, Globe, Briefcase, MessageSquare,
   Code2, ShieldCheck, Wrench, FileCode, LayoutGrid, List, Package,
-  Download, Upload
+  Download, Upload, Loader2
 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useTenant } from '@/contexts/TenantContext';
 import {
   appDeployTemplates,
   appDeployCategories,
@@ -44,6 +46,46 @@ export const AppDeploySection = () => {
   const [activeCategory, setActiveCategory] = useState<AppDeployCategory | 'All'>('All');
   const [selectedTemplate, setSelectedTemplate] = useState<AppDeployTemplate | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [deploying, setDeploying] = useState(false);
+  const { isConnected, getValidToken } = useTenant();
+
+  const deployToTenant = async (template: AppDeployTemplate) => {
+    if (!isConnected) {
+      toast.error('No tenant connected. Please connect a tenant first.');
+      return;
+    }
+    const token = await getValidToken();
+    if (!token) {
+      toast.error('Session expired. Please reconnect to the tenant.');
+      return;
+    }
+    setDeploying(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('graph-api', {
+        body: {
+          action: 'deploy-health-script',
+          accessToken: token,
+          scriptPayload: {
+            displayName: `PSADT - ${template.name}`,
+            description: template.description,
+            publisher: template.publisher,
+            runAs: 'System',
+            runAs32Bit: false,
+            detectionScriptContent: template.detectionScript,
+            remediationScriptContent: template.installScript,
+          },
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success(`"${template.name}" deployed successfully! Script ID: ${data.scriptId}`);
+      setSelectedTemplate(null);
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to deploy template to tenant.');
+    } finally {
+      setDeploying(false);
+    }
+  };
 
   const filtered = appDeployTemplates.filter((t) => {
     const matchesSearch =
@@ -327,12 +369,11 @@ export const AppDeploySection = () => {
                 </Button>
                 <Button
                   size="sm"
-                  onClick={() => {
-                    toast.info('Deploy to tenant requires an active tenant connection with DeviceManagementApps.ReadWrite.All permission.');
-                  }}
+                  disabled={deploying}
+                  onClick={() => deployToTenant(selectedTemplate)}
                 >
-                  <Play className="w-3.5 h-3.5 mr-1.5" />
-                  Deploy to Tenant
+                  {deploying ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Play className="w-3.5 h-3.5 mr-1.5" />}
+                  {deploying ? 'Deploying...' : 'Deploy to Tenant'}
                 </Button>
               </div>
             </>

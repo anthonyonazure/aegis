@@ -174,8 +174,8 @@ export const CopilotAgentsView = () => {
 
       if (jobError) {
         console.error('Failed to create export job:', jobError);
-        setAgents(getMockAgents());
-        setPolicies(getMockPolicies());
+        setAgents([]);
+        setPolicies([]);
         loadTenantStatuses();
         setIsLoading(false);
         return;
@@ -192,20 +192,20 @@ export const CopilotAgentsView = () => {
 
       if (error) {
         console.error('Failed to fetch agents:', error);
-        setAgents(getMockAgents());
+        setAgents([]);
       } else if (data?.resources?.['copilot/copilot-agents']) {
         setAgents(data.resources['copilot/copilot-agents']);
       } else {
-        setAgents(getMockAgents());
+        setAgents([]);
       }
 
-      setPolicies(getMockPolicies());
+      setPolicies([]);
       loadTenantStatuses();
 
     } catch (error) {
       console.error('Error loading agents:', error);
-      setAgents(getMockAgents());
-      setPolicies(getMockPolicies());
+      setAgents([]);
+      setPolicies([]);
     } finally {
       setIsLoading(false);
     }
@@ -223,9 +223,9 @@ export const CopilotAgentsView = () => {
         .map(c => ({
           tenantId: c.tenant_id,
           tenantName: c.display_name || c.tenant_name || c.tenant_id,
-          agentCount: Math.floor(Math.random() * 10) + 1,
-          blockedCount: Math.floor(Math.random() * 3),
-          pendingCount: Math.floor(Math.random() * 2),
+          agentCount: 0,
+          blockedCount: 0,
+          pendingCount: 0,
           policyName: 'Default Policy',
           lastSync: new Date().toISOString(),
         }));
