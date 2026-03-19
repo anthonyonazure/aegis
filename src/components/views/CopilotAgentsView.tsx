@@ -204,8 +204,8 @@ export const CopilotAgentsView = () => {
 
     } catch (error) {
       console.error('Error loading agents:', error);
-      setAgents(getMockAgents());
-      setPolicies(getMockPolicies());
+      setAgents([]);
+      setPolicies([]);
     } finally {
       setIsLoading(false);
     }
