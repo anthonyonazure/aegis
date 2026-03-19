@@ -174,8 +174,8 @@ export const CopilotAgentsView = () => {
 
       if (jobError) {
         console.error('Failed to create export job:', jobError);
-        setAgents(getMockAgents());
-        setPolicies(getMockPolicies());
+        setAgents([]);
+        setPolicies([]);
         loadTenantStatuses();
         setIsLoading(false);
         return;
