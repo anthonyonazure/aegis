@@ -65,7 +65,7 @@ function CopyBlock({ code, language = 'json' }: { code: string; language?: strin
 }
 
 export const SetupGuideSection = () => {
-  const { fetchData, isLoading, data, error } = useEmailSecurityData<any>({ action: 'get-overview' });
+  const { fetchData, isLoading, data, error } = useEmailSecurityData<any>({ action: 'fetch-overview' });
   const [verified, setVerified] = useState(false);
   const { toast } = useToast();
 
