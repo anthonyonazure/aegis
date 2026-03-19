@@ -52,6 +52,46 @@ export const RemediationSection = () => {
   const [activeCategory, setActiveCategory] = useState<RemediationCategory | 'All'>('All');
   const [selectedScript, setSelectedScript] = useState<RemediationScript | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [deploying, setDeploying] = useState(false);
+  const { isConnected, getValidToken } = useTenant();
+
+  const deployToTenant = async (script: RemediationScript) => {
+    if (!isConnected) {
+      toast.error('No tenant connected. Please connect a tenant first.');
+      return;
+    }
+    const token = await getValidToken();
+    if (!token) {
+      toast.error('Session expired. Please reconnect to the tenant.');
+      return;
+    }
+    setDeploying(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('graph-api', {
+        body: {
+          action: 'deploy-health-script',
+          accessToken: token,
+          scriptPayload: {
+            displayName: script.name,
+            description: script.description,
+            publisher: 'Community - JayRHa',
+            runAs: script.runAs,
+            runAs32Bit: script.runAs32Bit || false,
+            detectionScriptContent: script.detectionScript,
+            remediationScriptContent: script.remediationScript,
+          },
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success(`"${script.name}" deployed successfully! Script ID: ${data.scriptId}`);
+      setSelectedScript(null);
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to deploy script to tenant.');
+    } finally {
+      setDeploying(false);
+    }
+  };
 
   const filtered = remediationScripts.filter((s) => {
     const matchesSearch =
