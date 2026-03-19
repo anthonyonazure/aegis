@@ -10,8 +10,10 @@ import { toast } from 'sonner';
 import {
   Search, Copy, ExternalLink, Play, Globe, Briefcase, MessageSquare,
   Code2, ShieldCheck, Wrench, FileCode, LayoutGrid, List, Package,
-  Download, Upload
+  Download, Upload, Loader2
 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useTenant } from '@/contexts/TenantContext';
 import {
   appDeployTemplates,
   appDeployCategories,
