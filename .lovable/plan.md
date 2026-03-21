@@ -1,40 +1,56 @@
 
 
-# Features Wired Up But Not Fully Implemented
+# Plan: Add MISP Threat Intelligence Browser Module
 
-After reviewing the codebase, here are the areas that have UI/routing but lack real backend implementation:
+## Summary
+Add a new top-level **"Threat Intelligence"** module (sidebar group) with a MISP-inspired local threat intelligence browser. No external MISP server required — all data is embedded as a static catalog of curated threat intelligence: MITRE ATT&CK techniques, common IOC patterns, threat actor profiles, MISP galaxies, and public feed references.
 
-## 1. Git Integration — "Push to Git" (GitView.tsx)
-- **What works:** Config form saves repo URL, branch, commit message template, CI/CD pipeline template copy
-- **What doesn't:** The "Push to Git" button is permanently disabled (`disabled={!repoUrl || !selectedExportJob}`) and has **no onClick handler** — there is no edge function or API to actually push exports to a Git repository. It's purely UI.
+## What It Provides
+- Browse threat intelligence organized by MITRE ATT&CK tactics/techniques
+- Searchable IOC reference library (IP ranges, domains, file hashes, etc.) from well-known public feeds
+- Threat actor profiles (APT groups) with TTPs mapped to ATT&CK
+- MISP Galaxy browser (threat actors, tools, ransomware families, sectors)
+- Taxonomy reference (TLP, CIRCL, admiralty-scale, etc.)
+- Correlation helper: paste an IOC and see which known campaigns/actors match
 
-## 2. Copilot Agents View (CopilotAgentsView.tsx)
-- **What works:** Attempts to fetch from Graph API via export job
-- **What doesn't:** Falls back to **hardcoded mock data** (`getMockAgents()`, `getMockPolicies()`) on any error or missing data. The policies tab always shows mock data (`setPolicies(getMockPolicies())` is called unconditionally). Cross-tenant status data is also mocked.
+## File Changes
 
-## 3. Governance Center — Partial Live Data (GovernanceCenterView.tsx)
-- **What works:** Tenant health, compliance scores, billing data from DB
-- **What doesn't:** Several stats are hardcoded to `0`: `avgSecureScore`, `activeAlerts`, `adminUsers`, `guestUsers`, `mfaEnabled`, `riskyUsers`. License breakdown (`licensesByProduct`) is always an empty array. These could be populated from Graph API but aren't wired.
+| File | Change |
+|------|--------|
+| `src/lib/mispData.ts` | New — static catalog: ATT&CK techniques, threat actors (APT28, Lazarus, etc.), IOC patterns, galaxies, taxonomies, public feed URLs |
+| `src/components/misp/MispSidebar.tsx` | New — internal sidebar with sections: Overview, Events/IOCs, ATT&CK Matrix, Threat Actors, Galaxies, Taxonomies, Feeds |
+| `src/components/misp/MispTypes.ts` | New — section IDs and data interfaces |
+| `src/components/misp/sections/OverviewSection.tsx` | New — dashboard with stats, recent threat highlights, search |
+| `src/components/misp/sections/IocBrowserSection.tsx` | New — searchable IOC table with type filters (IP, domain, hash, URL, email), severity badges, copy-to-clipboard |
+| `src/components/misp/sections/AttackMatrixSection.tsx` | New — visual MITRE ATT&CK matrix grid (tactics as columns, techniques as cells) with click-to-detail |
+| `src/components/misp/sections/ThreatActorsSection.tsx` | New — card grid of APT groups with country, motivation, target sectors, linked techniques |
+| `src/components/misp/sections/GalaxiesSection.tsx` | New — browsable galaxy clusters (ransomware, tools, sectors) |
+| `src/components/misp/sections/TaxonomiesSection.tsx` | New — reference table of MISP taxonomies (TLP, PAP, etc.) |
+| `src/components/misp/sections/FeedsSection.tsx` | New — list of public OSINT feeds with URLs, descriptions, format info |
+| `src/components/views/MispView.tsx` | New — main view with sidebar + section routing (same pattern as IntuneView) |
+| `src/components/layout/Sidebar.tsx` | Add "Threat Intelligence" group with MISP item |
+| `src/pages/Index.tsx` | Register `'misp'` in SIMPLE_VIEWS |
 
-## 4. AppDeploy & Remediation — "Deploy to Tenant" Buttons
-- Both **AppDeploySection** and **RemediationSection** have "Deploy to Tenant" buttons that only show a **toast notification** ("Coming soon" / placeholder). No actual Graph API call to `POST /deviceManagement/deviceHealthScripts` or Win32 app creation is implemented.
+## Data Catalog (`mispData.ts`)
 
-## 5. Email Security — Several Sections
-- The edge function (`email-security`) handles some actions, but the **SetupGuideSection** had a wrong action name (just fixed). Other sections like Anti-Malware, Anti-Phishing, Anti-Spam, Safe Links, Safe Attachments fetch data but their **remediation/fix actions** (if any) are likely UI-only without write-back capability.
+**MITRE ATT&CK** (~50 key techniques across 14 tactics):
+- Reconnaissance, Resource Development, Initial Access, Execution, Persistence, Privilege Escalation, Defense Evasion, Credential Access, Discovery, Lateral Movement, Collection, C2, Exfiltration, Impact
 
----
+**Threat Actors** (~20 profiles):
+- APT28, APT29, Lazarus, Turla, Sandworm, FIN7, Hafnium, Volt Typhoon, BlackCat, LockBit, Conti, REvil, etc.
 
-## Recommendation
+**IOC Patterns** (~30 curated examples):
+- Known C2 domains, malware hashes, suspicious IP ranges with context
 
-The highest-impact items to implement would be:
+**Galaxies**: Ransomware families, attack tools (Cobalt Strike, Mimikatz, etc.), targeted sectors
 
-| Priority | Feature | Effort |
-|----------|---------|--------|
-| 1 | Deploy to Tenant for Remediation scripts | Medium — POST to `/deviceManagement/deviceHealthScripts` via existing `graph-api` function |
-| 2 | Deploy to Tenant for AppDeploy templates | Medium — similar pattern, POST Win32 app metadata |
-| 3 | Copilot Agents — remove mock fallback | Low — just remove mock data, show empty state instead |
-| 4 | Git Push — implement actual push | High — needs a new edge function for Git API (GitHub/Azure DevOps) |
-| 5 | Governance Center live stats | Medium — add Graph API calls for user/license/risk counts |
+**Taxonomies**: TLP (white/green/amber/red), PAP, Admiralty Scale, OSINT quality
 
-Would you like me to implement any of these?
+**Public Feeds** (~15): abuse.ch, AlienVault OTX, CIRCL OSINT, Botvrij, etc.
+
+## UI Pattern
+Follows the exact same layout as IntuneView/EmailSecurityView: left sidebar for section navigation + right content area with breadcrumbs.
+
+## No database changes needed
+All data is static reference content embedded in the frontend.
 
