@@ -55,6 +55,7 @@ import AIChatView from '@/components/views/AIChatView';
 import CrossTenantInsightsView from '@/components/views/CrossTenantInsightsView';
 import { AISchedulesView } from '@/components/views/AISchedulesView';
 import { IntuneView } from '@/components/views/IntuneView';
+import { MispView } from '@/components/views/MispView';
 import { DudeManagerView } from '@/components/views/DudeManagerView';
 import { EmailSecurityView } from '@/components/views/EmailSecurityView';
 import { SettingsView } from '@/components/views/SettingsView';
@@ -77,6 +78,7 @@ const SIMPLE_VIEWS: Record<string, React.ComponentType> = {
   'intune': IntuneView,
   'dude': DudeManagerView,
   'email-security': EmailSecurityView,
+  'misp': MispView,
   'nl-query': NaturalLanguageQueryView,
   'ai-chat': AIChatView,
   'cross-tenant-insights': CrossTenantInsightsView,
