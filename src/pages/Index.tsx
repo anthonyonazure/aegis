@@ -78,6 +78,7 @@ const SIMPLE_VIEWS: Record<string, React.ComponentType> = {
   'intune': IntuneView,
   'dude': DudeManagerView,
   'email-security': EmailSecurityView,
+  'misp': MispView,
   'nl-query': NaturalLanguageQueryView,
   'ai-chat': AIChatView,
   'cross-tenant-insights': CrossTenantInsightsView,

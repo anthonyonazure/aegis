@@ -99,6 +99,12 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
+    title: 'Threat Intelligence',
+    items: [
+      { id: 'misp', label: 'MISP Browser', icon: Shield, description: 'Browse curated threat intelligence: MITRE ATT&CK techniques, IOCs, threat actor profiles, MISP galaxies, and OSINT feeds — all locally embedded, no external MISP server required.' },
+    ],
+  },
+  {
     title: 'Tenant Health',
     items: [
       { id: 'health-dashboard', label: 'Health Dashboard', icon: Activity, description: 'Monitor tenant health status and issues' },
