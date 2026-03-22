@@ -102,6 +102,7 @@ const navGroups: NavGroup[] = [
     title: 'Threat Intelligence',
     items: [
       { id: 'misp', label: 'MISP Browser', icon: Shield, description: 'Browse curated threat intelligence: MITRE ATT&CK techniques, IOCs, threat actor profiles, MISP galaxies, and OSINT feeds — all locally embedded, no external MISP server required.' },
+      { id: 'hawk', label: 'Hawk Forensics', icon: Search, description: 'M365 incident response toolkit — generate Hawk PowerShell scripts, follow investigation playbooks, and reference the full command catalog.' },
     ],
   },
   {

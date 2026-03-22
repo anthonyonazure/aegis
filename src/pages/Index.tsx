@@ -80,6 +80,7 @@ const SIMPLE_VIEWS: Record<string, React.ComponentType> = {
   'dude': DudeManagerView,
   'email-security': EmailSecurityView,
   'misp': MispView,
+  'hawk': HawkView,
   'nl-query': NaturalLanguageQueryView,
   'ai-chat': AIChatView,
   'cross-tenant-insights': CrossTenantInsightsView,
