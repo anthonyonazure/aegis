@@ -28,6 +28,18 @@ const ExportRequestSchema = z.object({
   exportJobId: z.string().uuid('Invalid export job ID format'),
 });
 
+// Schema for proxy requests - raw Graph API endpoint passthrough
+const ProxyRequestSchema = z.object({
+  action: z.literal('proxy'),
+  accessToken: z.string().min(1, 'Access token required').max(10000, 'Access token too long'),
+  endpoint: z.string().min(1, 'Endpoint required').max(2000, 'Endpoint too long').refine(
+    (val) => val.startsWith('/'),
+    'Endpoint must start with /'
+  ),
+  method: z.enum(['GET', 'POST', 'PATCH', 'DELETE']).optional().default('GET'),
+  body: z.any().optional(),
+});
+
 // Schema for fetching policies without storing (for Policy Browser)
 const FetchRequestSchema = z.object({
   action: z.literal('fetch'),
