@@ -693,6 +693,57 @@ serve(async (req) => {
       );
     }
 
+    // Handle proxy action - raw Graph API endpoint passthrough
+    if (rawBody.action === 'proxy') {
+      const parseResult = ProxyRequestSchema.safeParse(rawBody);
+      if (!parseResult.success) {
+        console.error('Proxy validation error:', parseResult.error.errors);
+        return new Response(
+          JSON.stringify({ error: 'Invalid proxy request parameters' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const { accessToken, endpoint, method, body: reqBody } = parseResult.data;
+
+      // Determine base URL (beta vs v1.0 based on endpoint content)
+      const useBeta = endpoint.includes('identityProtection') || endpoint.includes('security/alerts_v2');
+      const baseUrl = useBeta ? 'https://graph.microsoft.com/beta' : 'https://graph.microsoft.com/v1.0';
+      const graphUrl = `${baseUrl}${endpoint}`;
+
+      console.log(`Proxy ${method} ${graphUrl}`);
+
+      const fetchOptions: RequestInit = {
+        method,
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+      };
+
+      if (reqBody && method !== 'GET') {
+        fetchOptions.body = JSON.stringify(reqBody);
+      }
+
+      const response = await fetch(graphUrl, fetchOptions);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.error?.message || `API_ERROR_${response.status}`;
+        console.error(`Proxy Graph API error:`, errorMessage);
+        return new Response(
+          JSON.stringify({ error: sanitizeError(errorMessage), value: [] }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const data = await response.json();
+      return new Response(
+        JSON.stringify(data),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Handle fetch action - retrieve policies without storing (for Policy Browser)
     if (rawBody.action === 'fetch') {
       const parseResult = FetchRequestSchema.safeParse(rawBody);
