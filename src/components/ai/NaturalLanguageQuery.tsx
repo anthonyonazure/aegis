@@ -124,7 +124,7 @@ export function NaturalLanguageQuery({ selectedTenants }: NaturalLanguageQueryPr
       const { data, error } = await supabase.functions.invoke('ai-nl-query', {
         body: { 
           query: q,
-          tenantConnectionId: effectiveTenantId,
+          tenantConnectionIds: [effectiveTenantId],
           tenantId: effectiveTenantId,
           context: { name: effectiveTenantName }
         }
