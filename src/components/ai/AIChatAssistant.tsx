@@ -15,9 +15,12 @@ import {
   Shield,
   Settings,
   FileText,
-  HelpCircle
+  HelpCircle,
+  Activity
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useTenant } from '@/contexts/TenantContext';
+import { useTenantSecurityData } from '@/hooks/useTenantSecurityData';
 
 interface Message {
   id: string;
@@ -45,12 +48,41 @@ export const AIChatAssistant: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const { isConnected, tenantName, tenantId } = useTenant();
+  const { alerts, riskyUsers, riskySignIns } = useTenantSecurityData();
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
+
+  // Build tenant context summary for the AI
+  const buildTenantContext = () => {
+    if (!isConnected) return null;
+
+    const highAlerts = alerts.filter(a => a.severity === 'high');
+    const medAlerts = alerts.filter(a => a.severity === 'medium');
+    const activeRiskyUsers = riskyUsers.filter(u => u.riskLevel !== 'none' && u.riskState !== 'remediated');
+
+    const parts: string[] = [];
+    parts.push(`Connected tenant: ${tenantName || tenantId || 'Unknown'}`);
+    parts.push(`Security alerts: ${alerts.length} total (${highAlerts.length} high, ${medAlerts.length} medium)`);
+    
+    if (highAlerts.length > 0) {
+      parts.push(`Recent high-severity alerts:\n${highAlerts.slice(0, 5).map(a => `  - ${a.title} (${a.category}, ${a.source})`).join('\n')}`);
+    }
+
+    if (activeRiskyUsers.length > 0) {
+      parts.push(`Risky users (${activeRiskyUsers.length}):\n${activeRiskyUsers.slice(0, 5).map(u => `  - ${u.userDisplayName} (${u.userPrincipalName}) — risk: ${u.riskLevel}, detail: ${u.riskDetail}`).join('\n')}`);
+    }
+
+    if (riskySignIns.length > 0) {
+      parts.push(`Risky sign-ins (${riskySignIns.length}):\n${riskySignIns.slice(0, 5).map(s => `  - ${s.userDisplayName} from ${s.ipAddress} (${s.location?.city || s.location?.countryOrRegion || 'unknown location'}) via ${s.appDisplayName}, risk: ${s.riskLevelDuringSignIn}`).join('\n')}`);
+    }
+
+    return parts.join('\n\n');
+  };
 
   const streamChat = async (userMessage: string) => {
     const userMsg: Message = {
@@ -70,6 +102,8 @@ export const AIChatAssistant: React.FC = () => {
     try {
       const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat-assistant`;
       
+      const tenantContext = buildTenantContext();
+      
       const response = await fetch(CHAT_URL, {
         method: 'POST',
         headers: {
@@ -80,7 +114,8 @@ export const AIChatAssistant: React.FC = () => {
           messages: [...messages, userMsg].map(m => ({
             role: m.role,
             content: m.content
-          }))
+          })),
+          tenantContext,
         }),
       });
 
@@ -167,7 +202,7 @@ export const AIChatAssistant: React.FC = () => {
             <div className="p-2 rounded-lg bg-gradient-to-br from-violet-500/20 to-purple-500/20">
               <Bot className="h-5 w-5 text-violet-500" />
             </div>
-            <div>
+            <div className="flex-1">
               <span className="flex items-center gap-2">
                 AI Assistant
                 <Badge variant="outline" className="bg-gradient-to-r from-violet-500/20 to-purple-500/20 text-violet-500 border-0">
@@ -179,6 +214,12 @@ export const AIChatAssistant: React.FC = () => {
                 Ask me anything about M365 configuration, security, and compliance
               </p>
             </div>
+            {isConnected && (
+              <Badge variant="secondary" className="gap-1 text-xs">
+                <Activity className="w-3 h-3 text-green-500" />
+                {tenantName || 'Connected'}
+              </Badge>
+            )}
           </CardTitle>
         </CardHeader>
 
@@ -192,8 +233,10 @@ export const AIChatAssistant: React.FC = () => {
                 </div>
                 <h3 className="text-lg font-semibold mb-2">How can I help you today?</h3>
                 <p className="text-sm text-muted-foreground text-center max-w-md mb-6">
-                  I'm your M365 management assistant. Ask me about security policies, 
-                  compliance requirements, configuration best practices, and more.
+                  {isConnected 
+                    ? `I have live context from your tenant "${tenantName || 'Connected'}" including ${alerts.length} security alerts and ${riskyUsers.length} risky user reports. Ask me about your specific security posture!`
+                    : 'I\'m your M365 management assistant. Ask me about security policies, compliance requirements, configuration best practices, and more.'
+                  }
                 </p>
                 
                 {/* Suggested Prompts */}
@@ -265,7 +308,7 @@ export const AIChatAssistant: React.FC = () => {
                 ref={inputRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Ask about M365 configuration, security, compliance..."
+                placeholder={isConnected ? `Ask about ${tenantName || 'your tenant'}...` : "Ask about M365 configuration, security, compliance..."}
                 disabled={isLoading}
                 className="flex-1"
               />
