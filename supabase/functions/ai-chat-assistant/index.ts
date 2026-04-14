@@ -28,14 +28,14 @@ serve(async (req) => {
   }
 
   try {
-    const { messages } = await req.json();
+    const { messages, tenantContext } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     
     if (!LOVABLE_API_KEY) {
       throw new Error('LOVABLE_API_KEY is not configured');
     }
 
-    const systemPrompt = `You are an expert Microsoft 365 management assistant for MSPs and IT administrators. You provide helpful, accurate, and actionable guidance on:
+    let systemPrompt = `You are an expert Microsoft 365 management assistant for MSPs and IT administrators. You provide helpful, accurate, and actionable guidance on:
 
 1. **Security Configuration**
    - Conditional Access policies
@@ -75,6 +75,21 @@ Guidelines for responses:
 - Suggest automation opportunities
 
 Format responses with clear structure using markdown when helpful.`;
+
+    // Inject live tenant context if available
+    if (tenantContext) {
+      systemPrompt += `
+
+---
+
+## LIVE TENANT DATA (Real-time from connected Microsoft 365 tenant)
+
+The following is real, live data from the user's connected tenant. Use this to provide specific, contextual advice rather than generic recommendations. Reference specific alerts, users, and sign-ins by name when relevant.
+
+${tenantContext}
+
+IMPORTANT: When the user asks about their security posture, risky users, alerts, or any tenant-specific question, always reference this live data. Do NOT make up or assume data — only use what is provided above. If data is missing or insufficient, let the user know what additional permissions or data would help.`;
+    }
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
