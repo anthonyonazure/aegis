@@ -6,14 +6,21 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Copy, Terminal, Play, Info } from 'lucide-react';
+import { Copy, Terminal, Info, Users, Loader2, Search } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useTenant } from '@/contexts/TenantContext';
+import { useTenantUsers } from '@/hooks/useTenantUsers';
 import { hawkCommands } from '@/lib/hawkData';
 
 export const ScriptGeneratorSection = () => {
   const { toast } = useToast();
+  const { isConnected, tenantId, tenantName } = useTenant();
+  const { users, isLoading: usersLoading } = useTenantUsers();
+
   const [investigationType, setInvestigationType] = useState<'tenant' | 'user' | 'both'>('tenant');
   const [upn, setUpn] = useState('');
+  const [upnSearch, setUpnSearch] = useState('');
+  const [showUserPicker, setShowUserPicker] = useState(false);
   const [daysBack, setDaysBack] = useState('90');
   const [outputPath, setOutputPath] = useState('C:\\HawkOutput');
   const [selectedCmds, setSelectedCmds] = useState<Set<string>>(new Set());
@@ -23,6 +30,15 @@ export const ScriptGeneratorSection = () => {
     if (investigationType === 'both') return hawkCommands.filter(c => c.category !== 'setup' && c.category !== 'message');
     return hawkCommands.filter(c => c.category === investigationType);
   }, [investigationType]);
+
+  const filteredUsers = useMemo(() => {
+    if (!upnSearch) return users.slice(0, 20);
+    const q = upnSearch.toLowerCase();
+    return users.filter(u =>
+      u.displayName.toLowerCase().includes(q) ||
+      u.userPrincipalName.toLowerCase().includes(q)
+    ).slice(0, 20);
+  }, [users, upnSearch]);
 
   const toggleCmd = (id: string) => {
     setSelectedCmds(prev => {
@@ -40,14 +56,21 @@ export const ScriptGeneratorSection = () => {
     }
   };
 
+  const selectUser = (userPrincipalName: string) => {
+    setUpn(userPrincipalName);
+    setShowUserPicker(false);
+    setUpnSearch('');
+  };
+
   const generatedScript = useMemo(() => {
     const lines: string[] = [
       '# ═══════════════════════════════════════════════════════════════════',
       '# Hawk M365 Forensics Investigation Script',
       `# Generated: ${new Date().toISOString().split('T')[0]}`,
+      tenantId ? `# Tenant: ${tenantName || tenantId}` : '',
       '# ═══════════════════════════════════════════════════════════════════',
       '',
-    ];
+    ].filter(Boolean);
 
     if (includeInstall) {
       lines.push(
@@ -120,7 +143,7 @@ export const ScriptGeneratorSection = () => {
     );
 
     return lines.join('\n');
-  }, [investigationType, upn, daysBack, outputPath, selectedCmds, includeInstall, filteredCommands]);
+  }, [investigationType, upn, daysBack, outputPath, selectedCmds, includeInstall, filteredCommands, tenantId, tenantName]);
 
   const copyScript = () => {
     navigator.clipboard.writeText(generatedScript);
@@ -133,6 +156,15 @@ export const ScriptGeneratorSection = () => {
         <h2 className="text-2xl font-bold">Script Generator</h2>
         <p className="text-muted-foreground mt-1">Build a ready-to-run Hawk PowerShell investigation script tailored to your scenario.</p>
       </div>
+
+      {isConnected && (
+        <div className="flex items-center gap-2 text-sm bg-green-500/10 border border-green-500/20 rounded-lg p-3">
+          <div className="w-2 h-2 rounded-full bg-green-500" />
+          <span className="text-green-700 dark:text-green-400">
+            Connected to <span className="font-medium">{tenantName || tenantId}</span> — user list auto-populated ({users.length} users)
+          </span>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Config */}
@@ -157,7 +189,58 @@ export const ScriptGeneratorSection = () => {
               {(investigationType === 'user' || investigationType === 'both') && (
                 <div className="space-y-2">
                   <Label>User Principal Name</Label>
-                  <Input placeholder="user@contoso.com" value={upn} onChange={e => setUpn(e.target.value)} />
+                  {isConnected && users.length > 0 ? (
+                    <div className="relative">
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder="Select or type a UPN..."
+                          value={upn}
+                          onChange={e => setUpn(e.target.value)}
+                          className="flex-1"
+                        />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShowUserPicker(!showUserPicker)}
+                          className="gap-1.5 shrink-0"
+                        >
+                          {usersLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Users className="w-3.5 h-3.5" />}
+                          Pick User
+                        </Button>
+                      </div>
+                      {showUserPicker && (
+                        <Card className="absolute z-50 mt-1 w-full max-h-60 overflow-auto shadow-lg">
+                          <CardContent className="p-2 space-y-1">
+                            <div className="relative mb-1">
+                              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                              <Input
+                                placeholder="Search users..."
+                                value={upnSearch}
+                                onChange={e => setUpnSearch(e.target.value)}
+                                className="pl-8 h-8 text-xs"
+                                autoFocus
+                              />
+                            </div>
+                            {filteredUsers.map(u => (
+                              <button
+                                key={u.id}
+                                className="w-full text-left px-2 py-1.5 rounded hover:bg-muted text-xs"
+                                onClick={() => selectUser(u.userPrincipalName)}
+                              >
+                                <p className="font-medium">{u.displayName}</p>
+                                <p className="text-muted-foreground font-mono">{u.userPrincipalName}</p>
+                              </button>
+                            ))}
+                            {filteredUsers.length === 0 && (
+                              <p className="text-xs text-muted-foreground text-center py-2">No users found</p>
+                            )}
+                          </CardContent>
+                        </Card>
+                      )}
+                    </div>
+                  ) : (
+                    <Input placeholder="user@contoso.com" value={upn} onChange={e => setUpn(e.target.value)} />
+                  )}
                 </div>
               )}
 
