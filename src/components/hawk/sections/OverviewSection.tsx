@@ -1,12 +1,22 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Shield, Terminal, BookOpen, Compass, ExternalLink } from 'lucide-react';
+import { Shield, Terminal, BookOpen, Compass, ExternalLink, Activity, ShieldAlert, UserX, LogIn, Loader2 } from 'lucide-react';
 import { hawkCommands, investigationPlaybooks, hawkPrerequisites } from '@/lib/hawkData';
 import { Button } from '@/components/ui/button';
+import { useTenant } from '@/contexts/TenantContext';
+import { useTenantSecurityData } from '@/hooks/useTenantSecurityData';
+import { useTenantUsers } from '@/hooks/useTenantUsers';
+import { format } from 'date-fns';
 
 export const OverviewSection = () => {
   const tenantCmds = hawkCommands.filter(c => c.category === 'tenant').length;
   const userCmds = hawkCommands.filter(c => c.category === 'user').length;
+  const { isConnected, tenantName, tenantId } = useTenant();
+  const { alerts, riskyUsers, riskySignIns, isLoading } = useTenantSecurityData();
+  const { users, isLoading: usersLoading } = useTenantUsers();
+
+  const highAlerts = alerts.filter(a => a.severity === 'high');
+  const activeRiskyUsers = riskyUsers.filter(u => u.riskLevel !== 'none' && u.riskState !== 'remediated');
 
   return (
     <div className="space-y-6">
@@ -16,6 +26,77 @@ export const OverviewSection = () => {
           PowerShell-based incident response and threat hunting for Microsoft 365. Generate scripts, follow investigation playbooks, and reference the complete command catalog.
         </p>
       </div>
+
+      {/* Live Tenant Context */}
+      {isConnected && (
+        <Card className="border-green-500/30 bg-green-500/5">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Activity className="w-4 h-4 text-green-500" />
+              Tenant Context — {tenantName || tenantId}
+            </CardTitle>
+            <CardDescription>Live security posture from your connected tenant</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="flex items-center gap-2 py-2">
+                <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">Loading security data...</span>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                <div className="flex items-center gap-2">
+                  <ShieldAlert className="w-4 h-4 text-destructive" />
+                  <div>
+                    <p className="text-lg font-bold">{alerts.length}</p>
+                    <p className="text-[10px] text-muted-foreground">Alerts</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <ShieldAlert className="w-4 h-4 text-orange-500" />
+                  <div>
+                    <p className="text-lg font-bold">{highAlerts.length}</p>
+                    <p className="text-[10px] text-muted-foreground">High Severity</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <UserX className="w-4 h-4 text-red-500" />
+                  <div>
+                    <p className="text-lg font-bold">{activeRiskyUsers.length}</p>
+                    <p className="text-[10px] text-muted-foreground">Risky Users</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <LogIn className="w-4 h-4 text-amber-500" />
+                  <div>
+                    <p className="text-lg font-bold">{riskySignIns.length}</p>
+                    <p className="text-[10px] text-muted-foreground">Risky Sign-Ins</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Shield className="w-4 h-4 text-blue-500" />
+                  <div>
+                    <p className="text-lg font-bold">{usersLoading ? '...' : users.length}</p>
+                    <p className="text-[10px] text-muted-foreground">Users Available</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {!isConnected && (
+        <Card className="border-border/50 bg-muted/30">
+          <CardContent className="p-4 flex items-center gap-3">
+            <Activity className="w-5 h-5 text-muted-foreground" />
+            <div>
+              <p className="text-sm font-medium">Connect a tenant for enhanced investigation</p>
+              <p className="text-xs text-muted-foreground">User lists and security context will auto-populate in the Script Generator and Investigation Wizard.</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
