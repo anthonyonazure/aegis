@@ -1,12 +1,16 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
-import { ChevronRight, AlertTriangle, CheckCircle2, Copy, Compass, ArrowLeft } from 'lucide-react';
+import { ChevronRight, AlertTriangle, CheckCircle2, Copy, Compass, ArrowLeft, Users, Search, Loader2, Activity } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { investigationPlaybooks, hawkCommands } from '@/lib/hawkData';
 import type { InvestigationPlaybook } from '@/lib/hawkData';
+import { useTenant } from '@/contexts/TenantContext';
+import { useTenantUsers } from '@/hooks/useTenantUsers';
+import { useTenantSecurityData } from '@/hooks/useTenantSecurityData';
 
 const severityColor: Record<string, string> = {
   critical: 'bg-destructive/15 text-destructive border-destructive/30',
@@ -17,12 +21,51 @@ const severityColor: Record<string, string> = {
 
 export const InvestigationWizardSection = () => {
   const { toast } = useToast();
+  const { isConnected, tenantId, tenantName } = useTenant();
+  const { users, isLoading: usersLoading } = useTenantUsers();
+  const { alerts, riskyUsers } = useTenantSecurityData();
   const [selectedPlaybook, setSelectedPlaybook] = useState<InvestigationPlaybook | null>(null);
   const [activeStep, setActiveStep] = useState(0);
+  const [targetUpn, setTargetUpn] = useState('');
+  const [upnSearch, setUpnSearch] = useState('');
+  const [showUserPicker, setShowUserPicker] = useState(false);
+
+  const filteredUsers = useMemo(() => {
+    if (!upnSearch) return users.slice(0, 20);
+    const q = upnSearch.toLowerCase();
+    return users.filter(u =>
+      u.displayName.toLowerCase().includes(q) ||
+      u.userPrincipalName.toLowerCase().includes(q)
+    ).slice(0, 20);
+  }, [users, upnSearch]);
+
+  // Highlight risky users at top of picker
+  const riskyUpns = useMemo(() => {
+    return new Set(riskyUsers.filter(u => u.riskLevel !== 'none').map(u => u.userPrincipalName.toLowerCase()));
+  }, [riskyUsers]);
 
   const copyCommand = (cmd: string) => {
-    navigator.clipboard.writeText(cmd);
-    toast({ title: 'Copied', description: 'Command copied to clipboard.' });
+    // Replace placeholders with live data
+    let finalCmd = cmd;
+    if (targetUpn) {
+      finalCmd = finalCmd.replace(/<UPN>/g, targetUpn).replace(/user@domain\.com/g, targetUpn);
+    }
+    if (tenantId) {
+      finalCmd = finalCmd.replace(/<TenantId>/g, tenantId);
+    }
+    navigator.clipboard.writeText(finalCmd);
+    toast({ title: 'Copied', description: 'Command copied to clipboard with live values.' });
+  };
+
+  const substituteCommand = (cmd: string): string => {
+    let result = cmd;
+    if (targetUpn) {
+      result = result.replace(/<UPN>/g, targetUpn).replace(/user@domain\.com/g, targetUpn);
+    }
+    if (tenantId) {
+      result = result.replace(/<TenantId>/g, tenantId);
+    }
+    return result;
   };
 
   if (!selectedPlaybook) {
@@ -32,6 +75,21 @@ export const InvestigationWizardSection = () => {
           <h2 className="text-2xl font-bold">Investigation Wizard</h2>
           <p className="text-muted-foreground mt-1">Choose an investigation scenario and follow the step-by-step guided workflow.</p>
         </div>
+
+        {/* Live Tenant Context */}
+        {isConnected && (
+          <Card className="border-border/50 bg-muted/30">
+            <CardContent className="p-4 flex items-center gap-3">
+              <Activity className="w-5 h-5 text-green-500 shrink-0" />
+              <div>
+                <p className="text-sm font-medium">Connected to {tenantName || 'tenant'}</p>
+                <p className="text-xs text-muted-foreground">
+                  {alerts.length} security alerts · {riskyUsers.filter(u => u.riskLevel !== 'none').length} risky users · {users.length} users available for investigation
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {investigationPlaybooks.map(pb => (
@@ -77,6 +135,71 @@ export const InvestigationWizardSection = () => {
           {selectedPlaybook.severity}
         </Badge>
       </div>
+
+      {/* Target User Selection */}
+      {isConnected && (
+        <Card className="border-border/50">
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Users className="w-4 h-4 text-primary" />
+                <p className="text-sm font-medium">Investigation Target</p>
+              </div>
+              {targetUpn && (
+                <Badge variant="secondary" className="text-xs">{targetUpn}</Badge>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search users or type UPN..."
+                  value={upnSearch || targetUpn}
+                  onChange={(e) => {
+                    setUpnSearch(e.target.value);
+                    setTargetUpn(e.target.value);
+                    setShowUserPicker(true);
+                  }}
+                  onFocus={() => setShowUserPicker(true)}
+                  className="pl-9"
+                />
+              </div>
+            </div>
+            {showUserPicker && users.length > 0 && (
+              <div className="border rounded-lg max-h-48 overflow-auto bg-background">
+                {usersLoading ? (
+                  <div className="p-3 flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="w-3 h-3 animate-spin" /> Loading users...
+                  </div>
+                ) : (
+                  filteredUsers.map(u => {
+                    const isRisky = riskyUpns.has(u.userPrincipalName.toLowerCase());
+                    return (
+                      <button
+                        key={u.id}
+                        className="w-full text-left px-3 py-2 hover:bg-muted/50 flex items-center justify-between text-sm"
+                        onClick={() => {
+                          setTargetUpn(u.userPrincipalName);
+                          setUpnSearch('');
+                          setShowUserPicker(false);
+                        }}
+                      >
+                        <div>
+                          <p className="font-medium">{u.displayName}</p>
+                          <p className="text-xs text-muted-foreground">{u.userPrincipalName}</p>
+                        </div>
+                        {isRisky && (
+                          <Badge variant="destructive" className="text-[10px]">Risky</Badge>
+                        )}
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Indicators */}
       <Card>
@@ -126,7 +249,9 @@ export const InvestigationWizardSection = () => {
         <CardContent className="space-y-4">
           {step.command && (
             <div className="relative">
-              <pre className="text-sm font-mono bg-muted/60 rounded-lg p-4 pr-12 overflow-x-auto">{step.command}</pre>
+              <pre className="text-sm font-mono bg-muted/60 rounded-lg p-4 pr-12 overflow-x-auto">
+                {substituteCommand(step.command)}
+              </pre>
               <Button
                 size="icon"
                 variant="ghost"
@@ -135,6 +260,11 @@ export const InvestigationWizardSection = () => {
               >
                 <Copy className="w-3.5 h-3.5" />
               </Button>
+              {(targetUpn || tenantId) && step.command.match(/<UPN>|<TenantId>|user@domain\.com/) && (
+                <p className="text-[10px] text-green-600 mt-1 flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3" /> Live values substituted
+                </p>
+              )}
             </div>
           )}
 
