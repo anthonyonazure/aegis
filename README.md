@@ -65,11 +65,11 @@ PolicyForge supports multiple AI providers — bring-your-own-key for Anthropic 
 
 ## Screenshots
 
-> _Captures live in `docs/screenshots/`. See [docs/SCREENSHOTS.md](docs/SCREENSHOTS.md)._
+| Threat Intelligence | AI Anomaly Detection |
+|---|---|
+| ![Threat Intel](docs/screenshots/threat-intel.png) | ![Anomaly](docs/screenshots/anomaly-detection.png) |
 
-| Dashboard | Threat Intelligence | AI Anomaly Detection |
-|---|---|---|
-| ![Dashboard](docs/screenshots/dashboard.png) | ![Threat Intel](docs/screenshots/threat-intel.png) | ![Anomaly](docs/screenshots/anomaly-detection.png) |
+The MISP-inspired Threat Intelligence browser ships with **38 ATT&CK techniques, 15 threat actors (12 active), 20 IOC entries, 20 galaxy clusters, 14 OSINT feeds, and 4 taxonomies** as the reference catalog. AI Anomaly Detection scans tenants for anomalous sign-ins, configuration changes, and permission grants — multi-tenant aware (5 customers / 8 tenants in production today).
 
 ## Tech Stack
 
