@@ -177,7 +177,7 @@ export function AIProviderSettings() {
                   <SelectItem value="lovable">
                     <div className="flex items-center gap-2">
                       <Sparkles className="w-4 h-4 text-primary" />
-                      Lovable AI (Built-in)
+                      Built-in (Gemini & GPT)
                     </div>
                   </SelectItem>
                   {configuredProviders.map(p => (
@@ -210,7 +210,7 @@ export function AIProviderSettings() {
             <div className="flex items-start gap-2 p-3 bg-primary/10 rounded-lg">
               <Sparkles className="w-4 h-4 text-primary mt-0.5" />
               <div className="text-sm">
-                <p className="font-medium text-foreground">Lovable AI is ready to use</p>
+                <p className="font-medium text-foreground">Built-in AI is ready to use</p>
                 <p className="text-muted-foreground">No configuration needed. Access to Gemini & GPT models included.</p>
               </div>
             </div>

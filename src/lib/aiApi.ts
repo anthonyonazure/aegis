@@ -40,7 +40,7 @@ export interface AIAnalysisResult {
 
 // Available AI providers
 export const AI_PROVIDERS = [
-  { id: 'lovable', name: 'Lovable AI', description: 'Built-in AI (Gemini & GPT)', requiresKey: false },
+  { id: 'lovable', name: 'Built-in', description: 'Built-in AI (Gemini & GPT)', requiresKey: false },
   { id: 'openai', name: 'OpenAI', description: 'GPT-4o, GPT-4, GPT-3.5', requiresKey: true },
   { id: 'google', name: 'Google AI', description: 'Gemini Pro, Gemini Flash', requiresKey: true },
   { id: 'anthropic', name: 'Anthropic', description: 'Claude 3.5, Claude 3', requiresKey: true },
