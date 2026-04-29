@@ -30,7 +30,7 @@ Designed for the operator running 5–500 customers who needs leverage, not just
 
 ### Intune Management
 - **Intune Manager** — centralized device, app, policy, and configuration management across tenants
-- **DUDE Sync** — auto-tag Microsoft Defender devices based on user-group membership (Microsoft Graph only)
+- **DUDE Sync** — auto-tag Microsoft Defender devices based on user-group membership (Microsoft Graph only). Concept inspired by Daniel Petri's [DUDE-Manager](https://github.com/danielpetri666/DUDE-Manager) (MIT).
 
 ### Threat Intelligence
 - **MISP Browser** — local threat intel browser with curated ATT&CK techniques, IOCs, threat actor profiles, OSINT feeds

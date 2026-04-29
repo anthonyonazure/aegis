@@ -1,3 +1,15 @@
+/**
+ * DUDE Manager — Dynamic User & Device Enumeration.
+ *
+ * Concept inspired by Daniel Petri's PowerShell + WPF DUDE-Manager
+ * (https://github.com/danielpetri666/DUDE-Manager, MIT licensed). His
+ * project established the design — user-group → device-group sync with
+ * transitive membership resolution, a blast-radius limiter, and optional
+ * Administrative Unit / Defender tag automation. This view ports the same
+ * concept to Aegis's Supabase + React stack via the dude-sync edge function.
+ *
+ * Feature parity gap-analysis tracked at: GitHub issue #6.
+ */
 import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
