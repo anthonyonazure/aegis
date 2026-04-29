@@ -226,5 +226,22 @@ SELECT cron.schedule(
 - [ ] Open a recent run, click **Download evidence package**, verify the ZIP contains `cover.pdf`, `manifest.json`, and `controls/<code>.json` files
 - [ ] Open the PDF and confirm it shows the control table colored by status
 
+### 30. Apply the marketplace migration (Phase 2 #5)
+File: `supabase/migrations/20260429180000_policy_templates_marketplace.sql`
+
+- [ ] Apply the migration
+- [ ] Verify tables `marketplace_templates` and `marketplace_template_ratings` exist with their RLS policies
+- [ ] Verify the SECURITY DEFINER function `install_marketplace_template(uuid)` is callable by `authenticated`
+
+### 31. Smoke-test the marketplace (Phase 2 #5)
+- [ ] Sidebar → Configuration & Policies → **Templates Marketplace**
+- [ ] Click **Publish**, paste a small JSON object as `policy_data`, give it a category, hit Publish
+- [ ] Refresh the **Browse** tab; the new template should be there
+- [ ] Click into the card, hit **Install** — confirm a new entry shows up in your existing Policy Templates view
+- [ ] Rate the template; confirm the average updates after a refresh
+- [ ] Open the **My publications** tab, click Unpublish — confirm it disappears from Browse but stays in My publications
+
+No new edge functions for #5 — install is a SECURITY DEFINER RPC, ratings + publish are plain RLS-protected inserts.
+
 ## Done
 _Move items here as you complete them so we have a running history._

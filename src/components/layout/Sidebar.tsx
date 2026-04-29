@@ -135,6 +135,7 @@ const navGroups: NavGroup[] = [
     title: 'Policy Management',
     items: [
       { id: 'policy-templates', label: 'Policy Templates', icon: FileCheck, description: 'Browse and apply policy templates' },
+      { id: 'policy-marketplace', label: 'Templates Marketplace', icon: Webhook, description: 'Browse and publish community-shared policy templates' },
       { id: 'policy-generator', label: 'Policy Generator', icon: Wand2, isAI: true, description: 'AI-powered policy creation and customization' },
       { id: 'remediation-scripts', label: 'Remediation Scripts', icon: Wrench, isAI: true, description: 'Generate scripts to fix configuration issues' },
       { id: 'change-impact', label: 'Change Impact', icon: GitCompare, isAI: true, description: 'AI analysis of impact before making changes' },
