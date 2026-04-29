@@ -6,7 +6,7 @@
 # Prerequisites (one-time):
 #   1. npm install -g supabase   (or use npx supabase ...)
 #   2. supabase login
-#   3. supabase link --project-ref rcvtxvpyqmfuunnpsqny
+#   3. supabase link --project-ref <your-project-ref>
 #   4. Set the AI gateway secrets in Supabase Dashboard:
 #        AI_GATEWAY_API_KEY = your OpenAI / OpenAI-compatible API key
 #        AI_GATEWAY_URL     = https://api.openai.com/v1 (or your gateway)

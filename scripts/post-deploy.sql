@@ -17,7 +17,7 @@ ALTER TABLE public.ai_conversations ALTER COLUMN provider SET DEFAULT 'gateway';
 --    when no schedule is due, so this is cheap.
 --
 --    Replace the placeholders before running:
---      <SUPABASE_URL>       — e.g. https://rcvtxvpyqmfuunnpsqny.supabase.co
+--      <SUPABASE_URL>       — e.g. https://<your-project-ref>.supabase.co
 --      <SERVICE_ROLE_KEY>   — service_role key from Project Settings → API
 -- ============================================================================
 -- Required extensions (Supabase has them, but enable just in case)
@@ -40,7 +40,7 @@ SELECT cron.schedule(
   'aegis-compliance-runner',
   '*/15 * * * *',
   $cron$ SELECT net.http_post(
-    url := 'https://rcvtxvpyqmfuunnpsqny.supabase.co/functions/v1/run-scheduled-compliance',
+    url := 'https://<your-project-ref>.supabase.co/functions/v1/run-scheduled-compliance',
     headers := jsonb_build_object(
       'Authorization', 'Bearer YOUR_SERVICE_ROLE_KEY_HERE',
       'Content-Type',  'application/json'

@@ -16,14 +16,14 @@
 
 Most MSP M365 tooling is read-only dashboards or pre-AI scripting platforms. Aegis is built differently: **multi-customer, multi-tenant, AI-augmented across every workflow** that an MSP runs against Microsoft 365.
 
-Production-grade today: 5 customers loaded, 8 tenants connected, 45 successful tenant exports, full Graph API integration. Built for the operator running 5–500 customers who needs leverage, not just visibility.
+Designed for the operator running 5–500 customers who needs leverage, not just visibility. Open-source under the MIT license — fork it, run your own instance, or contribute back.
 
 ## Capability Surface
 
 ### Governance & Configuration
 - **Tenant Health** — connection health, API status, license usage across every connected tenant
 - **Resource Explorer** — browse and select M365 resources across 11 categories (Intune, Conditional Access, Entra ID, Exchange, SharePoint, Teams, etc.)
-- **Export Configuration** — tenant settings exported to JSON / Terraform / Bicep / PowerShell. 45 exports / 4 formats.
+- **Export Configuration** — tenant settings exported to JSON / Terraform / Bicep / PowerShell.
 - **Import & Restore** — restore configurations from previous exports or migrate between tenants
 - **Policy Templates** — reusable policy definitions for consistent deployments across customers
 - **Customer Management** — group multiple tenants under MSP customers; org chart, contacts, PSA ticket links
@@ -69,7 +69,7 @@ Aegis supports multiple AI providers — bring-your-own-key for Anthropic Claude
 |---|---|
 | ![Threat Intel](docs/screenshots/threat-intel.png) | ![Anomaly](docs/screenshots/anomaly-detection.png) |
 
-The MISP-inspired Threat Intelligence browser ships with **38 ATT&CK techniques, 15 threat actors (12 active), 20 IOC entries, 20 galaxy clusters, 14 OSINT feeds, and 4 taxonomies** as the reference catalog. AI Anomaly Detection scans tenants for anomalous sign-ins, configuration changes, and permission grants — multi-tenant aware (5 customers / 8 tenants in production today).
+The MISP-inspired Threat Intelligence browser ships with **38 ATT&CK techniques, 15 threat actors, 20 IOC entries, 20 galaxy clusters, 14 OSINT feeds, and 4 taxonomies** as the seed reference catalog. AI Anomaly Detection scans tenants for anomalous sign-ins, configuration changes, and permission grants — multi-tenant aware.
 
 ## Tech Stack
 
@@ -88,26 +88,56 @@ The MISP-inspired Threat Intelligence browser ships with **38 ATT&CK techniques,
 ## Quick Start
 
 ```bash
-git clone git@github.com:anthonyonazure/aegis.git
+git clone https://github.com/<your-fork>/aegis.git
 cd aegis
 
 npm install
-cp .env.example .env    # fill in Supabase + Graph API + AI provider keys
+cp .env.example .env    # fill in Supabase URL + publishable key
 npm run dev             # http://localhost:8080
 ```
 
-You'll need:
-- An Azure app registration with appropriate Graph API permissions for the modules you intend to enable
-- Supabase project (or local instance)
-- API keys for at least one AI provider (or use the built-in default)
+### Prerequisites
 
-### Supabase edge function secrets
+- A **Supabase project** (cloud or self-hosted). Free tier works for evaluation.
+- **Supabase CLI** installed and logged in (`supabase login`).
+- An **Azure app registration** with Microsoft Graph API permissions for the modules you intend to enable. Required permissions vary by feature; the in-app **Permissions Reference** view lists them.
+- **API key for at least one AI provider** (OpenAI, Anthropic, Google, Azure OpenAI, OpenRouter, etc.) for the AI features.
 
-The built-in AI gateway is wired through env vars (no vendor lock in the source). Point it at any OpenAI-compatible chat-completions endpoint:
+### Required environment variables
 
-- `AI_GATEWAY_API_KEY` — API key for the gateway
-- `AI_GATEWAY_URL` — base URL for an OpenAI-compatible endpoint (e.g. `https://api.openai.com/v1`, an Azure OpenAI deployment, OpenRouter, or your own proxy)
-- Per-provider keys (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.) are optional fallbacks. Users can also supply their own via the in-app provider settings (BYOK).
+**Frontend (`.env`):**
+| Variable | Description |
+|---|---|
+| `VITE_SUPABASE_URL` | Your Supabase project URL (e.g. `https://abc.supabase.co`) |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | The `anon` / publishable key from Project Settings → API |
+| `VITE_SUPABASE_PROJECT_ID` | Project ref (used for diagnostics only) |
+| `VITE_PORTAL_BASE_HOST` | *(optional)* Base host for the customer portal (e.g. `aegis.io`). Without this, only path-based portal routing works. |
+
+**Supabase edge function secrets** (Project Settings → Edge Functions → Manage secrets):
+| Variable | Description |
+|---|---|
+| `AI_GATEWAY_API_KEY` | API key for the built-in AI gateway |
+| `AI_GATEWAY_URL` | Base URL for an OpenAI-compatible chat-completions endpoint (e.g. `https://api.openai.com/v1`) |
+| `RESEND_API_KEY` | *(optional)* For outbound notification emails |
+| `CUSTOM_DOMAIN_CNAME_TARGET` | *(optional)* For customer-owned portal domains (Phase 2 #3c) |
+| `CUSTOM_DOMAIN_A_TARGETS` | *(optional)* Apex-domain fallback for the above |
+
+Users can also bring their own provider keys via the in-app AI Provider Settings (BYOK).
+
+### Deploying
+
+After `supabase login` + `supabase link --project-ref <your-project-ref>`:
+
+```powershell
+# Windows
+.\scripts\deploy-aegis.ps1
+```
+```bash
+# macOS / WSL / Git Bash
+./scripts/deploy-aegis.sh
+```
+
+This runs every database migration and deploys every edge function in order. Then paste `scripts/post-deploy.sql` into the Supabase SQL editor (after editing the placeholder URL + service-role key) to register the compliance cron job. See [HANDOFF.md](./HANDOFF.md) for the full deployment runbook including DNS / SSL setup for the customer portal.
 
 ## Project Structure
 
@@ -130,13 +160,26 @@ docs/
 
 ## Roadmap
 
-- [ ] Public marketplace for shared Policy Templates across MSPs
-- [ ] White-label per-MSP branding (already supports multi-customer; add branding)
-- [ ] Webhook → ServiceNow / Jira / ConnectWise on detected anomalies
-- [ ] Customer-facing read-only portal (clients see their own posture without seeing other tenants)
-- [ ] Automated CMMC / HIPAA / SOC 2 evidence collection scheduling
-- [ ] Plugin SDK for community-contributed AI workflows
+Implemented (Phase 2 of original roadmap):
+
+- [x] White-label per-MSP branding
+- [x] Webhook → ServiceNow / Jira / ConnectWise on detected anomalies
+- [x] Customer-facing read-only portal (subdomain + custom-domain routing, branded per customer)
+- [x] Automated CMMC / HIPAA / SOC 2 evidence collection with downloadable audit packages and scheduling
+- [x] Public marketplace for shared Policy Templates across MSPs
+- [x] Plugin SDK for community-contributed AI workflows
+
+Open ideas:
+
+- [ ] Additional compliance frameworks (NIST SP 800-53, ISO 27001, PCI DSS)
+- [ ] More evaluator coverage per existing framework
+- [ ] AI-generated narrative explanations on evidence packages
+- [ ] Slack / Teams app surfaces for the customer portal
+
+## Contributing
+
+Contributions welcome! See [CONTRIBUTING.md](./CONTRIBUTING.md) for development setup, coding conventions, and the PR process. Please report security issues per [SECURITY.md](./SECURITY.md).
 
 ## License
 
-Proprietary. All rights reserved.
+[MIT](./LICENSE) — see the LICENSE file for full terms.

@@ -1,10 +1,10 @@
 # Aegis — Manual Follow-Ups
 
-Things I (Claude) cannot do from the dev shell that you, Anthony, need to do in Supabase / external services. Cross items off as you complete them.
+Things the operator deploying Aegis needs to do in Supabase / external services that can't be scripted from the dev shell. Cross items off as you complete them.
 
 ## TL;DR — fastest path
 
-After `supabase login` + `supabase link --project-ref rcvtxvpyqmfuunnpsqny`:
+After `supabase login` + `supabase link --project-ref <your-project-ref>`:
 
 ```powershell
 # Windows

@@ -1,4 +1,6 @@
-project_id = "rcvtxvpyqmfuunnpsqny"
+# Replace with your own Supabase project ref before running `supabase link`.
+# This is the "Project ID" from your Supabase Dashboard → Project Settings → General.
+project_id = "your-project-ref"
 
 [functions.graph-api]
 verify_jwt = false

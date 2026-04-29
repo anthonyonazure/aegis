@@ -7,7 +7,7 @@
 # Prerequisites (one-time):
 #   1. brew install supabase/tap/supabase   (or npm i -g supabase)
 #   2. supabase login
-#   3. supabase link --project-ref rcvtxvpyqmfuunnpsqny
+#   3. supabase link --project-ref <your-project-ref>
 #   4. Set AI_GATEWAY_API_KEY + AI_GATEWAY_URL in the Supabase Dashboard.
 #      Optional for #3c custom domains: CUSTOM_DOMAIN_CNAME_TARGET / CUSTOM_DOMAIN_A_TARGETS.
 #
