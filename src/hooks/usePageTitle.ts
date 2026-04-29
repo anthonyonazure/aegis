@@ -1,12 +1,15 @@
 import { useEffect } from 'react';
+import { useBranding } from '@/contexts/BrandingContext';
 
-const BASE_TITLE = 'Aegis';
+const DEFAULT_TITLE = 'Aegis';
 
 export function usePageTitle(title?: string) {
+  const { brandName } = useBranding();
+  const baseTitle = brandName || DEFAULT_TITLE;
   useEffect(() => {
-    document.title = title ? `${title} | ${BASE_TITLE}` : `${BASE_TITLE} - M365 Governance Platform`;
+    document.title = title ? `${title} | ${baseTitle}` : `${baseTitle} - M365 Governance Platform`;
     return () => {
-      document.title = `${BASE_TITLE} - M365 Governance Platform`;
+      document.title = `${baseTitle} - M365 Governance Platform`;
     };
-  }, [title]);
+  }, [title, baseTitle]);
 }

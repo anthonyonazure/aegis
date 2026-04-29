@@ -57,6 +57,13 @@ export async function updateCustomer(
   if (updates.primaryContactEmail !== undefined) updateData.primary_contact_email = updates.primaryContactEmail;
   if (updates.notes !== undefined) updateData.notes = updates.notes;
   if (updates.isActive !== undefined) updateData.is_active = updates.isActive;
+  if (updates.brandName !== undefined) updateData.brand_name = updates.brandName;
+  if (updates.logoUrl !== undefined) updateData.logo_url = updates.logoUrl;
+  if (updates.primaryColor !== undefined) updateData.primary_color = updates.primaryColor;
+  if (updates.accentColor !== undefined) updateData.accent_color = updates.accentColor;
+  if (updates.supportEmail !== undefined) updateData.support_email = updates.supportEmail;
+  if (updates.supportUrl !== undefined) updateData.support_url = updates.supportUrl;
+  if (updates.customSubdomain !== undefined) updateData.custom_subdomain = updates.customSubdomain;
 
   const { data, error } = await supabase
     .from('customers')
@@ -291,6 +298,13 @@ function mapCustomerFromDb(row: Record<string, unknown>): Customer {
     isActive: row.is_active as boolean,
     createdAt: new Date(row.created_at as string),
     updatedAt: new Date(row.updated_at as string),
+    brandName: row.brand_name as string | undefined,
+    logoUrl: row.logo_url as string | undefined,
+    primaryColor: row.primary_color as string | undefined,
+    accentColor: row.accent_color as string | undefined,
+    supportEmail: row.support_email as string | undefined,
+    supportUrl: row.support_url as string | undefined,
+    customSubdomain: row.custom_subdomain as string | undefined,
   };
 }
 

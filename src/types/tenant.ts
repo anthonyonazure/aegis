@@ -13,6 +13,14 @@ export interface Customer {
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
+  // White-label branding
+  brandName?: string;
+  logoUrl?: string;
+  primaryColor?: string;     // HSL string, e.g. "210 100% 55%"
+  accentColor?: string;      // HSL string
+  supportEmail?: string;
+  supportUrl?: string;
+  customSubdomain?: string;  // Reserved for customer portal (Phase 2 #3)
 }
 
 export interface TenantGroup {

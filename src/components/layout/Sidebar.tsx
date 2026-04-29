@@ -56,6 +56,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { useBranding } from '@/contexts/BrandingContext';
 import { TenantSelector } from '@/components/TenantSelector';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
@@ -198,6 +199,7 @@ interface SidebarProps {
 
 export const Sidebar = ({ activeTab, onTabChange, isConnected = false }: SidebarProps) => {
   const [collapsed, setCollapsed] = useState(false);
+  const branding = useBranding();
 
   return (
     <motion.aside 
@@ -225,11 +227,19 @@ export const Sidebar = ({ activeTab, onTabChange, isConnected = false }: Sidebar
       <div className="p-4 border-b border-sidebar-border flex items-center justify-between relative z-10">
         {!collapsed && (
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-glow">
-              <Shield className="w-5 h-5 text-primary-foreground" />
-            </div>
+            {branding.logoUrl ? (
+              <img
+                src={branding.logoUrl}
+                alt={`${branding.brandName} logo`}
+                className="w-9 h-9 rounded-xl object-contain bg-sidebar-accent/30"
+              />
+            ) : (
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-glow">
+                <Shield className="w-5 h-5 text-primary-foreground" />
+              </div>
+            )}
             <div>
-              <h1 className="font-semibold text-sm text-foreground tracking-tight">Aegis</h1>
+              <h1 className="font-semibold text-sm text-foreground tracking-tight">{branding.brandName}</h1>
               <p className="text-[11px] text-muted-foreground">M365 Governance Platform</p>
             </div>
           </div>

@@ -16,6 +16,34 @@ interface NotificationPayload {
   message: string;
   score?: number;
   recommendations?: string[];
+  /** Optional — when supplied, the email is white-label branded with the customer's brand_name, logo, and support contact. */
+  customer_id?: string;
+}
+
+interface CustomerBrand {
+  brand_name: string | null;
+  logo_url: string | null;
+  support_email: string | null;
+  support_url: string | null;
+  primary_color: string | null;
+}
+
+async function loadCustomerBrand(customerId: string): Promise<CustomerBrand | null> {
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (!supabaseUrl || !supabaseKey) return null;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    const { data } = await supabase
+      .from('customers')
+      .select('brand_name, logo_url, support_email, support_url, primary_color')
+      .eq('id', customerId)
+      .maybeSingle();
+    return (data as CustomerBrand) ?? null;
+  } catch (e) {
+    console.error('loadCustomerBrand failed:', e);
+    return null;
+  }
 }
 
 async function sendSlackNotification(webhookUrl: string, subject: string, message: string, score?: number, recommendations?: string[]) {
@@ -98,23 +126,54 @@ async function sendTeamsNotification(webhookUrl: string, subject: string, messag
   }
 }
 
-async function sendEmailNotification(email: string, subject: string, message: string, score?: number, recommendations?: string[]) {
+async function sendEmailNotification(
+  email: string,
+  subject: string,
+  message: string,
+  score?: number,
+  recommendations?: string[],
+  brand?: CustomerBrand | null
+) {
   const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
   if (!RESEND_API_KEY) {
     throw new Error('RESEND_API_KEY not configured - email notifications unavailable');
   }
 
-  let html = `<h2>${subject}</h2><p>${message}</p>`;
+  const brandName = brand?.brand_name?.trim() || 'Aegis';
+  const logoUrl = brand?.logo_url?.trim() || null;
+  const primary = brand?.primary_color?.trim() || '210 100% 55%';
+  const supportEmail = brand?.support_email?.trim() || null;
+  const supportUrl = brand?.support_url?.trim() || null;
+
+  const headerHtml = logoUrl
+    ? `<img src="${logoUrl}" alt="${brandName}" style="max-height:48px;max-width:200px;display:block;margin:0 0 16px 0" />`
+    : `<div style="font-weight:700;font-size:18px;color:hsl(${primary});margin-bottom:16px">${brandName}</div>`;
+
+  const supportFooter = supportEmail || supportUrl
+    ? `<hr style="margin:24px 0;border:none;border-top:1px solid #e5e7eb"/>
+       <p style="font-size:12px;color:#6b7280">
+         ${supportEmail ? `Need help? <a href="mailto:${supportEmail}">${supportEmail}</a>` : ''}
+         ${supportEmail && supportUrl ? ' · ' : ''}
+         ${supportUrl ? `<a href="${supportUrl}">Support center</a>` : ''}
+       </p>`
+    : '';
+
+  let html = `<div style="font-family:system-ui,-apple-system,sans-serif;color:#111;max-width:600px">
+    ${headerHtml}
+    <h2 style="font-size:18px;margin:0 0 12px">${subject}</h2>
+    <p style="margin:0 0 12px">${message}</p>`;
   if (score !== undefined) {
     html += `<p><strong>Score:</strong> ${score}%</p>`;
   }
   if (recommendations && recommendations.length > 0) {
-    html += `<h3>Top Recommendations:</h3><ol>`;
-    recommendations.slice(0, 5).forEach(r => {
-      html += `<li>${r}</li>`;
+    html += `<h3 style="font-size:14px;margin:16px 0 8px">Top recommendations</h3><ol style="margin:0;padding-left:20px">`;
+    recommendations.slice(0, 5).forEach((r) => {
+      html += `<li style="margin:4px 0">${r}</li>`;
     });
     html += `</ol>`;
   }
+  html += supportFooter;
+  html += `</div>`;
 
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -123,9 +182,10 @@ async function sendEmailNotification(email: string, subject: string, message: st
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      from: 'Aegis <notifications@resend.dev>',
+      from: `${brandName} <notifications@resend.dev>`,
       to: [email],
-      subject: `[Aegis] ${subject}`,
+      subject: `[${brandName}] ${subject}`,
+      ...(supportEmail ? { reply_to: supportEmail } : {}),
       html,
     }),
   });
@@ -143,24 +203,28 @@ serve(async (req) => {
 
   try {
     const payload: NotificationPayload = await req.json();
-    const { channel_type, config, subject, message, score, recommendations } = payload;
+    const { channel_type, config, subject, message, score, recommendations, customer_id } = payload;
 
-    console.log(`Sending ${channel_type} notification: ${subject}`);
+    console.log(`Sending ${channel_type} notification: ${subject}${customer_id ? ` (customer ${customer_id})` : ''}`);
+
+    // Load customer branding for white-label emails. Slack/Teams use their own
+    // branding model so we only apply for email today.
+    const brand = customer_id ? await loadCustomerBrand(customer_id) : null;
 
     switch (channel_type) {
       case 'slack':
         if (!config.webhook_url) throw new Error('Slack webhook URL required');
         await sendSlackNotification(config.webhook_url, subject, message, score, recommendations);
         break;
-      
+
       case 'teams':
         if (!config.webhook_url) throw new Error('Teams webhook URL required');
         await sendTeamsNotification(config.webhook_url, subject, message, score, recommendations);
         break;
-      
+
       case 'email':
         if (!config.email) throw new Error('Email address required');
-        await sendEmailNotification(config.email, subject, message, score, recommendations);
+        await sendEmailNotification(config.email, subject, message, score, recommendations, brand);
         break;
       
       default:

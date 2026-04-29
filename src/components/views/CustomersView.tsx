@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { CustomerManager } from '@/components/CustomerManager';
 import { TenantGroupManager } from '@/components/TenantGroupManager';
 import { TenantConfigPanel } from '@/components/TenantConfigPanel';
+import { BrandingSettings } from '@/components/customers/BrandingSettings';
 import { Customer } from '@/types/tenant';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { FolderTree, Settings, ArrowLeft } from 'lucide-react';
+import { FolderTree, Settings, ArrowLeft, Palette } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 type ViewMode = 'list' | 'customer-detail';
@@ -49,7 +50,7 @@ export const CustomersView = () => {
           </div>
         </div>
 
-        {/* Tabs for Tenants and Groups */}
+        {/* Tabs for Tenants, Groups, and Branding */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList>
             <TabsTrigger value="tenants" className="gap-2">
@@ -60,6 +61,10 @@ export const CustomersView = () => {
               <FolderTree className="w-4 h-4" />
               Tenant Groups
             </TabsTrigger>
+            <TabsTrigger value="branding" className="gap-2">
+              <Palette className="w-4 h-4" />
+              Branding
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="tenants" className="mt-6">
@@ -68,6 +73,10 @@ export const CustomersView = () => {
 
           <TabsContent value="groups" className="mt-6">
             <TenantGroupManager customer={selectedCustomer} />
+          </TabsContent>
+
+          <TabsContent value="branding" className="mt-6">
+            <BrandingSettings customer={selectedCustomer} />
           </TabsContent>
         </Tabs>
       </div>
