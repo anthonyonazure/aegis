@@ -137,3 +137,22 @@ verify_jwt = false
 
 [functions.email-security]
 verify_jwt = false
+
+# Phase 2 #3a–#3c, #4a–#4c, #6 functions
+[functions.compute-drift-adhoc]
+verify_jwt = false
+
+[functions.invite-portal-user]
+verify_jwt = false
+
+[functions.verify-custom-domain]
+verify_jwt = false
+
+[functions.collect-compliance-evidence]
+verify_jwt = false
+
+[functions.run-scheduled-compliance]
+verify_jwt = false
+
+[functions.run-plugin]
+verify_jwt = false

@@ -2,6 +2,23 @@
 
 Things I (Claude) cannot do from the dev shell that you, Anthony, need to do in Supabase / external services. Cross items off as you complete them.
 
+## TL;DR — fastest path
+
+After `supabase login` + `supabase link --project-ref rcvtxvpyqmfuunnpsqny`:
+
+```powershell
+# Windows
+.\scripts\deploy-aegis.ps1
+```
+```bash
+# macOS / WSL / Git Bash
+./scripts/deploy-aegis.sh
+```
+
+That handles every migration + every function deploy below in one pass. Then paste `scripts/post-deploy.sql` into the Supabase SQL editor (after editing the URL + service-role placeholders) to register the compliance cron job and rename any `provider='lovable'` rows.
+
+The remaining items in this file are manual: gateway secrets, Auth redirect URLs, DNS/SSL for portal hosts, and the smoke-test passes.
+
 ## Open
 
 ### 1. Configure AI gateway secrets in Supabase
