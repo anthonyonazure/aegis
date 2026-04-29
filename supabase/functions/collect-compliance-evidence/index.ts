@@ -267,6 +267,144 @@ const EVALUATORS: Record<string, Evaluator> = {
   },
 
   /**
+   * Pass: at least one enabled CA policy with grantControls.builtInControls
+   * including 'block' that targets legacy clientAppTypes ('exchangeActiveSync'
+   * and/or 'other'). 'other' is what Graph reports for IMAP / POP / SMTP /
+   * older Office clients — collectively "legacy auth".
+   */
+  'legacy-auth-blocked': async ({ fetchGraph }) => {
+    const data = await fetchGraph('/identity/conditionalAccess/policies');
+    if (!data) {
+      return {
+        status: 'na',
+        notes: 'Conditional Access policies not readable.',
+        snapshot: {},
+      };
+    }
+    const policies = (data.value as Array<Record<string, unknown>> | undefined) ?? [];
+    const matches = policies.filter((p) => {
+      if (p.state !== 'enabled') return false;
+      const conditions = p.conditions as Record<string, unknown> | undefined;
+      const clientApps = (conditions?.clientAppTypes as string[]) ?? [];
+      const blocksLegacy =
+        clientApps.includes('exchangeActiveSync') || clientApps.includes('other');
+      const grantControls = p.grantControls as Record<string, unknown> | undefined;
+      const builtIn = (grantControls?.builtInControls as string[]) ?? [];
+      return blocksLegacy && builtIn.includes('block');
+    });
+    if (matches.length > 0) {
+      return {
+        status: 'pass',
+        notes: `${matches.length} enabled Conditional Access policy/policies block legacy authentication clients.`,
+        snapshot: {
+          matchedPolicies: matches.map((m) => ({
+            id: m.id,
+            displayName: m.displayName,
+            conditions: m.conditions,
+          })),
+        },
+      };
+    }
+    return {
+      status: 'fail',
+      notes: 'No enabled Conditional Access policy blocks legacy authentication. Legacy protocols (IMAP / POP / SMTP / older Office clients) bypass MFA and modern Conditional Access checks.',
+      snapshot: {
+        enabledPolicyCount: policies.filter((p) => p.state === 'enabled').length,
+      },
+    };
+  },
+
+  /**
+   * Pass: authorizationPolicy.allowInvitesFrom is NOT 'everyone' AND
+   * defaultUserRolePermissions is configured to restrict guest user creation.
+   * `everyone` lets anyone with a tenant account invite externals — high risk
+   * for both privacy (HIPAA, SOC 2) and supply chain (CMMC).
+   */
+  'guest-restrictions': async ({ fetchGraph }) => {
+    const data = await fetchGraph('/policies/authorizationPolicy');
+    if (!data) {
+      return {
+        status: 'na',
+        notes: 'authorizationPolicy not readable (Policy.Read.All required).',
+        snapshot: {},
+      };
+    }
+    // Graph returns a single object here, not a {value:[…]} list.
+    const policy = (data as Record<string, unknown>) ?? {};
+    const allowInvitesFrom = String(policy.allowInvitesFrom ?? '');
+    const allowedToCreateApps = (policy.defaultUserRolePermissions as Record<string, unknown> | undefined)
+      ?.allowedToCreateApps;
+    const restrictive = allowInvitesFrom !== 'everyone' && allowInvitesFrom !== '';
+    if (restrictive) {
+      return {
+        status: 'pass',
+        notes: `Guest invites restricted to ${allowInvitesFrom}.`,
+        snapshot: {
+          allowInvitesFrom,
+          allowedToCreateApps,
+        },
+      };
+    }
+    return {
+      status: 'fail',
+      notes: `Any user can invite guests (allowInvitesFrom=${allowInvitesFrom || 'unset'}). Restrict to admins or guest inviters.`,
+      snapshot: {
+        allowInvitesFrom,
+        allowedToCreateApps,
+      },
+    };
+  },
+
+  /**
+   * Pass: at least one ENABLED Conditional Access policy that triggers on
+   * sign-in risk ('high' or 'medium') and either grants with MFA or blocks.
+   * Detects whether the tenant has Identity Protection / risk-based CA wired
+   * up (a common SOC 2 CC7.2 / CMMC SI.L2-3.14.6 expectation).
+   */
+  'risky-signin-protection': async ({ fetchGraph }) => {
+    const data = await fetchGraph('/identity/conditionalAccess/policies');
+    if (!data) {
+      return {
+        status: 'na',
+        notes: 'Conditional Access policies not readable.',
+        snapshot: {},
+      };
+    }
+    const policies = (data.value as Array<Record<string, unknown>> | undefined) ?? [];
+    const matches = policies.filter((p) => {
+      if (p.state !== 'enabled') return false;
+      const conditions = p.conditions as Record<string, unknown> | undefined;
+      const riskLevels = ((conditions?.signInRiskLevels as string[]) ?? []).map((s) => s.toLowerCase());
+      const targetsRisk = riskLevels.includes('high') || riskLevels.includes('medium');
+      const grantControls = p.grantControls as Record<string, unknown> | undefined;
+      const builtIn = ((grantControls?.builtInControls as string[]) ?? []).map((s) => s.toLowerCase());
+      const acts = builtIn.includes('mfa') || builtIn.includes('block');
+      return targetsRisk && acts;
+    });
+    if (matches.length > 0) {
+      return {
+        status: 'pass',
+        notes: `${matches.length} enabled CA policy/policies act on sign-in risk (require MFA or block).`,
+        snapshot: {
+          matchedPolicies: matches.map((m) => ({
+            id: m.id,
+            displayName: m.displayName,
+            conditions: { signInRiskLevels: (m.conditions as Record<string, unknown>)?.signInRiskLevels },
+            grantControls: m.grantControls,
+          })),
+        },
+      };
+    }
+    return {
+      status: 'fail',
+      notes: 'No enabled Conditional Access policy responds to sign-in risk. Configure Identity Protection + risk-based CA (requires Entra ID P2).',
+      snapshot: {
+        enabledPolicyCount: policies.filter((p) => p.state === 'enabled').length,
+      },
+    };
+  },
+
+  /**
    * Pass: count of enabled users who have NOT signed in in the last 90 days
    * is below a threshold (relative to total active users — 5% or 1, whichever
    * is larger). Scoring stale accounts proportionally avoids penalizing very

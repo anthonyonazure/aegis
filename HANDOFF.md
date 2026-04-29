@@ -179,5 +179,24 @@ Expected behavior on the seed controls (depends on your tenant's actual config):
 
 Failures are detailed inline in the snapshot — the JSON gives you the actual data the auditor wants to see.
 
+### 24. Apply the SOC 2 + CMMC seed migration (Phase 2 #4b)
+File: `supabase/migrations/20260429160000_compliance_soc2_cmmc_seed.sql`
+
+- [ ] Apply the migration
+- [ ] Verify two new framework rows exist: `soc2-tsc` and `cmmc-l2`
+- [ ] Verify their controls populate (6 SOC 2 controls + 9 CMMC L2 controls)
+
+### 25. Redeploy the compliance evidence edge function (Phase 2 #4b)
+The function file gained three new evaluators (`legacy-auth-blocked`, `guest-restrictions`, `risky-signin-protection`). Redeploy `collect-compliance-evidence`.
+
+- [ ] Redeploy `collect-compliance-evidence`
+
+### 26. Smoke-test SOC 2 + CMMC frameworks (Phase 2 #4b)
+- [ ] Compliance Evidence view → switch framework to "SOC 2 — Trust Services Criteria" → Collect against a tenant
+- [ ] Switch to "CMMC Level 2" → Collect
+- [ ] Confirm both runs produce results across the new evaluator keys
+
+The same tenant snapshots will produce different aggregate counts per framework because each framework asks different questions of the same data — that's the point.
+
 ## Done
 _Move items here as you complete them so we have a running history._
