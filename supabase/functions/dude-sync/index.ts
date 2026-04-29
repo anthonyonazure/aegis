@@ -180,6 +180,32 @@ async function previewSync(token: string, mapping: any) {
   };
 }
 
+// Load the per-MSP safety settings (allowed group-name prefixes).
+// Empty / missing row = no restriction, for backwards compat.
+async function loadSettings(supabase: any, userId: string): Promise<{ allowedPrefixes: string[] }> {
+  const { data } = await supabase
+    .from('dude_settings')
+    .select('allowed_group_prefixes')
+    .eq('user_id', userId)
+    .maybeSingle();
+  return { allowedPrefixes: (data?.allowed_group_prefixes as string[] | undefined) ?? [] };
+}
+
+// Returns null if allowed; otherwise a human-readable reason.
+function checkPrefixAllowlist(
+  mapping: { user_group_name: string; device_group_name: string },
+  allowedPrefixes: string[]
+): string | null {
+  if (allowedPrefixes.length === 0) return null;
+  const userOk = allowedPrefixes.some((p) => mapping.user_group_name?.startsWith(p));
+  const deviceOk = allowedPrefixes.some((p) => mapping.device_group_name?.startsWith(p));
+  if (userOk && deviceOk) return null;
+  const offenders: string[] = [];
+  if (!userOk) offenders.push(`user group "${mapping.user_group_name}"`);
+  if (!deviceOk) offenders.push(`device group "${mapping.device_group_name}"`);
+  return `Prefix allowlist violation: ${offenders.join(' and ')} must start with one of [${allowedPrefixes.join(', ')}].`;
+}
+
 // Execute sync
 async function executeSync(token: string, mapping: any, supabase: any, userId: string) {
   const startTime = Date.now();
@@ -190,6 +216,27 @@ async function executeSync(token: string, mapping: any, supabase: any, userId: s
   const details: any = {};
 
   try {
+    // Safety: per-MSP prefix allowlist (issue #6 PR1).
+    const settings = await loadSettings(supabase, userId);
+    const allowlistViolation = checkPrefixAllowlist(mapping, settings.allowedPrefixes);
+    if (allowlistViolation) {
+      status = 'skipped';
+      details.reason = allowlistViolation;
+      const durationMs = Date.now() - startTime;
+      await supabase.from('dude_sync_logs').insert({
+        user_id: userId,
+        mapping_id: mapping.id,
+        tenant_connection_id: mapping.tenant_connection_id,
+        status,
+        devices_added: 0,
+        devices_removed: 0,
+        devices_skipped: 0,
+        details,
+        duration_ms: durationMs,
+      });
+      return { status, devicesAdded: 0, devicesRemoved: 0, devicesSkipped: 0, durationMs, details };
+    }
+
     const preview = await previewSync(token, mapping);
     details.preview = {
       resolvedDevices: preview.resolvedDeviceCount,
@@ -198,7 +245,15 @@ async function executeSync(token: string, mapping: any, supabase: any, userId: s
       toRemoveCount: preview.toRemove.length,
     };
 
-    if (preview.blastRadiusExceeded) {
+    // Safety: dry-run (issue #6 PR1). New mappings ship dry_run=true.
+    // Operator must explicitly flip the toggle off after reviewing the preview.
+    if (mapping.dry_run) {
+      status = 'dry-run';
+      details.reason = 'Dry-run mode — preview only. Toggle "Apply" off to enable writes.';
+      details.wouldAdd = preview.toAdd.length;
+      details.wouldRemove = preview.toRemove.length;
+      devicesSkipped = preview.toAdd.length + preview.toRemove.length;
+    } else if (preview.blastRadiusExceeded) {
       status = 'skipped';
       details.reason = `Blast radius exceeded: ${preview.removalPercent}% > ${preview.maxRemovalPercent}% limit`;
       devicesSkipped = preview.toRemove.length;

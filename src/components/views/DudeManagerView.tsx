@@ -34,6 +34,7 @@ import {
 interface DudeMapping {
   id: string;
   enabled: boolean;
+  dry_run: boolean;
   user_group_id: string;
   user_group_name: string;
   device_group_id: string;
@@ -48,6 +49,11 @@ interface DudeMapping {
   last_sync_summary: any;
   tenant_connection_id: string | null;
   created_at: string;
+}
+
+interface DudeSettings {
+  user_id: string;
+  allowed_group_prefixes: string[];
 }
 
 interface SyncLog {
@@ -94,6 +100,11 @@ export const DudeManagerView = () => {
   const [groupOptions, setGroupOptions] = useState<GroupOption[]>([]);
   const [searchingGroups, setSearchingGroups] = useState(false);
 
+  // Safety settings — per-MSP prefix allowlist (issue #6 PR1)
+  const [allowedPrefixes, setAllowedPrefixes] = useState<string[]>([]);
+  const [newPrefix, setNewPrefix] = useState('');
+  const [savingSettings, setSavingSettings] = useState(false);
+
   // Form state
   const [formUserGroupId, setFormUserGroupId] = useState('');
   const [formUserGroupName, setFormUserGroupName] = useState('');
@@ -129,11 +140,11 @@ export const DudeManagerView = () => {
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      await Promise.all([loadMappings(), loadSyncLogs()]);
+      await Promise.all([loadMappings(), loadSyncLogs(), loadSettings()]);
       setLoading(false);
     };
     load();
-  }, [loadMappings, loadSyncLogs]);
+  }, [loadMappings, loadSyncLogs, loadSettings]);
 
   const searchGroups = async (prefix: string) => {
     if (!connectionId || prefix.length < 2) { setGroupOptions([]); return; }
@@ -205,6 +216,70 @@ export const DudeManagerView = () => {
   const deleteMapping = async (id: string) => {
     const { error } = await supabase.from('dude_mappings').delete().eq('id', id);
     if (!error) { toast({ title: 'Mapping Deleted' }); loadMappings(); }
+  };
+
+  // Load per-MSP DUDE safety settings (prefix allowlist).
+  const loadSettings = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data } = await supabase
+      .from('dude_settings')
+      .select('allowed_group_prefixes')
+      .eq('user_id', user.id)
+      .maybeSingle();
+    setAllowedPrefixes((data?.allowed_group_prefixes as string[] | undefined) ?? []);
+  }, []);
+
+  const saveAllowedPrefixes = async (next: string[]) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    setSavingSettings(true);
+    try {
+      const { error } = await supabase
+        .from('dude_settings')
+        .upsert({ user_id: user.id, allowed_group_prefixes: next }, { onConflict: 'user_id' });
+      if (error) {
+        toast({ title: 'Save failed', description: error.message, variant: 'destructive' });
+        return;
+      }
+      setAllowedPrefixes(next);
+      toast({
+        title: next.length === 0 ? 'Allowlist cleared' : 'Allowlist saved',
+        description: next.length === 0
+          ? 'Sync will operate on any group. Add prefixes to enforce a guardrail.'
+          : `Sync will only write to groups starting with: ${next.join(', ')}`,
+      });
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  const addPrefix = async () => {
+    const p = newPrefix.trim();
+    if (!p) return;
+    if (allowedPrefixes.includes(p)) {
+      toast({ title: 'Already in allowlist', variant: 'destructive' });
+      return;
+    }
+    await saveAllowedPrefixes([...allowedPrefixes, p]);
+    setNewPrefix('');
+  };
+
+  const removePrefix = async (p: string) => {
+    await saveAllowedPrefixes(allowedPrefixes.filter((x) => x !== p));
+  };
+
+  const toggleDryRun = async (id: string, dry_run: boolean) => {
+    const { error } = await supabase.from('dude_mappings').update({ dry_run }).eq('id', id);
+    if (error) {
+      toast({ title: 'Update failed', description: error.message, variant: 'destructive' });
+      return;
+    }
+    setMappings((list) => list.map((m) => (m.id === id ? { ...m, dry_run } : m)));
+    toast({
+      title: dry_run ? 'Dry-run enabled' : 'Apply mode enabled',
+      description: dry_run ? 'Sync will preview only.' : 'Next sync will write to the device group.',
+    });
   };
 
   const toggleMapping = async (id: string, enabled: boolean) => {
@@ -322,6 +397,7 @@ export const DudeManagerView = () => {
           <TabsTrigger value="mappings">Mappings</TabsTrigger>
           <TabsTrigger value="sync">Sync</TabsTrigger>
           <TabsTrigger value="history">History</TabsTrigger>
+          <TabsTrigger value="safety">Safety</TabsTrigger>
         </TabsList>
 
         {/* MAPPINGS TAB */}
@@ -349,6 +425,7 @@ export const DudeManagerView = () => {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-16">Enabled</TableHead>
+                    <TableHead className="w-20">Mode</TableHead>
                     <TableHead>User Group</TableHead>
                     <TableHead className="w-8"></TableHead>
                     <TableHead>Device Group</TableHead>
@@ -363,6 +440,23 @@ export const DudeManagerView = () => {
                     <TableRow key={m.id}>
                       <TableCell>
                         <Switch checked={m.enabled} onCheckedChange={(v) => toggleMapping(m.id, v)} />
+                      </TableCell>
+                      <TableCell>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Badge
+                              onClick={() => toggleDryRun(m.id, !m.dry_run)}
+                              className={`cursor-pointer ${m.dry_run ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30 border' : 'bg-green-500/20 text-green-400 border-green-500/30 border'}`}
+                            >
+                              {m.dry_run ? 'Dry-run' : 'Apply'}
+                            </Badge>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            {m.dry_run
+                              ? 'Click to enable writes. Currently the sync only previews.'
+                              : 'Click to revert to dry-run. Currently the sync writes to the device group.'}
+                          </TooltipContent>
+                        </Tooltip>
                       </TableCell>
                       <TableCell className="font-medium">{m.user_group_name}</TableCell>
                       <TableCell><ArrowRight className="h-4 w-4 text-muted-foreground" /></TableCell>
@@ -522,6 +616,83 @@ export const DudeManagerView = () => {
               </Table>
             </Card>
           )}
+        </TabsContent>
+
+        {/* SAFETY TAB */}
+        <TabsContent value="safety" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Shield className="h-5 w-5 text-primary" />
+                Group prefix allowlist
+              </CardTitle>
+              <CardDescription>
+                When set, DUDE Sync refuses to write to any group whose name doesn't start with one of these prefixes —
+                applies to BOTH the user group and the device group on every mapping. Empty = no restriction (legacy
+                behavior). Recommended: pick a naming convention like <code>SG-DUDE-</code> for everything DUDE manages,
+                so an attacker who compromises Aegis can't pivot into your "All Users" group.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Prefix (e.g. SG-DUDE-)"
+                  value={newPrefix}
+                  onChange={(e) => setNewPrefix(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && addPrefix()}
+                />
+                <Button onClick={addPrefix} disabled={savingSettings || !newPrefix.trim()}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add
+                </Button>
+              </div>
+              {allowedPrefixes.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No prefixes set. DUDE Sync will operate on any group your service principal can write to.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {allowedPrefixes.map((p) => (
+                    <Badge key={p} variant="outline" className="gap-2 py-1.5 pr-1">
+                      <span className="font-mono">{p}</span>
+                      <button
+                        onClick={() => removePrefix(p)}
+                        className="hover:text-destructive"
+                        aria-label={`Remove ${p}`}
+                      >
+                        <XCircle className="h-3.5 w-3.5" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-yellow-500" />
+                Dry-run mode
+              </CardTitle>
+              <CardDescription>
+                New mappings ship with dry-run enabled — sync produces a preview but never writes. Flip the badge in
+                the Mappings table to "Apply" once you've reviewed the preview and trust the result.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Mappings in dry-run</span>
+                  <span className="font-medium">{mappings.filter((m) => m.dry_run).length}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Mappings applying writes</span>
+                  <span className="font-medium">{mappings.filter((m) => !m.dry_run).length}</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
 
