@@ -40,9 +40,9 @@ serve(async (req) => {
     const AI_GATEWAY_KEY = Deno.env.get('AI_GATEWAY_API_KEY');
     if (!AI_GATEWAY_KEY) {
       throw new Error('AI_GATEWAY_API_KEY is not configured');
+    }
     const AI_GATEWAY_URL = Deno.env.get('AI_GATEWAY_URL');
     if (!AI_GATEWAY_URL) throw new Error('AI_GATEWAY_URL is not configured');
-    }
 
     const systemPrompt = `You are a Microsoft 365 configuration expert. Analyze configuration drift and explain changes in plain English that both technical and non-technical stakeholders can understand.
 

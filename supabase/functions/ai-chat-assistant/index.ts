@@ -33,9 +33,9 @@ serve(async (req) => {
     
     if (!AI_GATEWAY_KEY) {
       throw new Error('AI_GATEWAY_API_KEY is not configured');
+    }
     const AI_GATEWAY_URL = Deno.env.get('AI_GATEWAY_URL');
     if (!AI_GATEWAY_URL) throw new Error('AI_GATEWAY_URL is not configured');
-    }
 
     let systemPrompt = `You are an expert Microsoft 365 management assistant for MSPs and IT administrators. You provide helpful, accurate, and actionable guidance on:
 
