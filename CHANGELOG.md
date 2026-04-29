@@ -6,7 +6,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
-### Phase 2 of the original roadmap is complete. Highlights below.
+### Added
+
+### Changed
+
+### Fixed
+
+### Security
+
+---
+
+## [0.1.0] — 2026-04-29
+
+First public release. Phase 2 of the original roadmap is complete. Highlights below.
 
 ### Added
 
@@ -46,9 +58,5 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ---
 
-## [0.1.0] — Initial public release
-
-The first tagged release will mark the cut between the bootstrap / Lovable migration phase and the open-source codebase. Until then, work happens on `main` and is described under `[Unreleased]` above.
-
-[Unreleased]: https://github.com/your-fork/aegis/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/your-fork/aegis/releases/tag/v0.1.0
+[Unreleased]: https://github.com/anthonyonazure/aegis/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/anthonyonazure/aegis/releases/tag/v0.1.0
