@@ -71,29 +71,6 @@ interface DriftExplanation {
   };
 }
 
-// Sample drift data for demo
-const sampleDriftData = {
-  changes: [
-    {
-      resourceType: 'conditionalAccessPolicy',
-      resourceName: 'Require MFA for Admins',
-      before: { state: 'enabled', conditions: { users: { includeRoles: ['Global Administrator'] } } },
-      after: { state: 'disabled', conditions: { users: { includeRoles: ['Global Administrator'] } } }
-    },
-    {
-      resourceType: 'deviceCompliancePolicy',
-      resourceName: 'Windows Security Baseline',
-      before: { bitLockerEnabled: true, minimumOsVersion: '10.0.19041' },
-      after: { bitLockerEnabled: false, minimumOsVersion: '10.0.18363' }
-    },
-    {
-      resourceType: 'group',
-      resourceName: 'External Contractors',
-      before: null,
-      after: { membershipType: 'dynamic', members: 45 }
-    }
-  ]
-};
 
 import { SelectedTenantInfo } from '@/components/copilot/TenantMultiSelector';
 
@@ -121,21 +98,49 @@ export function DriftExplainer({ selectedTenants }: DriftExplainerProps) {
     setResult(null);
 
     try {
+      // 1. Compute real drift against the most recent export as baseline
+      const { data: driftData, error: driftError } = await supabase.functions.invoke(
+        'compute-drift-adhoc',
+        { body: { tenantConnectionId: effectiveTenantId } }
+      );
+
+      if (driftError) throw driftError;
+      if (driftData?.error === 'no_baseline' || driftData?.error === 'empty_baseline') {
+        toast({
+          title: 'No baseline yet',
+          description:
+            driftData.message ||
+            'Run an export for this tenant first, then come back to explain drift.',
+          variant: 'destructive',
+        });
+        return;
+      }
+      if (driftData?.error) throw new Error(driftData.error);
+
+      if (!driftData?.changes || driftData.changes.length === 0) {
+        toast({
+          title: 'No drift detected',
+          description: 'Current configuration matches the baseline. Nothing to explain.',
+        });
+        return;
+      }
+
+      // 2. Pass real drift to the AI explainer
       const { data, error } = await supabase.functions.invoke('ai-drift-explainer', {
-        body: { 
+        body: {
           tenantConnectionId: effectiveTenantId,
           tenantName: selectedTenants?.[0]?.name,
-          driftData: sampleDriftData 
-        }
+          driftData,
+        },
       });
 
       if (error) throw error;
-      if (data.error) throw new Error(data.error);
+      if (data?.error) throw new Error(data.error);
 
       setResult(data);
       toast({
         title: 'Analysis Complete',
-        description: `Found ${data.summary?.totalChanges || 0} configuration changes`,
+        description: `Explained ${driftData.summary?.totalChanges ?? data.summary?.totalChanges ?? 0} configuration changes`,
       });
     } catch (error) {
       console.error('Drift analysis error:', error);
