@@ -55,6 +55,38 @@ SELECT cron.schedule(
 -- Confirm the cron job exists:
 -- SELECT jobname, schedule FROM cron.job WHERE jobname = 'aegis-compliance-runner';
 
+-- ============================================================================
+-- 3. Scheduled DUDE runner (issue #6 PR3)
+--
+--    Hits run-scheduled-dude every 30 minutes. The function checks each
+--    user's dude_settings.schedule_cron + last_scheduled_run_at and
+--    skips users that are not yet due, so this is cheap. Customers
+--    enable scheduling per-MSP in the DUDE Manager UI's Safety tab.
+--
+--    Same placeholders as job 2 — replace SUPABASE_URL and the bearer key.
+-- ============================================================================
+DO $$
+BEGIN
+  PERFORM cron.unschedule('aegis-dude-runner') WHERE EXISTS (
+    SELECT 1 FROM cron.job WHERE jobname = 'aegis-dude-runner'
+  );
+EXCEPTION WHEN OTHERS THEN
+  NULL;
+END $$;
+
+SELECT cron.schedule(
+  'aegis-dude-runner',
+  '*/30 * * * *',
+  $cron$ SELECT net.http_post(
+    url := 'https://<your-project-ref>.supabase.co/functions/v1/run-scheduled-dude',
+    headers := jsonb_build_object(
+      'Authorization', 'Bearer YOUR_SERVICE_ROLE_KEY_HERE',
+      'Content-Type',  'application/json'
+    ),
+    body := '{}'::jsonb
+  ) $cron$
+);
+
 -- Confirm framework + control seeds landed:
 -- SELECT f.code, f.name, count(c.id) AS controls
 -- FROM public.compliance_frameworks f

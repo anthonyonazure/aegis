@@ -463,7 +463,12 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
 
-    // Auth
+    // Auth — two paths:
+    //   (a) End user JWT in the Authorization header — normal in-app flow.
+    //   (b) Service-role key + scheduled=true + userId in body — internal
+    //       call from run-scheduled-dude. Service-role keys never reach the
+    //       client; they live only in edge function env, so trusting the
+    //       supplied userId is safe in this controlled path.
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
@@ -471,16 +476,26 @@ serve(async (req) => {
       });
     }
 
-    const userClient = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_ANON_KEY')!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
-    const { data: { user }, error: userError } = await userClient.auth.getUser();
-    if (userError || !user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
+    const earlyBody = isServiceRole ? await req.clone().json().catch(() => ({})) : null;
+
+    let user: { id: string };
+    if (isServiceRole && earlyBody?.scheduled === true && typeof earlyBody?.userId === 'string') {
+      user = { id: earlyBody.userId as string };
+    } else {
+      const userClient = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_ANON_KEY')!,
+        { global: { headers: { Authorization: authHeader } } }
+      );
+      const { data: { user: u }, error: userError } = await userClient.auth.getUser();
+      if (userError || !u) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      user = { id: u.id };
     }
 
     // Rate limit

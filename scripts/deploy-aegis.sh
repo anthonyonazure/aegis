@@ -42,6 +42,7 @@ FUNCTIONS=(
   collect-compliance-evidence
   run-scheduled-compliance
   run-plugin
+  run-scheduled-dude
 )
 
 for fn in "${FUNCTIONS[@]}"; do

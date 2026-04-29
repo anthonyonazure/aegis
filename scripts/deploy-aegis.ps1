@@ -52,7 +52,8 @@ $functions = @(
   'verify-custom-domain',
   'collect-compliance-evidence',
   'run-scheduled-compliance',
-  'run-plugin'
+  'run-plugin',
+  'run-scheduled-dude'
 )
 
 foreach ($fn in $functions) {

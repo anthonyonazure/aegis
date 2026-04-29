@@ -158,3 +158,6 @@ verify_jwt = false
 
 [functions.run-plugin]
 verify_jwt = false
+
+[functions.run-scheduled-dude]
+verify_jwt = false

@@ -104,6 +104,10 @@ export const DudeManagerView = () => {
   const [allowedPrefixes, setAllowedPrefixes] = useState<string[]>([]);
   const [newPrefix, setNewPrefix] = useState('');
   const [savingSettings, setSavingSettings] = useState(false);
+  // Schedule (issue #6 PR3)
+  const [scheduleEnabled, setScheduleEnabled] = useState(false);
+  const [scheduleCron, setScheduleCron] = useState('0 */2 * * *');
+  const [lastScheduledRunAt, setLastScheduledRunAt] = useState<string | null>(null);
 
   // Form state
   const [formUserGroupId, setFormUserGroupId] = useState('');
@@ -218,17 +222,46 @@ export const DudeManagerView = () => {
     if (!error) { toast({ title: 'Mapping Deleted' }); loadMappings(); }
   };
 
-  // Load per-MSP DUDE safety settings (prefix allowlist).
+  // Load per-MSP DUDE safety settings (prefix allowlist + schedule).
   const loadSettings = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
     const { data } = await supabase
       .from('dude_settings')
-      .select('allowed_group_prefixes')
+      .select('allowed_group_prefixes, schedule_enabled, schedule_cron, last_scheduled_run_at')
       .eq('user_id', user.id)
       .maybeSingle();
     setAllowedPrefixes((data?.allowed_group_prefixes as string[] | undefined) ?? []);
+    setScheduleEnabled(Boolean(data?.schedule_enabled));
+    setScheduleCron((data?.schedule_cron as string | undefined) ?? '0 */2 * * *');
+    setLastScheduledRunAt((data?.last_scheduled_run_at as string | undefined) ?? null);
   }, []);
+
+  const saveSchedule = async (enabled: boolean, cron: string) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    setSavingSettings(true);
+    try {
+      const { error } = await supabase
+        .from('dude_settings')
+        .upsert(
+          { user_id: user.id, schedule_enabled: enabled, schedule_cron: cron },
+          { onConflict: 'user_id' }
+        );
+      if (error) {
+        toast({ title: 'Save failed', description: error.message, variant: 'destructive' });
+        return;
+      }
+      setScheduleEnabled(enabled);
+      setScheduleCron(cron);
+      toast({
+        title: enabled ? 'Schedule enabled' : 'Schedule paused',
+        description: enabled ? `DUDE will run on cron "${cron}".` : 'DUDE will only run on manual trigger.',
+      });
+    } finally {
+      setSavingSettings(false);
+    }
+  };
 
   const saveAllowedPrefixes = async (next: string[]) => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -665,6 +698,61 @@ export const DudeManagerView = () => {
                     </Badge>
                   ))}
                 </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="h-5 w-5 text-primary" />
+                Scheduled sync
+              </CardTitle>
+              <CardDescription>
+                When enabled, the <code>run-scheduled-dude</code> edge function (called every 30 min by pg_cron)
+                processes your mappings on the cadence below. Cadence options use simple cron syntax — common
+                values shown via the buttons. Operators self-hosting Aegis must register the cron job from
+                <code> scripts/post-deploy.sql</code>; without that the toggle here is a no-op.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-center gap-3">
+                <Switch
+                  checked={scheduleEnabled}
+                  onCheckedChange={(v) => saveSchedule(v, scheduleCron)}
+                  disabled={savingSettings}
+                />
+                <span className="text-sm">
+                  {scheduleEnabled ? 'Scheduled sync is enabled' : 'Scheduled sync is paused'}
+                </span>
+              </div>
+              {scheduleEnabled && (
+                <>
+                  <div className="flex gap-2 flex-wrap">
+                    {[
+                      { label: 'Every 2 hours', cron: '0 */2 * * *' },
+                      { label: 'Every 6 hours', cron: '0 */6 * * *' },
+                      { label: 'Daily 09:00', cron: '0 9 * * *' },
+                      { label: 'Weekly Mon 09:00', cron: '0 9 * * 1' },
+                    ].map((p) => (
+                      <Button
+                        key={p.cron}
+                        size="sm"
+                        variant={scheduleCron === p.cron ? 'default' : 'outline'}
+                        onClick={() => saveSchedule(true, p.cron)}
+                        disabled={savingSettings}
+                      >
+                        {p.label}
+                      </Button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground font-mono">{scheduleCron}</p>
+                  {lastScheduledRunAt && (
+                    <p className="text-xs text-muted-foreground">
+                      Last scheduled run: {new Date(lastScheduledRunAt).toLocaleString()}
+                    </p>
+                  )}
+                </>
               )}
             </CardContent>
           </Card>
