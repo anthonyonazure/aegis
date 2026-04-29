@@ -562,6 +562,44 @@ ${missingPermissions.length > 0 ? `\nNote: Some data sources were unavailable du
 
     console.log('Anomaly detection completed:', parsedResponse.summary);
 
+    // Persist the run so the customer portal + MSP history can show it later
+    // (Phase 2 #3b). Failures here are logged but never block the response.
+    let persistedRunId: string | null = null;
+    try {
+      const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+      if (serviceKey) {
+        const supabaseAdmin = createClient(supabaseUrl, serviceKey);
+        const summary = (parsedResponse.summary ?? {}) as Record<string, unknown>;
+        const anomaliesArr = Array.isArray(parsedResponse.anomalies) ? parsedResponse.anomalies : [];
+        const { data: persisted, error: persistErr } = await supabaseAdmin
+          .from('anomaly_runs')
+          .insert({
+            user_id: user.id,
+            tenant_connection_id: tenantConnectionId,
+            total_anomalies: Number(summary.totalAnomalies) || anomaliesArr.length,
+            critical_count: Number(summary.critical) || 0,
+            high_count: Number(summary.high) || 0,
+            medium_count: Number(summary.medium) || 0,
+            low_count: Number(summary.low) || 0,
+            overall_risk_level: typeof summary.overallRiskLevel === 'string' ? summary.overallRiskLevel : null,
+            summary,
+            anomalies: anomaliesArr,
+            data_sources: parsedResponse.dataSources ?? {},
+            completed_at: new Date().toISOString(),
+          })
+          .select('id')
+          .single();
+        if (persistErr) {
+          console.error('anomaly_runs persist failed:', persistErr);
+        } else if (persisted) {
+          persistedRunId = (persisted as { id: string }).id;
+          (parsedResponse as Record<string, unknown>).runId = persistedRunId;
+        }
+      }
+    } catch (err) {
+      console.error('anomaly_runs persist threw:', err);
+    }
+
     // Fan-out webhooks + auto-tickets when findings exist (does not block response).
     // Caller can opt out with notifyOnFindings:false (e.g. preview/sandbox runs).
     if (notifyOnFindings && Array.isArray(parsedResponse.anomalies) && parsedResponse.anomalies.length > 0) {

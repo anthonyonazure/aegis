@@ -9,12 +9,12 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Plus, Trash2, ToggleLeft, ToggleRight, Users, Copy } from 'lucide-react';
+import { Loader2, Mail, Trash2, ToggleLeft, ToggleRight, Users, Copy, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Customer, CustomerUser, CustomerUserRole } from '@/types/tenant';
 import {
   getCustomerUsers,
-  addCustomerUser,
+  inviteCustomerUserByEmail,
   setCustomerUserActive,
   removeCustomerUser,
 } from '@/lib/customerUsersDatabase';
@@ -24,23 +24,23 @@ interface PortalUsersManagerProps {
 }
 
 /**
- * Phase 2 #3a — MSP-side management of portal users for a customer.
+ * Phase 2 #3b — MSP-side portal user management with email invites.
  *
- * Real invite-flow (sending a magic link / signup email) is the next
- * iteration. For now, this UI requires the MSP to paste an existing
- * auth.users id (created out of band via Supabase dashboard or a
- * separate signup). The auth.users row + customer_users link together
- * grant portal access.
+ * Replaces the #3a "paste auth user id" form. The MSP supplies an email +
+ * role; the invite-portal-user edge function creates the auth user (if
+ * needed), sends a magic link redirected at the customer's portal login,
+ * and upserts the customer_users link.
  */
 export function PortalUsersManager({ customer }: PortalUsersManagerProps) {
   const { toast } = useToast();
   const [users, setUsers] = useState<CustomerUser[]>([]);
   const [loading, setLoading] = useState(true);
-  const [authUserId, setAuthUserId] = useState('');
+  const [email, setEmail] = useState('');
   const [role, setRole] = useState<CustomerUserRole>('customer_viewer');
   const [submitting, setSubmitting] = useState(false);
 
   const portalSlug = customer.customSubdomain;
+  const portalUrl = portalSlug ? `${window.location.origin}/portal/${portalSlug}/login` : null;
 
   const refresh = async () => {
     setLoading(true);
@@ -63,25 +63,40 @@ export function PortalUsersManager({ customer }: PortalUsersManagerProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customer.id]);
 
-  const handleAdd = async () => {
-    if (!authUserId.trim()) {
-      toast({ title: 'Missing user id', description: 'Paste the auth.users id to invite.', variant: 'destructive' });
+  const handleInvite = async () => {
+    const trimmed = email.trim();
+    if (!trimmed) {
+      toast({ title: 'Email required', description: 'Enter an email to invite.', variant: 'destructive' });
+      return;
+    }
+    if (!portalSlug) {
+      toast({
+        title: 'Set a portal slug first',
+        description: 'On the Branding tab, set custom_subdomain so invitees land at the right portal URL.',
+        variant: 'destructive',
+      });
       return;
     }
     setSubmitting(true);
     try {
-      await addCustomerUser({
+      const result = await inviteCustomerUserByEmail({
         customerId: customer.id,
-        authUserId: authUserId.trim(),
+        email: trimmed,
         role,
+        redirectTo: portalUrl ?? undefined,
       });
-      toast({ title: 'Portal user added' });
-      setAuthUserId('');
+      toast({
+        title: result.inviteEmailSent ? 'Invite sent' : 'Linked, but email not sent',
+        description: result.inviteEmailSent
+          ? `${trimmed} will get a magic link to ${portalUrl}.`
+          : result.message || 'Share the portal URL manually.',
+      });
+      setEmail('');
       setRole('customer_viewer');
       await refresh();
     } catch (e) {
       toast({
-        title: 'Failed to add portal user',
+        title: 'Invite failed',
         description: e instanceof Error ? e.message : 'Unknown error',
         variant: 'destructive',
       });
@@ -118,8 +133,6 @@ export function PortalUsersManager({ customer }: PortalUsersManagerProps) {
     }
   };
 
-  const portalUrl = portalSlug ? `${window.location.origin}/portal/${portalSlug}/login` : null;
-
   const handleCopyUrl = async () => {
     if (!portalUrl) return;
     await navigator.clipboard.writeText(portalUrl);
@@ -135,8 +148,8 @@ export function PortalUsersManager({ customer }: PortalUsersManagerProps) {
             Portal access for {customer.name}
           </CardTitle>
           <CardDescription>
-            People you grant access here can sign in to a read-only portal showing this customer's secure score, drift,
-            and anomaly findings. They cannot see other customers' data.
+            People you invite here can sign in to a read-only portal showing this customer's secure score, drift, and
+            anomaly findings. They cannot see other customers' data.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -148,31 +161,36 @@ export function PortalUsersManager({ customer }: PortalUsersManagerProps) {
               </Button>
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">
-              Set a <strong>custom_subdomain</strong> on the Branding tab to expose a portal URL like{' '}
-              <code>/portal/your-slug/login</code>.
-            </p>
+            <div className="flex items-start gap-2 p-3 rounded-md bg-yellow-500/10 border border-yellow-500/30">
+              <AlertTriangle className="w-4 h-4 text-yellow-400 mt-0.5" />
+              <p className="text-sm">
+                Set a <strong>custom_subdomain</strong> on the Branding tab to expose a portal URL like{' '}
+                <code>/portal/your-slug/login</code>. You'll need this before invites can be sent.
+              </p>
+            </div>
           )}
         </CardContent>
       </Card>
 
       <Card className="glass-panel border-border/50">
         <CardHeader>
-          <CardTitle>Add a portal user</CardTitle>
+          <CardTitle>Invite a portal user</CardTitle>
           <CardDescription>
-            Paste the Supabase <code>auth.users.id</code> for the person you want to grant access. Email-invite flow
-            (auto-create + magic link) is on the roadmap; for now create the user in the Supabase dashboard first.
+            We'll create the account if needed and email a magic link that lands at the portal sign-in. Roles only
+            affect future read/write surfaces; today everything is read-only either way.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 md:grid-cols-[1fr,200px,auto]">
             <div className="space-y-2">
-              <Label htmlFor="auth-user-id">Auth user ID</Label>
+              <Label htmlFor="invite-email">Email</Label>
               <Input
-                id="auth-user-id"
-                placeholder="00000000-0000-0000-0000-000000000000"
-                value={authUserId}
-                onChange={(e) => setAuthUserId(e.target.value)}
+                id="invite-email"
+                type="email"
+                placeholder="contact@customer.com"
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
               />
             </div>
             <div className="space-y-2">
@@ -188,9 +206,9 @@ export function PortalUsersManager({ customer }: PortalUsersManagerProps) {
               </Select>
             </div>
             <div className="flex items-end">
-              <Button onClick={handleAdd} disabled={submitting} className="w-full md:w-auto">
-                {submitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Plus className="w-4 h-4 mr-2" />}
-                Grant access
+              <Button onClick={handleInvite} disabled={submitting || !portalSlug} className="w-full md:w-auto">
+                {submitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Mail className="w-4 h-4 mr-2" />}
+                Send invite
               </Button>
             </div>
           </div>
@@ -241,7 +259,12 @@ export function PortalUsersManager({ customer }: PortalUsersManagerProps) {
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-1">
-                        <Button size="sm" variant="ghost" onClick={() => handleToggle(u)} title={u.isActive ? 'Disable' : 'Enable'}>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleToggle(u)}
+                          title={u.isActive ? 'Disable' : 'Enable'}
+                        >
                           {u.isActive ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
                         </Button>
                         <Button size="sm" variant="ghost" onClick={() => handleRemove(u)} title="Revoke">

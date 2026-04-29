@@ -90,5 +90,29 @@ For now, granting portal access is two steps in Supabase:
 ### 11. Edge function deploys (Phase 2 #3a — none new)
 No new edge functions in #3a; foundation is RLS + frontend only. The portal pulls existing tables through PostgREST, gated by the new policies.
 
+### 12. Apply the anomaly_runs migration (Phase 2 #3b)
+File: `supabase/migrations/20260429130000_anomaly_runs.sql`
+
+- [ ] Apply the migration
+- [ ] Verify table `public.anomaly_runs` exists with the JSONB columns + the four severity counters
+- [ ] Verify the portal RLS policy `Portal users can read anomaly runs for their tenants` is present
+
+### 13. Configure Supabase Auth for portal invites (Phase 2 #3b)
+The new `invite-portal-user` edge function calls `auth.admin.inviteUserByEmail` and `auth.admin.generateLink`, which trigger emails through whatever SMTP is configured on your Supabase project.
+
+- [ ] In Supabase Dashboard → Authentication → URL Configuration, add `https://<your-app-host>/portal/*` to **Redirect URLs** so the magic link redirect parameter is honored
+- [ ] If you haven't set custom SMTP, the default Supabase sender may be rate-limited; for production, configure SMTP under Authentication → Emails
+
+### 14. Deploy the new edge function (Phase 2 #3b)
+- [ ] **New**: `invite-portal-user`
+- [ ] **Modified**: `ai-anomaly-detection` (now persists rows into `anomaly_runs` after AI parse)
+
+### 15. Smoke-test the portal end-to-end (Phase 2 #3b)
+- [ ] Open a customer's detail page → Branding tab → set `custom_subdomain` (e.g. `acme`) and Save
+- [ ] Switch to the **Portal users** tab → Send invite to a real email address (use a throwaway you can check)
+- [ ] Confirm the invite email arrives, click the magic link, land on `/portal/acme/login` (signed in)
+- [ ] On the portal Dashboard, verify secure score / drift summary / tenant count populate
+- [ ] Run AI Anomaly Detection (MSP side) for the customer's tenant — confirm a row in `anomaly_runs`, then refresh the portal **Anomalies** tab and see the run listed
+
 ## Done
 _Move items here as you complete them so we have a running history._

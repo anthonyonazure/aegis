@@ -60,32 +60,43 @@ export async function getCurrentPortalUser(): Promise<CustomerUser | null> {
 }
 
 /**
- * Invite a portal user. The auth.users row must already exist — calling this
- * before the user has signed up will fail. Real invite flow (email a magic
- * link) is the next iteration; for now the MSP creates the auth user out of
- * band (Supabase dashboard or signup) and pastes the resulting user id here.
+ * Invite a portal user by email (Phase 2 #3b).
+ *
+ * Calls the `invite-portal-user` edge function which uses the Supabase Auth
+ * Admin API to either invite a new user (sending a magic link) or generate a
+ * fresh magic link for an existing account, then upserts the customer_users
+ * row that grants portal access.
  */
-export async function addCustomerUser(input: {
+export async function inviteCustomerUserByEmail(input: {
   customerId: string;
-  authUserId: string;
+  email: string;
   role?: CustomerUserRole;
-}): Promise<CustomerUser> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Not authenticated');
-
-  const { data, error } = await supabase
-    .from('customer_users')
-    .insert({
-      customer_id: input.customerId,
-      auth_user_id: input.authUserId,
+  redirectTo?: string;
+}): Promise<{
+  authUserId: string;
+  inviteEmailSent: boolean;
+  message: string;
+}> {
+  const { data, error } = await supabase.functions.invoke('invite-portal-user', {
+    body: {
+      customerId: input.customerId,
+      email: input.email,
       role: input.role ?? 'customer_viewer',
-      invited_by: user.id,
-    })
-    .select()
-    .single();
-
-  if (error) throw new Error(`Failed to add portal user: ${error.message}`);
-  return mapCustomerUserFromDb(data);
+      ...(input.redirectTo ? { redirectTo: input.redirectTo } : {}),
+    },
+  });
+  if (error) {
+    // Edge function returned non-2xx; supabase-js wraps the body in error.context
+    throw new Error(error.message || 'Failed to invite portal user');
+  }
+  if (!data?.success) {
+    throw new Error(data?.error || 'Failed to invite portal user');
+  }
+  return {
+    authUserId: data.authUserId,
+    inviteEmailSent: Boolean(data.inviteEmailSent),
+    message: data.message ?? '',
+  };
 }
 
 /** Toggle a portal user active/inactive (revoke without deleting). */
