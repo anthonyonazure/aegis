@@ -243,5 +243,22 @@ File: `supabase/migrations/20260429180000_policy_templates_marketplace.sql`
 
 No new edge functions for #5 — install is a SECURITY DEFINER RPC, ratings + publish are plain RLS-protected inserts.
 
+### 32. Apply the plugin SDK migration (Phase 2 #6)
+File: `supabase/migrations/20260429190000_plugin_sdk.sql`
+
+- [ ] Apply the migration
+- [ ] Verify tables `plugins` and `plugin_runs` exist with their RLS policies
+- [ ] Verify `install_plugin(uuid)` RPC is callable by `authenticated`
+
+### 33. Deploy run-plugin (Phase 2 #6)
+- [ ] **New**: deploy `run-plugin`. Reads the existing `AI_GATEWAY_API_KEY` and `AI_GATEWAY_URL` secrets you already configured for the AI features — no new env to set.
+
+### 34. Smoke-test the Plugin SDK (Phase 2 #6)
+- [ ] Sidebar → Configuration & Policies → **Plugins** → New plugin
+- [ ] Use the seeded sample template (already filled in the editor) — Save
+- [ ] Click ▶ Run on the new plugin, fill in `focusArea`, pick a tenant if you enabled "Tenant ctx", hit Run
+- [ ] Confirm output appears in the dialog and a new row shows up in the **Run history** tab
+- [ ] Toggle the plugin to Public, refresh the **Marketplace** tab, click Install — confirm a clone shows up in **My plugins** with the description tagged "[Installed from marketplace]"
+
 ## Done
 _Move items here as you complete them so we have a running history._
