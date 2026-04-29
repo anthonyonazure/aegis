@@ -1085,7 +1085,7 @@ Interactive chat for tenant questions:
 
 The platform supports multiple AI providers:
 
-### Default Provider (Built-in)
+### Default Provider (Built-in AI)
 
 - No configuration required
 - Automatic model selection
@@ -1125,7 +1125,7 @@ M365 Governance Manager supports using your own AI provider API keys for maximum
 
 | Provider | API Key Required | Models Available |
 |----------|------------------|------------------|
-| Built-in | None (gateway) | Gemini, GPT (default) |
+| Built-in AI | None (built-in gateway) | Gemini, GPT (default) |
 | OpenAI | Yes | GPT-4o, GPT-4o-mini, o1, o1-mini |
 | Google AI | Yes | Gemini Pro, Gemini Flash |
 | Anthropic | Yes | Claude 3.5 Sonnet, Claude 3.5 Haiku |
@@ -1221,7 +1221,7 @@ Each AI chat allows selecting the provider and model:
 
 If a configured provider fails:
 
-1. System automatically falls back to Built-in
+1. System automatically falls back to the built-in AI
 2. You're notified of the fallback
 3. Request is completed seamlessly
 

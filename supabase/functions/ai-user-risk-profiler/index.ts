@@ -71,8 +71,10 @@ serve(async (req) => {
 
   try {
     const { tenantConnectionIds, tenantNames, userData: legacyData, tenantContext: legacyContext } = await req.json();
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY is not configured');
+    const AI_GATEWAY_KEY = Deno.env.get('AI_GATEWAY_API_KEY');
+    if (!AI_GATEWAY_KEY) throw new Error('AI_GATEWAY_API_KEY is not configured');
+    const AI_GATEWAY_URL = Deno.env.get('AI_GATEWAY_URL');
+    if (!AI_GATEWAY_URL) throw new Error('AI_GATEWAY_URL is not configured');
 
     let realUserData: any = legacyData || {};
     let realContext: any = legacyContext || {};
@@ -108,9 +110,9 @@ ${JSON.stringify(realContext, null, 2)}
 
 Provide a comprehensive risk profile with actionable recommendations.`;
 
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const response = await fetch(`${AI_GATEWAY_URL}/chat/completions`, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${LOVABLE_API_KEY}`, 'Content-Type': 'application/json' },
+      headers: { 'Authorization': `Bearer ${AI_GATEWAY_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: 'google/gemini-2.5-flash', messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], temperature: 0.7, max_tokens: 4000 }),
     });
 

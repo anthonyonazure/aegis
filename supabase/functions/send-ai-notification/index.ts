@@ -123,9 +123,9 @@ async function sendEmailNotification(email: string, subject: string, message: st
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      from: 'PolicyForge <notifications@resend.dev>',
+      from: 'Aegis <notifications@resend.dev>',
       to: [email],
-      subject: `[PolicyForge] ${subject}`,
+      subject: `[Aegis] ${subject}`,
       html,
     }),
   });

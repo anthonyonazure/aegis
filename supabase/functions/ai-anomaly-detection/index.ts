@@ -233,9 +233,11 @@ serve(async (req) => {
     }
 
     // Send real data to AI for analysis
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    const AI_GATEWAY_KEY = Deno.env.get("AI_GATEWAY_API_KEY");
+    if (!AI_GATEWAY_KEY) {
+      throw new Error("AI_GATEWAY_API_KEY is not configured");
+    const AI_GATEWAY_URL = Deno.env.get('AI_GATEWAY_URL');
+    if (!AI_GATEWAY_URL) throw new Error('AI_GATEWAY_URL is not configured');
     }
 
     const systemPrompt = `You are a security analyst AI specialized in Microsoft 365 and Azure AD security monitoring.
@@ -315,10 +317,10 @@ ${JSON.stringify(auditData.riskyUsers, null, 2)}
 
 ${missingPermissions.length > 0 ? `\nNote: Some data sources were unavailable due to missing permissions: ${missingPermissions.join(', ')}` : ''}`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch(`${AI_GATEWAY_URL}/chat/completions`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${AI_GATEWAY_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({

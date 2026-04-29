@@ -16,12 +16,12 @@ export default function TermsOfService() {
         <div className="prose prose-sm dark:prose-invert space-y-6">
           <section>
             <h2 className="text-xl font-semibold mb-3">1. Acceptance of Terms</h2>
-            <p className="text-muted-foreground">By accessing or using PolicyForge, you agree to be bound by these Terms of Service. If you do not agree, do not use the platform.</p>
+            <p className="text-muted-foreground">By accessing or using Aegis, you agree to be bound by these Terms of Service. If you do not agree, do not use the platform.</p>
           </section>
 
           <section>
             <h2 className="text-xl font-semibold mb-3">2. Description of Service</h2>
-            <p className="text-muted-foreground">PolicyForge is an AI-powered platform for Managed Service Providers (MSPs) to manage Microsoft 365 tenant configurations, enforce compliance policies, detect drift, and generate governance reports across multiple tenants.</p>
+            <p className="text-muted-foreground">Aegis is an AI-powered platform for Managed Service Providers (MSPs) to manage Microsoft 365 tenant configurations, enforce compliance policies, detect drift, and generate governance reports across multiple tenants.</p>
           </section>
 
           <section>
@@ -36,17 +36,17 @@ export default function TermsOfService() {
 
           <section>
             <h2 className="text-xl font-semibold mb-3">5. Data & Tenant Access</h2>
-            <p className="text-muted-foreground">You grant PolicyForge permission to access your Microsoft 365 tenants solely to provide the services described. You are responsible for ensuring you have authorization to connect each tenant. PolicyForge acts as a processor of your tenant data.</p>
+            <p className="text-muted-foreground">You grant Aegis permission to access your Microsoft 365 tenants solely to provide the services described. You are responsible for ensuring you have authorization to connect each tenant. Aegis acts as a processor of your tenant data.</p>
           </section>
 
           <section>
             <h2 className="text-xl font-semibold mb-3">6. AI Features</h2>
-            <p className="text-muted-foreground">AI-generated recommendations, analyses, and reports are provided for informational purposes only. You should review all AI outputs before acting on them. PolicyForge is not liable for actions taken based on AI recommendations.</p>
+            <p className="text-muted-foreground">AI-generated recommendations, analyses, and reports are provided for informational purposes only. You should review all AI outputs before acting on them. Aegis is not liable for actions taken based on AI recommendations.</p>
           </section>
 
           <section>
             <h2 className="text-xl font-semibold mb-3">7. Limitation of Liability</h2>
-            <p className="text-muted-foreground">PolicyForge is provided "as is" without warranties of any kind. We are not liable for any indirect, incidental, or consequential damages arising from your use of the platform, including data loss or configuration changes made through the service.</p>
+            <p className="text-muted-foreground">Aegis is provided "as is" without warranties of any kind. We are not liable for any indirect, incidental, or consequential damages arising from your use of the platform, including data loss or configuration changes made through the service.</p>
           </section>
 
           <section>
@@ -61,7 +61,7 @@ export default function TermsOfService() {
 
           <section>
             <h2 className="text-xl font-semibold mb-3">10. Contact</h2>
-            <p className="text-muted-foreground">For questions about these terms, please contact us at legal@policyforge.io.</p>
+            <p className="text-muted-foreground">For questions about these terms, please contact us at legal@aegis.io.</p>
           </section>
         </div>
       </div>

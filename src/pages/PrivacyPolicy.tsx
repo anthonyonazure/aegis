@@ -16,7 +16,7 @@ export default function PrivacyPolicy() {
         <div className="prose prose-sm dark:prose-invert space-y-6">
           <section>
             <h2 className="text-xl font-semibold mb-3">1. Information We Collect</h2>
-            <p className="text-muted-foreground">We collect information you provide directly, including your email address, name, and Microsoft 365 tenant configuration data when you use PolicyForge. We also collect usage data such as feature interactions and session metadata to improve the platform.</p>
+            <p className="text-muted-foreground">We collect information you provide directly, including your email address, name, and Microsoft 365 tenant configuration data when you use Aegis. We also collect usage data such as feature interactions and session metadata to improve the platform.</p>
           </section>
 
           <section>
@@ -31,7 +31,7 @@ export default function PrivacyPolicy() {
 
           <section>
             <h2 className="text-xl font-semibold mb-3">4. Third-Party Services</h2>
-            <p className="text-muted-foreground">PolicyForge integrates with Microsoft Graph API, AI providers, and PSA tools at your direction. Data shared with these services is governed by their respective privacy policies. We only transmit the minimum data necessary for each integration.</p>
+            <p className="text-muted-foreground">Aegis integrates with Microsoft Graph API, AI providers, and PSA tools at your direction. Data shared with these services is governed by their respective privacy policies. We only transmit the minimum data necessary for each integration.</p>
           </section>
 
           <section>
@@ -46,7 +46,7 @@ export default function PrivacyPolicy() {
 
           <section>
             <h2 className="text-xl font-semibold mb-3">7. Contact</h2>
-            <p className="text-muted-foreground">For privacy-related questions, please contact us at privacy@policyforge.io.</p>
+            <p className="text-muted-foreground">For privacy-related questions, please contact us at privacy@aegis.io.</p>
           </section>
         </div>
       </div>

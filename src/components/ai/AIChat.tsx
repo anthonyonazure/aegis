@@ -61,13 +61,13 @@ export function AIChat({
   const [messages, setMessages] = useState<AIMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [provider, setProvider] = useState('lovable');
+  const [provider, setProvider] = useState('gateway');
   const [model, setModel] = useState('google/gemini-3-flash-preview');
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const selectedTenant = tenants.find(t => t.id === selectedTenantId);
-  const availableModels = PROVIDER_MODELS[provider] || PROVIDER_MODELS.lovable;
+  const availableModels = PROVIDER_MODELS[provider] || PROVIDER_MODELS.gateway;
 
   // Scroll to bottom on new messages
   useEffect(() => {

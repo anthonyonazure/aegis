@@ -433,8 +433,9 @@ serve(async (req) => {
             exoPolicies: exoPolicyData,
           };
 
-          const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-          if (!LOVABLE_API_KEY) {
+          const AI_GATEWAY_KEY = Deno.env.get("AI_GATEWAY_API_KEY");
+          const AI_GATEWAY_URL = Deno.env.get("AI_GATEWAY_URL") ?? "";
+          if (!AI_GATEWAY_KEY || !AI_GATEWAY_URL) {
             return new Response(JSON.stringify({ error: "AI not configured" }), {
               status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
             });
@@ -466,9 +467,9 @@ Focus on:
 2. EOP policy settings and gaps
 3. Defender for Office 365 configuration`;
 
-          const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          const aiResp = await fetch(`${AI_GATEWAY_URL}/chat/completions`, {
             method: "POST",
-            headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+            headers: { Authorization: `Bearer ${AI_GATEWAY_KEY}`, "Content-Type": "application/json" },
             body: JSON.stringify({
               model: "google/gemini-3-flash-preview",
               messages: [

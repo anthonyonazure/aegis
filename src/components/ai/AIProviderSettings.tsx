@@ -50,7 +50,7 @@ export function AIProviderSettings() {
   const [apiKey, setApiKey] = useState('');
   const [showKey, setShowKey] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [defaultProvider, setDefaultProvider] = useState('lovable');
+  const [defaultProvider, setDefaultProvider] = useState('gateway');
   const [defaultModel, setDefaultModel] = useState('google/gemini-3-flash-preview');
 
   useEffect(() => {
@@ -174,10 +174,10 @@ export function AIProviderSettings() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="lovable">
+                  <SelectItem value="gateway">
                     <div className="flex items-center gap-2">
                       <Sparkles className="w-4 h-4 text-primary" />
-                      Built-in (Gemini & GPT)
+                      Built-in AI (Gemini & GPT)
                     </div>
                   </SelectItem>
                   {configuredProviders.map(p => (
@@ -206,7 +206,7 @@ export function AIProviderSettings() {
             </div>
           </div>
 
-          {defaultProvider === 'lovable' && (
+          {defaultProvider === 'gateway' && (
             <div className="flex items-start gap-2 p-3 bg-primary/10 rounded-lg">
               <Sparkles className="w-4 h-4 text-primary mt-0.5" />
               <div className="text-sm">

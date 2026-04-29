@@ -95,8 +95,10 @@ serve(async (req) => {
 
   try {
     const { tenantConnectionIds, tenantNames, tenantData: legacyData, industry, companySize } = await req.json();
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY is not configured');
+    const AI_GATEWAY_KEY = Deno.env.get('AI_GATEWAY_API_KEY');
+    if (!AI_GATEWAY_KEY) throw new Error('AI_GATEWAY_API_KEY is not configured');
+    const AI_GATEWAY_URL = Deno.env.get('AI_GATEWAY_URL');
+    if (!AI_GATEWAY_URL) throw new Error('AI_GATEWAY_URL is not configured');
 
     let realData: any = legacyData || {};
 
@@ -123,9 +125,9 @@ serve(async (req) => {
     const contextData = { tenant: realData, industry: industry || 'Technology', companySize: companySize || 'medium', analysisDate: new Date().toISOString() };
     console.log('Running security benchmark with real data');
 
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const response = await fetch(`${AI_GATEWAY_URL}/chat/completions`, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${LOVABLE_API_KEY}`, 'Content-Type': 'application/json' },
+      headers: { 'Authorization': `Bearer ${AI_GATEWAY_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: 'google/gemini-3-flash-preview', messages: [{ role: 'system', content: BENCHMARK_PROMPT }, { role: 'user', content: `Analyze and benchmark this REAL tenant security data:\n\n${JSON.stringify(contextData, null, 2)}` }], temperature: 0.3, max_tokens: 8000 }),
     });
 

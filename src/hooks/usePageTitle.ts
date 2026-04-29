@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 
-const BASE_TITLE = 'PolicyForge';
+const BASE_TITLE = 'Aegis';
 
 export function usePageTitle(title?: string) {
   useEffect(() => {

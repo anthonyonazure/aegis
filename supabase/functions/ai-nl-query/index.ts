@@ -66,8 +66,10 @@ serve(async (req) => {
     const { query, tenantId, context, tenantConnectionIds } = await req.json();
     console.log('Natural language query:', { query, tenantId });
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+    const AI_GATEWAY_KEY = Deno.env.get("AI_GATEWAY_API_KEY");
+    if (!AI_GATEWAY_KEY) throw new Error("AI_GATEWAY_API_KEY is not configured");
+    const AI_GATEWAY_URL = Deno.env.get('AI_GATEWAY_URL');
+    if (!AI_GATEWAY_URL) throw new Error('AI_GATEWAY_URL is not configured');
 
     // Step 1: Ask AI to determine which endpoints to query
     const planPrompt = `You are a Microsoft 365 data assistant. Given the user's question, determine which Graph API data sources are needed.
@@ -80,9 +82,9 @@ User question: "${query}"
 Return JSON only:
 { "endpoints": ["key1", "key2"], "interpretation": "What data the user wants" }`;
 
-    const planResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const planResp = await fetch(`${AI_GATEWAY_URL}/chat/completions`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${AI_GATEWAY_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model: "google/gemini-2.5-flash-lite",
         messages: [{ role: "user", content: planPrompt }],
@@ -168,9 +170,9 @@ Output JSON:
   "dataSource": "${dataSource}"
 }`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch(`${AI_GATEWAY_URL}/chat/completions`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${AI_GATEWAY_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model: "google/gemini-3-flash-preview",
         messages: [

@@ -29,10 +29,12 @@ serve(async (req) => {
 
   try {
     const { messages, tenantContext } = await req.json();
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+    const AI_GATEWAY_KEY = Deno.env.get('AI_GATEWAY_API_KEY');
     
-    if (!LOVABLE_API_KEY) {
-      throw new Error('LOVABLE_API_KEY is not configured');
+    if (!AI_GATEWAY_KEY) {
+      throw new Error('AI_GATEWAY_API_KEY is not configured');
+    const AI_GATEWAY_URL = Deno.env.get('AI_GATEWAY_URL');
+    if (!AI_GATEWAY_URL) throw new Error('AI_GATEWAY_URL is not configured');
     }
 
     let systemPrompt = `You are an expert Microsoft 365 management assistant for MSPs and IT administrators. You provide helpful, accurate, and actionable guidance on:
@@ -91,10 +93,10 @@ ${tenantContext}
 IMPORTANT: When the user asks about their security posture, risky users, alerts, or any tenant-specific question, always reference this live data. Do NOT make up or assume data — only use what is provided above. If data is missing or insufficient, let the user know what additional permissions or data would help.`;
     }
 
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const response = await fetch(`${AI_GATEWAY_URL}/chat/completions`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Authorization': `Bearer ${AI_GATEWAY_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({

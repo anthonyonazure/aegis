@@ -140,7 +140,7 @@ serve(async (req) => {
 
     const userId = claimsData.claims.sub as string;
     const body: AnalyzeRequest = await req.json();
-    const { analysisType, tenantConnectionId, customerId, data, provider = 'lovable', model } = body;
+    const { analysisType, tenantConnectionId, customerId, data, provider = 'gateway', model } = body;
 
     if (!ANALYSIS_PROMPTS[analysisType]) {
       return new Response(
@@ -176,11 +176,12 @@ serve(async (req) => {
     }
 
     // Get API key
-    let apiKey = Deno.env.get('LOVABLE_API_KEY');
-    let endpoint = 'https://ai.gateway.lovable.dev/v1/chat/completions';
+    let apiKey = Deno.env.get('AI_GATEWAY_API_KEY');
+    const AI_GATEWAY_URL = Deno.env.get('AI_GATEWAY_URL') ?? '';
+    let endpoint = `${AI_GATEWAY_URL}/chat/completions`;
     let selectedModel = model || 'google/gemini-3-flash-preview';
 
-    if (provider !== 'lovable') {
+    if (provider !== 'gateway') {
       const { data: keyData } = await supabase.rpc('get_ai_api_key', { p_provider: provider });
       if (keyData) {
         apiKey = keyData;

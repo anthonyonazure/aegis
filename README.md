@@ -1,6 +1,6 @@
-# PolicyForge
+# Aegis
 
-> **AI-native Microsoft 365 governance for MSPs.** Multi-customer, multi-tenant, with AI woven through anomaly detection, policy generation, threat intelligence, drift detection, and incident response. The platform Vortex-class MSPs build their AI service line on.
+> **AI-powered Microsoft 365 governance, security, and drift management for MSPs.** Multi-customer, multi-tenant, with AI woven through anomaly detection, policy generation, threat intelligence, drift detection, and incident response.
 
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
@@ -14,7 +14,7 @@
 
 ## What it is
 
-Most MSP M365 tooling is read-only dashboards or pre-AI scripting platforms. PolicyForge is built differently: **multi-customer, multi-tenant, AI-augmented across every workflow** that an MSP runs against Microsoft 365.
+Most MSP M365 tooling is read-only dashboards or pre-AI scripting platforms. Aegis is built differently: **multi-customer, multi-tenant, AI-augmented across every workflow** that an MSP runs against Microsoft 365.
 
 Production-grade today: 5 customers loaded, 8 tenants connected, 45 successful tenant exports, full Graph API integration. Built for the operator running 5–500 customers who needs leverage, not just visibility.
 
@@ -61,7 +61,7 @@ Production-grade today: 5 customers loaded, 8 tenants connected, 45 successful t
 - **Validation** — validate tenant state against compliance baselines before deployment
 
 ### Multi-LLM Provider Support
-PolicyForge supports multiple AI providers — bring-your-own-key for Anthropic Claude, OpenAI, Azure OpenAI, Google Gemini, plus a built-in default option. Choose providers per workflow.
+Aegis supports multiple AI providers — bring-your-own-key for Anthropic Claude, OpenAI, Azure OpenAI, Google Gemini, plus a built-in default option. Choose providers per workflow.
 
 ## Screenshots
 
@@ -88,18 +88,26 @@ The MISP-inspired Threat Intelligence browser ships with **38 ATT&CK techniques,
 ## Quick Start
 
 ```bash
-git clone git@github.com:anthonyonazure/policyforge.git
-cd policyforge
+git clone git@github.com:anthonyonazure/aegis.git
+cd aegis
 
-bun install
+npm install
 cp .env.example .env    # fill in Supabase + Graph API + AI provider keys
-bun run dev             # http://localhost:8080
+npm run dev             # http://localhost:8080
 ```
 
 You'll need:
 - An Azure app registration with appropriate Graph API permissions for the modules you intend to enable
 - Supabase project (or local instance)
 - API keys for at least one AI provider (or use the built-in default)
+
+### Supabase edge function secrets
+
+The built-in AI gateway is wired through env vars (no vendor strings in the source):
+
+- `AI_GATEWAY_API_KEY` — key for the built-in AI gateway
+- `AI_GATEWAY_URL` — base URL for the built-in AI gateway (e.g. `https://your-gateway/v1`)
+- Per-provider keys (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.) are optional fallbacks; users can also supply their own via the in-app provider settings.
 
 ## Project Structure
 
@@ -108,7 +116,7 @@ src/
   components/
     ai/                    AI provider settings, AI chat, prompt templates
     views/                 Major view components per feature module
-    ...                    
+    ...
   pages/                   Top-level routes
   integrations/            Graph API, AI providers, Supabase, DUDE/PSA
   hooks/, lib/, types/

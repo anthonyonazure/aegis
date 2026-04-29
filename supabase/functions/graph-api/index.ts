@@ -1223,7 +1223,7 @@ serve(async (req) => {
       const body: Record<string, any> = {
         displayName: scriptPayload.displayName,
         description: scriptPayload.description || '',
-        publisher: scriptPayload.publisher || 'Lovable MSP Manager',
+        publisher: scriptPayload.publisher || 'Aegis MSP Manager',
         runAsAccount: scriptPayload.runAs === 'System' ? 'system' : 'user',
         runAs32Bit: scriptPayload.runAs32Bit || false,
         enforceSignatureCheck: false,

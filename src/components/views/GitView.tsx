@@ -78,7 +78,7 @@ export const GitView = () => {
   const [repoUrl, setRepoUrl] = useState('');
   const [branch, setBranch] = useState('main');
   const [autoCommit, setAutoCommit] = useState(true);
-  const [commitMessage, setCommitMessage] = useState('chore: update PolicyForge export - {{date}}');
+  const [commitMessage, setCommitMessage] = useState('chore: update Aegis export - {{date}}');
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -203,7 +203,7 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add -A
-          git diff --quiet && git diff --staged --quiet || git commit -m "chore: update PolicyForge export"
+          git diff --quiet && git diff --staged --quiet || git commit -m "chore: update Aegis export"
           git push`;
 
   if (loading) {

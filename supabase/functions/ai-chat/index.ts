@@ -1,6 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+const AI_GATEWAY_URL = Deno.env.get('AI_GATEWAY_URL') ?? '';
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -30,8 +32,8 @@ function checkRateLimit(userId: string): { allowed: boolean; remaining: number }
 
 // Provider configurations
 const PROVIDERS: Record<string, { endpoint: string; defaultModel: string }> = {
-  lovable: {
-    endpoint: 'https://ai.gateway.lovable.dev/v1/chat/completions',
+  gateway: {
+    endpoint: `${AI_GATEWAY_URL}/chat/completions`,
     defaultModel: 'google/gemini-3-flash-preview',
   },
   openai: {
@@ -181,16 +183,16 @@ serve(async (req) => {
     } = body;
 
     // Determine which provider and API key to use
-    let provider = requestedProvider || 'lovable';
+    let provider = requestedProvider || 'gateway';
     let apiKey: string | undefined = undefined;
     let endpoint: string;
     let model: string;
 
-    if (provider === 'lovable') {
-      // Use Lovable AI (default)
-      apiKey = Deno.env.get('LOVABLE_API_KEY');
-      endpoint = PROVIDERS.lovable.endpoint;
-      model = requestedModel || PROVIDERS.lovable.defaultModel;
+    if (provider === 'gateway') {
+      // Use built-in AI (default)
+      apiKey = Deno.env.get('AI_GATEWAY_API_KEY');
+      endpoint = PROVIDERS.gateway.endpoint;
+      model = requestedModel || PROVIDERS.gateway.defaultModel;
     } else {
       // Check for user's custom API key
       const { data: keyData } = await supabase.rpc('get_ai_api_key', { p_provider: provider });
@@ -204,12 +206,12 @@ serve(async (req) => {
       }
 
       if (!apiKey) {
-        // Fall back to Lovable AI
-        console.log(`No API key for ${provider}, falling back to Lovable AI`);
-        provider = 'lovable';
-        apiKey = Deno.env.get('LOVABLE_API_KEY');
-        endpoint = PROVIDERS.lovable.endpoint;
-        model = PROVIDERS.lovable.defaultModel;
+        // Fall back to built-in AI
+        console.log(`No API key for ${provider}, falling back to built-in AI`);
+        provider = 'gateway';
+        apiKey = Deno.env.get('AI_GATEWAY_API_KEY');
+        endpoint = PROVIDERS.gateway.endpoint;
+        model = PROVIDERS.gateway.defaultModel;
       } else {
         const providerConfig = PROVIDERS[provider];
         if (!providerConfig) {
