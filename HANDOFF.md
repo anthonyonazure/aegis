@@ -2,6 +2,53 @@
 
 Things the operator deploying Aegis needs to do in Supabase / external services that can't be scripted from the dev shell. Cross items off as you complete them.
 
+---
+
+## ⚠️ Known risks / unverified areas
+
+The codebase ships with `npm run build` green and CI passing on every push, but the following have **not** been runtime-tested end-to-end against a real Supabase project + M365 tenant. They are most likely to need adjustment on first deploy.
+
+### High risk — likely to need a fix on first deploy
+
+- **Service-role bypass in `dude-sync`**. The function checks `authHeader === \`Bearer ${SERVICE_ROLE_KEY}\`` for exact string equality so `run-scheduled-dude` can act on behalf of any user. Supabase's gateway sometimes rewrites or wraps the Authorization header; if so, the bypass never fires and the cron-triggered DUDE sync silently 401s. **Validate by triggering `run-scheduled-dude` manually and confirming dude_sync_logs gets a row.**
+
+- **`Deno.resolveDns` in `verify-custom-domain`**. Supabase Edge runtime can have restrictions on outbound DNS. If lookups fail, switch to a DoH (DNS-over-HTTPS) fallback against `1.1.1.1` or `8.8.8.8`.
+
+- **`pg_cron` + `net.http_post` setup**. The post-deploy SQL enables both extensions and schedules two cron jobs. Exact syntax + extension permissions vary by Supabase tier (free tier has limits on outbound HTTP from cron). If `cron.schedule` errors, fall back to invoking the runner functions from a long-running external scheduler.
+
+- **Supabase Auth `redirectTo` allowlist**. `invite-portal-user` passes the customer's portal URL as the magic-link redirect. **You must add `https://<your-host>/portal/*` to Authentication → URL Configuration → Redirect URLs** or invitees land on the wrong sign-in page after clicking the magic link.
+
+- **AI narrative prompt quality**. The prompt for `narrate-compliance-evidence` has been written but never run on a real failed-control snapshot. First runs may produce generic / verbose / hallucinated narratives. Iterate on the system prompt with one or two real failures before shipping the feature to customers.
+
+### Medium risk — works under the documented conditions, breaks gracefully otherwise
+
+- **MDE Defender API integration** (DUDE Defender tagging). Token scope is `https://api.securitycenter.microsoft.com/.default`, separate from Graph. Requires `Machine.ReadWrite.All` on the WindowsDefenderATP API on the app registration. If not granted, tagging fails open — devices land in the device group, but the tag silently no-ops and the sync log records the reason.
+
+- **Graph `beta` endpoints in DUDE PR4** (`/beta/administrativeUnits/{id}/members/$ref`). Beta APIs change. The "400 = already a member" quirk we depend on for AU user sync may shift; if it does, expected counts in `details.adminUnitUserSync` will be off but the operation still succeeds.
+
+- **Compliance evaluators (8 total)**. Coded against my mental model of Graph response shapes; never run against a live tenant. Most likely failure mode: a field I assumed always-present is actually optional, leading to a TypeError. Wrap the first few real runs in a debug log session.
+
+- **PCI DSS 8.4.2 (full-tenant MFA, not just admins)**. Mapped to the existing admin-MFA evaluator. **This will report PASS even when only admins have MFA**, which is a false positive for that specific control. Add an `mfa-required-for-all-users` evaluator before anyone uses Aegis to sign off on a PCI report.
+
+- **AC-7 (NIST smart lockout) and PCI 10.4.1 (time sync)**. Ship as `evaluator_key = NULL`, so they show as N/A in the UI. Auditor expects manual evidence collected outside the platform; document this explicitly in audit response.
+
+### Low risk — should work as designed
+
+- Plain CRUD UIs (marketplace browse/install/rate, plugin editor, branding form, custom-domain settings).
+- RLS policy patterns reused from existing tables that already work.
+- Migrations are additive — no destructive changes; rerunning is safe.
+- Edge function packaging — `supabase/config.toml` lists every function, scripts deploy them in dependency order.
+
+### What I would do before trusting any of this in front of a paying customer
+
+1. Run `./scripts/deploy-aegis.sh` against a throwaway Supabase project. Catches migration ordering, function deploy errors, config.toml omissions.
+2. Run one compliance evaluator against a real tenant. Check the snapshot JSON matches what the code expects.
+3. Click the portal flow end-to-end: create customer → set slug → invite real email → click the magic link → confirm the dashboard loads.
+4. Trigger `run-scheduled-dude` manually with the operator's user_id in the body and confirm a sync log lands.
+5. Check the GitHub Actions CI badge in README — if it's red, something obvious broke between local and CI.
+
+---
+
 ## TL;DR — fastest path
 
 After `supabase login` + `supabase link --project-ref <your-project-ref>`:
