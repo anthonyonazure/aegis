@@ -30,7 +30,7 @@ Designed for the operator running 5–500 customers who needs leverage, not just
 
 ### Intune Management
 - **Intune Manager** — centralized device, app, policy, and configuration management across tenants
-- **DUDE Sync** — sync customer / tenant / billing data with N-able DUDE / PSA integrations
+- **DUDE Sync** — auto-tag Microsoft Defender devices based on user-group membership (Microsoft Graph only)
 
 ### Threat Intelligence
 - **MISP Browser** — local threat intel browser with curated ATT&CK techniques, IOCs, threat actor profiles, OSINT feeds
@@ -81,7 +81,7 @@ The MISP-inspired Threat Intelligence browser ships with **38 ATT&CK techniques,
 | Backend | Supabase (Auth, PostgreSQL, Edge Functions) |
 | M365 integration | Microsoft Graph API (Intune, Entra, Exchange, SharePoint, Teams) |
 | AI providers | Multi-provider (Anthropic, OpenAI, Azure OpenAI, Gemini, built-in) |
-| PSA integration | DUDE Sync (N-able compatible) |
+| PSA integration | HaloPSA · Autotask · ConnectWise · ServiceNow · Jira |
 | Threat intel | MISP-format ingestion |
 | Routing | react-router-dom v6 |
 
