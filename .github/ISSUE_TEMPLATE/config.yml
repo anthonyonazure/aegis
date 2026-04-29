@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/anthonyonazure/aegis/security/advisories/new
+    about: Report a security issue privately. DO NOT use the public issue tracker for security reports.
+  - name: Question / discussion
+    url: https://github.com/anthonyonazure/aegis/discussions
+    about: For questions, ideas, and general conversation, prefer GitHub Discussions over an issue.

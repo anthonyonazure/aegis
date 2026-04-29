@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel a running CI for an in-flight branch when a new commit lands;
+# keeps the queue moving and saves Actions minutes on rapid pushes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build + lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        # Allow lint warnings; only fail on errors. The repo inherits a
+        # large set of warnings from the original codebase.
+        run: npm run lint --if-present
+
+      - name: Build
+        run: npm run build
+        env:
+          # Vite expects these to be set at build time even when no real
+          # backend is present; placeholders keep the build deterministic
+          # for CI.
+          VITE_SUPABASE_URL: 'https://example.supabase.co'
+          VITE_SUPABASE_PUBLISHABLE_KEY: 'placeholder-anon-key'
+          VITE_SUPABASE_PROJECT_ID: 'example'

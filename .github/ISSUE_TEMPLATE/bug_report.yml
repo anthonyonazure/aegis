@@ -1,0 +1,83 @@
+name: Bug report
+description: Report a defect in Aegis.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. For security issues, **do not file a public issue** — use the [security advisory form](https://github.com/anthonyonazure/aegis/security/advisories/new) instead.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What went wrong, in one or two sentences.
+      placeholder: e.g. Compliance evidence collection fails for tenants without Conditional Access policies.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps. Include any relevant config (framework code, plugin, etc.).
+      placeholder: |
+        1. Navigate to Compliance Evidence
+        2. Select HIPAA framework + tenant X
+        3. Click Collect
+        4. Observe error toast: "..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      placeholder: e.g. Each control should evaluate; missing-data controls should mark as N/A.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include error messages, screenshots, or relevant log snippets. **Sanitize** — no real customer names, no secrets.
+      placeholder: |
+        Error toast: "Cannot read properties of undefined".
+        Edge function log shows ...
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Aegis version / commit
+      description: Output of `git rev-parse --short HEAD`, or the release tag you're on.
+      placeholder: e.g. v0.2.1 or abcd123
+    validations:
+      required: true
+
+  - type: input
+    id: env
+    attributes:
+      label: Environment
+      description: Browser + OS, plus deployment target (Supabase cloud / self-hosted).
+      placeholder: Chrome 138 on macOS 14.4, Supabase cloud
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else?
+      description: Workarounds you tried, screenshots, related issues.
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmations
+      options:
+        - label: I have searched existing issues and this isn't a duplicate.
+          required: true
+        - label: I am NOT reporting a security vulnerability (those go through the security advisory form).
+          required: true

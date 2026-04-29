@@ -1,0 +1,61 @@
+name: Feature request
+description: Suggest a new capability or improvement.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: Describe the actual MSP / customer / operator problem. "I want X" is OK; "I want X because Y" is much better.
+      placeholder: e.g. "Auditors keep asking for a printable summary of the last evidence run, and the ZIP is too granular for non-technical reviewers."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: What would you like Aegis to do? Sketch the UX or API; don't worry about implementation details unless they matter.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What workarounds have you tried? Why are they insufficient?
+    validations:
+      required: false
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Which area?
+      multiple: true
+      options:
+        - MSP UI (Dashboard / nav / settings)
+        - Customer portal
+        - Compliance evidence
+        - Plugin SDK
+        - Marketplace (templates or plugins)
+        - PSA integrations / webhooks
+        - Branding
+        - Edge functions / backend
+        - Database / migrations
+        - Documentation
+        - Other
+
+  - type: dropdown
+    id: importance
+    attributes:
+      label: Importance to you
+      options:
+        - Nice to have
+        - Would meaningfully improve our day-to-day
+        - Blocking us from adopting Aegis
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else?
+      description: Mockups, references, or links to similar features in other tools.
