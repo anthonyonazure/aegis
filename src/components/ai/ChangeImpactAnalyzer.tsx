@@ -68,13 +68,14 @@ export function ChangeImpactAnalyzer({ selectedTenants }: ChangeImpactAnalyzerPr
       const { data, error } = await supabase.functions.invoke('ai-change-impact', {
         body: {
           proposedChanges: parsedChanges,
-          currentConfig: {},
-          tenantConnectionId: effectiveConnectionId,
-          tenantData: { 
+          // currentConfig left empty intentionally — backend fetches live config
+          // from Graph when tenantConnectionIds is supplied. See ai-change-impact/index.ts.
+          tenantConnectionIds: [effectiveConnectionId],
+          tenantData: {
             tenantId: effectiveConnectionId,
-            tenantName: effectiveTenantName 
-          }
-        }
+            tenantName: effectiveTenantName,
+          },
+        },
       });
 
       if (error) throw error;
