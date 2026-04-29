@@ -12,6 +12,7 @@ import { ValidationView } from '@/components/views/ValidationView';
 import { DriftDetectionView } from '@/components/views/DriftDetectionView';
 import { ComplianceView } from '@/components/views/ComplianceView';
 import { ComplianceDashboardView } from '@/components/views/ComplianceDashboardView';
+import { ComplianceEvidenceView } from '@/components/views/ComplianceEvidenceView';
 import { AuditView } from '@/components/views/AuditView';
 import { ScheduledExportsView } from '@/components/views/ScheduledExportsView';
 import { WebhooksView } from '@/components/views/WebhooksView';
@@ -108,6 +109,7 @@ const SIMPLE_VIEWS: Record<string, React.ComponentType> = {
   'compliance': ComplianceView,
   'compliance-advisor': ComplianceAdvisorView,
   'compliance-dashboard': ComplianceDashboardView,
+  'compliance-evidence': ComplianceEvidenceView,
   'audit': AuditView,
   'permission-health': PermissionHealthView,
   'copilot-agents': CopilotAgentsView,

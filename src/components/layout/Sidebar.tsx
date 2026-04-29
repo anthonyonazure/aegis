@@ -155,6 +155,7 @@ const navGroups: NavGroup[] = [
       { id: 'compliance', label: 'Compliance Checks', icon: AlertTriangle, description: 'Run compliance verification checks' },
       { id: 'compliance-advisor', label: 'Compliance Advisor', icon: Scale, isAI: true, description: 'AI recommendations for compliance improvements' },
       { id: 'compliance-dashboard', label: 'Compliance Dashboard', icon: BarChart3, description: 'Compliance status dashboard and reports' },
+      { id: 'compliance-evidence', label: 'Compliance Evidence', icon: FileCheck, description: 'Run framework-specific evidence collection (HIPAA, SOC 2, CMMC)' },
     ],
   },
   {

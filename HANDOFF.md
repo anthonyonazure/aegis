@@ -152,5 +152,32 @@ After items 16-17 are done:
 - [ ] Wait a few minutes, click Verify. On success the portal becomes available at `https://portal.acme.com`
 - [ ] Open `https://portal.acme.com/login` and sign in
 
+### 21. Apply the compliance-evidence migration (Phase 2 #4a)
+File: `supabase/migrations/20260429150000_compliance_evidence.sql`
+
+- [ ] Apply the migration
+- [ ] Verify tables `compliance_frameworks`, `compliance_controls`, `compliance_evidence_runs`, `compliance_evidence_items` exist
+- [ ] Verify the HIPAA Security Rule framework + 5 seed controls were inserted (`SELECT * FROM compliance_controls JOIN compliance_frameworks USING…`)
+
+### 22. Deploy the new edge function (Phase 2 #4a)
+- [ ] **New**: `collect-compliance-evidence`
+
+This function uses the same Graph credentials path other tenant-targeted functions use (RPC `get_decrypted_credential`); no new env vars to set.
+
+### 23. Smoke-test compliance evidence collection (Phase 2 #4a)
+- [ ] Open the MSP app → sidebar → **Security & Compliance** → **Compliance Evidence**
+- [ ] Pick framework "HIPAA Security Rule", pick a tenant, click Collect
+- [ ] Confirm a run lands in the Recent runs list with PASS/FAIL/N/A counts
+- [ ] Click into the run; expand a control to see the captured snapshot JSON
+
+Expected behavior on the seed controls (depends on your tenant's actual config):
+- `mfa-required-for-admins`: pass if any enabled CA policy targets Global/Privileged Auth/Security Admin and requires MFA
+- `audit-logs-enabled`: pass if `/auditLogs/signIns` returns records (needs `AuditLog.Read.All`)
+- `no-shared-account-signin`: pass if no enabled accounts use info@/support@/etc patterns
+- `strong-auth-methods-enabled`: pass if FIDO2 / Microsoft Authenticator / Windows Hello are enabled in the auth methods policy
+- `no-stale-active-users`: pass if ≤5% of active users (or ≤1) have not signed in for 90+ days
+
+Failures are detailed inline in the snapshot — the JSON gives you the actual data the auditor wants to see.
+
 ## Done
 _Move items here as you complete them so we have a running history._
