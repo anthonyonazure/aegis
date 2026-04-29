@@ -161,3 +161,6 @@ verify_jwt = false
 
 [functions.run-scheduled-dude]
 verify_jwt = false
+
+[functions.narrate-compliance-evidence]
+verify_jwt = false

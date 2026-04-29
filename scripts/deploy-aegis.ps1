@@ -53,7 +53,8 @@ $functions = @(
   'collect-compliance-evidence',
   'run-scheduled-compliance',
   'run-plugin',
-  'run-scheduled-dude'
+  'run-scheduled-dude',
+  'narrate-compliance-evidence'
 )
 
 foreach ($fn in $functions) {

@@ -43,6 +43,7 @@ FUNCTIONS=(
   run-scheduled-compliance
   run-plugin
   run-scheduled-dude
+  narrate-compliance-evidence
 )
 
 for fn in "${FUNCTIONS[@]}"; do

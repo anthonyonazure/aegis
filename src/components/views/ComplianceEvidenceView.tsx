@@ -18,7 +18,10 @@ import {
   getComplianceFrameworks,
   getRecentEvidenceRuns,
   getRunItems,
+  narrateRun,
 } from '@/lib/complianceDatabase';
+import { Switch } from '@/components/ui/switch';
+import { Sparkles } from 'lucide-react';
 import { downloadEvidencePackage } from '@/lib/complianceEvidencePackage';
 import { ComplianceSchedulesPanel } from '@/components/compliance/ComplianceSchedulesPanel';
 
@@ -62,6 +65,9 @@ export function ComplianceEvidenceView() {
   const [activeRunItems, setActiveRunItems] = useState<ComplianceEvidenceItem[]>([]);
   const [itemsLoading, setItemsLoading] = useState(false);
   const [expandedItem, setExpandedItem] = useState<string | null>(null);
+  // AI narratives (issue #4)
+  const [includeNarratives, setIncludeNarratives] = useState(false);
+  const [narrating, setNarrating] = useState(false);
   const [loadingFrameworks, setLoadingFrameworks] = useState(true);
 
   const tenantId = selectedTenants[0]?.id;
@@ -198,12 +204,40 @@ export function ComplianceEvidenceView() {
     if (!activeRunId || !selectedFramework) return;
     const run = recentRuns.find((r) => r.id === activeRunId);
     if (!run) return;
+    let narratives: Record<string, string> | undefined;
     try {
+      // Issue #4: optionally generate AI narratives for fail/error controls
+      // before assembling the ZIP. Skip silently if the AI call fails — the
+      // package still downloads with the raw snapshots, which is the
+      // auditor-accurate baseline.
+      if (includeNarratives) {
+        setNarrating(true);
+        try {
+          const result = await narrateRun({ runId: activeRunId });
+          narratives = result.narratives;
+          if (Object.keys(narratives).length === 0) {
+            toast({
+              title: 'No narratives generated',
+              description: result.message ?? 'Run had no fail/error controls to narrate.',
+            });
+          }
+        } catch (e) {
+          toast({
+            title: 'Narrative generation failed',
+            description: e instanceof Error ? e.message : 'Unknown error — downloading without narratives.',
+            variant: 'destructive',
+          });
+        } finally {
+          setNarrating(false);
+        }
+      }
+
       await downloadEvidencePackage({
         run,
         framework: selectedFramework,
         items: activeRunItems,
         tenantName: tenantName || 'tenant',
+        narratives,
       });
       toast({ title: 'Evidence package downloaded' });
     } catch (e) {
@@ -362,16 +396,38 @@ export function ComplianceEvidenceView() {
                   Per-control results and the captured evidence snapshot. Click a control to expand.
                 </CardDescription>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleDownloadPackage}
-                disabled={itemsLoading || activeRunItems.length === 0}
-                title="Download an audit-ready ZIP (PDF cover + manifest + per-control snapshots)"
-              >
-                <Download className="w-4 h-4 mr-2" />
-                Download evidence package
-              </Button>
+              <div className="flex flex-col gap-2 items-end">
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id="include-narratives"
+                    checked={includeNarratives}
+                    onCheckedChange={setIncludeNarratives}
+                  />
+                  <label htmlFor="include-narratives" className="text-xs text-muted-foreground cursor-pointer flex items-center gap-1">
+                    <Sparkles className="w-3 h-3" />
+                    Include AI narratives (fail/error controls)
+                  </label>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDownloadPackage}
+                  disabled={itemsLoading || activeRunItems.length === 0 || narrating}
+                  title="Download an audit-ready ZIP (PDF cover + manifest + per-control snapshots, optionally with AI narratives)"
+                >
+                  {narrating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Narrating…
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-4 h-4 mr-2" />
+                      Download evidence package
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent>

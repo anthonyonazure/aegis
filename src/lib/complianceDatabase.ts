@@ -298,3 +298,29 @@ export async function triggerComplianceSchedule(configId: string): Promise<{
   if (error) throw new Error(error.message);
   return data as { processed: number; summary: Record<string, unknown> };
 }
+
+// ---------- AI narratives (issue #4) ----------
+
+export interface NarrativeResult {
+  narratives: Record<string, string>; // keyed by compliance_evidence_items.id
+  model: string | null;
+  generatedAt: string;
+  itemCount?: number;
+  message?: string;
+}
+
+/**
+ * Generate AI narratives for a compliance run. By default narrates the
+ * fail + error items (the auditor-relevant subset). Pass controlIds (item
+ * ids) to override.
+ */
+export async function narrateRun(input: {
+  runId: string;
+  controlIds?: string[];
+}): Promise<NarrativeResult> {
+  const { data, error } = await supabase.functions.invoke('narrate-compliance-evidence', {
+    body: input,
+  });
+  if (error) throw new Error(error.message);
+  return data as NarrativeResult;
+}
