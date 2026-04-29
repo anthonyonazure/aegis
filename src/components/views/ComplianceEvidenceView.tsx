@@ -5,8 +5,9 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { Loader2, ShieldCheck, ShieldAlert, ChevronDown, ChevronRight, FileCheck, Play, Calendar } from 'lucide-react';
+import { Loader2, ShieldCheck, ShieldAlert, ChevronDown, ChevronRight, FileCheck, Play, Calendar, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { TenantMultiSelector, SelectedTenantInfo } from '@/components/copilot/TenantMultiSelector';
 import {
   ComplianceFramework,
@@ -17,6 +18,8 @@ import {
   getRecentEvidenceRuns,
   getRunItems,
 } from '@/lib/complianceDatabase';
+import { downloadEvidencePackage } from '@/lib/complianceEvidencePackage';
+import { ComplianceSchedulesPanel } from '@/components/compliance/ComplianceSchedulesPanel';
 
 const STATUS_BADGE: Record<string, string> = {
   pass: 'bg-green-500/20 text-green-400 border-green-500/30 border',
@@ -183,6 +186,27 @@ export function ComplianceEvidenceView() {
     }
   };
 
+  const handleDownloadPackage = async () => {
+    if (!activeRunId || !selectedFramework) return;
+    const run = recentRuns.find((r) => r.id === activeRunId);
+    if (!run) return;
+    try {
+      await downloadEvidencePackage({
+        run,
+        framework: selectedFramework,
+        items: activeRunItems,
+        tenantName: tenantName || 'tenant',
+      });
+      toast({ title: 'Evidence package downloaded' });
+    } catch (e) {
+      toast({
+        title: 'Download failed',
+        description: e instanceof Error ? e.message : 'Unknown error',
+        variant: 'destructive',
+      });
+    }
+  };
+
   return (
     <div className="space-y-6">
       <header>
@@ -193,6 +217,17 @@ export function ComplianceEvidenceView() {
         </p>
       </header>
 
+      <Tabs defaultValue="adhoc" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="adhoc">On demand</TabsTrigger>
+          <TabsTrigger value="schedules">Schedules</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="schedules" className="space-y-4">
+          <ComplianceSchedulesPanel frameworks={frameworks} />
+        </TabsContent>
+
+        <TabsContent value="adhoc" className="space-y-6">
       <Card>
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
@@ -312,10 +347,24 @@ export function ComplianceEvidenceView() {
       {activeRunId && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Run detail</CardTitle>
-            <CardDescription>
-              Per-control results and the captured evidence snapshot. Click a control to expand.
-            </CardDescription>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <CardTitle className="text-lg">Run detail</CardTitle>
+                <CardDescription>
+                  Per-control results and the captured evidence snapshot. Click a control to expand.
+                </CardDescription>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDownloadPackage}
+                disabled={itemsLoading || activeRunItems.length === 0}
+                title="Download an audit-ready ZIP (PDF cover + manifest + per-control snapshots)"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Download evidence package
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             {itemsLoading ? (
@@ -378,6 +427,8 @@ export function ComplianceEvidenceView() {
           </CardContent>
         </Card>
       )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

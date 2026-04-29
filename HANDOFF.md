@@ -198,5 +198,33 @@ The function file gained three new evaluators (`legacy-auth-blocked`, `guest-res
 
 The same tenant snapshots will produce different aggregate counts per framework because each framework asks different questions of the same data — that's the point.
 
+### 27. Apply the compliance schedules migration (Phase 2 #4c)
+File: `supabase/migrations/20260429170000_compliance_schedules.sql`
+
+- [ ] Apply the migration
+- [ ] Verify tables `scheduled_compliance_configs` + `scheduled_compliance_runs` exist with the expected RLS policies
+
+### 28. Deploy run-scheduled-compliance + register cron (Phase 2 #4c)
+- [ ] **New**: deploy `run-scheduled-compliance`
+- [ ] In Supabase Dashboard → Database → Cron Jobs (or pg_cron), schedule a recurring HTTP call to `https://<your-project>.supabase.co/functions/v1/run-scheduled-compliance` every 15 minutes (the function checks `last_run_at` against each schedule's cadence, so it's a no-op when nothing is due). Use the service-role key as the auth header.
+
+Example pg_cron entry:
+```sql
+SELECT cron.schedule(
+  'compliance-runner',
+  '*/15 * * * *',
+  $$ SELECT net.http_post(
+       url := '<SUPABASE_URL>/functions/v1/run-scheduled-compliance',
+       headers := jsonb_build_object('Authorization', 'Bearer <SERVICE_ROLE_KEY>')
+     ); $$
+);
+```
+
+### 29. Smoke-test scheduling + downloadable package (Phase 2 #4c)
+- [ ] Compliance Evidence → **Schedules** tab → Create schedule (Weekly Mon 09:00, HIPAA, "all tenants")
+- [ ] Click ▶ to run it manually; confirm one evidence run per tenant lands in the **On demand** tab
+- [ ] Open a recent run, click **Download evidence package**, verify the ZIP contains `cover.pdf`, `manifest.json`, and `controls/<code>.json` files
+- [ ] Open the PDF and confirm it shows the control table colored by status
+
 ## Done
 _Move items here as you complete them so we have a running history._

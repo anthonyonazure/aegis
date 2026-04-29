@@ -193,3 +193,108 @@ export async function collectEvidence(input: {
   if (error) return { success: false, error: error.message };
   return data as CollectEvidenceResult;
 }
+
+// ---------- Compliance schedules (Phase 2 #4c) ----------
+
+export type ComplianceScheduleTarget = 'all' | 'customer' | 'group' | 'selected';
+
+export interface ComplianceSchedule {
+  id: string;
+  userId: string;
+  name: string;
+  description: string | null;
+  frameworkId: string;
+  targetType: ComplianceScheduleTarget;
+  targetTenantIds: string[];
+  targetCustomerId: string | null;
+  targetGroupId: string | null;
+  scheduleCron: string;
+  isActive: boolean;
+  lastRunAt: Date | null;
+  nextRunAt: Date | null;
+  runCount: number;
+}
+
+function mapSchedule(row: Record<string, unknown>): ComplianceSchedule {
+  return {
+    id: row.id as string,
+    userId: row.user_id as string,
+    name: row.name as string,
+    description: (row.description as string) ?? null,
+    frameworkId: row.framework_id as string,
+    targetType: row.target_type as ComplianceScheduleTarget,
+    targetTenantIds: (row.target_tenant_ids as string[]) ?? [],
+    targetCustomerId: (row.target_customer_id as string) ?? null,
+    targetGroupId: (row.target_group_id as string) ?? null,
+    scheduleCron: row.schedule_cron as string,
+    isActive: row.is_active as boolean,
+    lastRunAt: row.last_run_at ? new Date(row.last_run_at as string) : null,
+    nextRunAt: row.next_run_at ? new Date(row.next_run_at as string) : null,
+    runCount: (row.run_count as number) ?? 0,
+  };
+}
+
+export async function listComplianceSchedules(): Promise<ComplianceSchedule[]> {
+  const { data, error } = await supabase
+    .from('scheduled_compliance_configs')
+    .select('*')
+    .order('created_at', { ascending: false });
+  if (error) throw new Error(`Failed to load schedules: ${error.message}`);
+  return (data ?? []).map(mapSchedule);
+}
+
+export async function createComplianceSchedule(input: {
+  name: string;
+  description?: string;
+  frameworkId: string;
+  targetType: ComplianceScheduleTarget;
+  targetTenantIds?: string[];
+  targetCustomerId?: string | null;
+  targetGroupId?: string | null;
+  scheduleCron: string;
+}): Promise<ComplianceSchedule> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+  const { data, error } = await supabase
+    .from('scheduled_compliance_configs')
+    .insert({
+      user_id: user.id,
+      name: input.name,
+      description: input.description ?? null,
+      framework_id: input.frameworkId,
+      target_type: input.targetType,
+      target_tenant_ids: input.targetTenantIds ?? [],
+      target_customer_id: input.targetCustomerId ?? null,
+      target_group_id: input.targetGroupId ?? null,
+      schedule_cron: input.scheduleCron,
+    })
+    .select()
+    .single();
+  if (error) throw new Error(`Failed to create schedule: ${error.message}`);
+  return mapSchedule(data);
+}
+
+export async function setComplianceScheduleActive(id: string, isActive: boolean): Promise<void> {
+  const { error } = await supabase
+    .from('scheduled_compliance_configs')
+    .update({ is_active: isActive })
+    .eq('id', id);
+  if (error) throw new Error(`Failed to update schedule: ${error.message}`);
+}
+
+export async function deleteComplianceSchedule(id: string): Promise<void> {
+  const { error } = await supabase.from('scheduled_compliance_configs').delete().eq('id', id);
+  if (error) throw new Error(`Failed to delete schedule: ${error.message}`);
+}
+
+/** Manually trigger a schedule (useful for "Run now" buttons). */
+export async function triggerComplianceSchedule(configId: string): Promise<{
+  processed: number;
+  summary: Record<string, unknown>;
+}> {
+  const { data, error } = await supabase.functions.invoke('run-scheduled-compliance', {
+    body: { configId },
+  });
+  if (error) throw new Error(error.message);
+  return data as { processed: number; summary: Record<string, unknown> };
+}
