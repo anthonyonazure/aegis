@@ -8,6 +8,7 @@ import { Separator } from '@/components/ui/separator';
 import { Loader2, ShieldCheck, ShieldAlert, ChevronDown, ChevronRight, FileCheck, Play, Calendar, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { TenantMultiSelector, SelectedTenantInfo } from '@/components/copilot/TenantMultiSelector';
 import {
   ComplianceFramework,
@@ -26,6 +27,13 @@ const STATUS_BADGE: Record<string, string> = {
   fail: 'bg-red-500/20 text-red-400 border-red-500/30 border',
   na: 'bg-muted text-muted-foreground',
   error: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30 border',
+};
+
+const STATUS_TOOLTIP: Record<string, string> = {
+  pass: 'Evaluator ran and the tenant satisfies this control.',
+  fail: 'Evaluator ran and the tenant does NOT satisfy this control. Expand to see the captured snapshot.',
+  na: "This control's evaluator hasn't been implemented, or the required Graph permission isn't granted. Treat as manual review.",
+  error: 'Evaluator threw an exception (often a Graph timeout or unexpected response shape). Check the function logs.',
 };
 
 const SEVERITY_PILL: Record<string, string> = {
@@ -404,9 +412,18 @@ export function ComplianceEvidenceView() {
                           )}
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
-                          <Badge className={STATUS_BADGE[item.status] ?? STATUS_BADGE.na}>
-                            {item.status.toUpperCase()}
-                          </Badge>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span>
+                                <Badge className={STATUS_BADGE[item.status] ?? STATUS_BADGE.na}>
+                                  {item.status.toUpperCase()}
+                                </Badge>
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-xs">
+                              {STATUS_TOOLTIP[item.status] ?? STATUS_TOOLTIP.na}
+                            </TooltipContent>
+                          </Tooltip>
                           {expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                         </div>
                       </button>
