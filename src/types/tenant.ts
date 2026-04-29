@@ -23,6 +23,23 @@ export interface Customer {
   customSubdomain?: string;  // Reserved for customer portal (Phase 2 #3)
 }
 
+export type CustomerUserRole = 'customer_admin' | 'customer_viewer';
+
+export interface CustomerUser {
+  id: string;
+  authUserId: string;
+  customerId: string;
+  role: CustomerUserRole;
+  isActive: boolean;
+  invitedBy: string | null;
+  invitedAt: Date;
+  lastLoginAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+  // Optional join data (filled when listing for an MSP)
+  email?: string;
+}
+
 export interface TenantGroup {
   id: string;
   customerId: string;

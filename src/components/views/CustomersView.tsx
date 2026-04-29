@@ -3,9 +3,10 @@ import { CustomerManager } from '@/components/CustomerManager';
 import { TenantGroupManager } from '@/components/TenantGroupManager';
 import { TenantConfigPanel } from '@/components/TenantConfigPanel';
 import { BrandingSettings } from '@/components/customers/BrandingSettings';
+import { PortalUsersManager } from '@/components/customers/PortalUsersManager';
 import { Customer } from '@/types/tenant';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { FolderTree, Settings, ArrowLeft, Palette } from 'lucide-react';
+import { FolderTree, Settings, ArrowLeft, Palette, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 type ViewMode = 'list' | 'customer-detail';
@@ -65,6 +66,10 @@ export const CustomersView = () => {
               <Palette className="w-4 h-4" />
               Branding
             </TabsTrigger>
+            <TabsTrigger value="portal-users" className="gap-2">
+              <Users className="w-4 h-4" />
+              Portal users
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="tenants" className="mt-6">
@@ -77,6 +82,10 @@ export const CustomersView = () => {
 
           <TabsContent value="branding" className="mt-6">
             <BrandingSettings customer={selectedCustomer} />
+          </TabsContent>
+
+          <TabsContent value="portal-users" className="mt-6">
+            <PortalUsersManager customer={selectedCustomer} />
           </TabsContent>
         </Tabs>
       </div>

@@ -12,6 +12,8 @@ import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import TermsOfService from "./pages/TermsOfService";
+import PortalLogin from "./pages/portal/PortalLogin";
+import PortalApp from "./pages/portal/PortalApp";
 
 const queryClient = new QueryClient();
 
@@ -30,6 +32,9 @@ const App = () => (
                 <Route path="/privacy" element={<PrivacyPolicy />} />
                 <Route path="/terms" element={<TermsOfService />} />
                 <Route path="/" element={<Index />} />
+                {/* Customer-facing read-only portal (Phase 2 #3a) */}
+                <Route path="/portal/:slug/login" element={<PortalLogin />} />
+                <Route path="/portal/:slug/*" element={<PortalApp />} />
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />
               </Routes>

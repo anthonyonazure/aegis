@@ -70,5 +70,25 @@ File: `supabase/migrations/20260429110000_extend_psa_providers_and_anomaly_routi
 - [ ] Run AI Anomaly Detection on a tenant — confirm a ticket lands in the configured PSA when critical/high findings come back
 - [ ] (Optional) Configure a webhook with event `anomaly.detected` and confirm it fires
 
+### 9. Apply the customer-portal foundation migration (Phase 2 #3a)
+File: `supabase/migrations/20260429120000_customer_portal_foundation.sql`
+
+- [ ] Apply the migration
+- [ ] Verify table `public.customer_users` exists with the expected columns
+- [ ] Verify function `public.current_portal_customer_id()` returns NULL for an MSP user (run from a logged-in MSP session)
+- [ ] Verify the new RLS policies are present on `customers`, `tenant_connections`, `tenant_secure_scores`, `secure_score_history`, `scheduled_drift_runs`
+
+### 10. Set up a portal user (manual flow for #3a — invite-flow lands in #3b)
+For now, granting portal access is two steps in Supabase:
+
+- [ ] In Supabase Dashboard → Authentication → Users → **Add user** with the customer contact's email + a temp password (or invite via email)
+- [ ] Copy the new `auth.users.id`
+- [ ] In Aegis, open the customer's detail page → **Branding** tab → set `custom_subdomain` (e.g. `acme`) and Save
+- [ ] Switch to the **Portal users** tab → paste the auth user id → Grant access (default role: viewer)
+- [ ] Open `/portal/<slug>/login` (incognito window helps), sign in with the new user, confirm the dashboard loads with that customer's data only
+
+### 11. Edge function deploys (Phase 2 #3a — none new)
+No new edge functions in #3a; foundation is RLS + frontend only. The portal pulls existing tables through PostgREST, gated by the new policies.
+
 ## Done
 _Move items here as you complete them so we have a running history._
