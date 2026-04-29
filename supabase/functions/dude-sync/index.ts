@@ -68,21 +68,25 @@ async function graphDelete(token: string, url: string): Promise<void> {
   await res.text(); // consume body
 }
 
-async function getAccessToken(supabase: any, tenantConnectionId: string, userId: string): Promise<string> {
+// Stored tenant credentials, decrypted on demand.
+async function getStoredCredentials(supabase: any, tenantConnectionId: string, userId: string) {
   const { data, error } = await supabase.rpc('get_decrypted_credential', {
     p_tenant_connection_id: tenantConnectionId,
     p_user_id: userId,
   });
   if (error || !data?.[0]) throw new Error('Failed to retrieve credentials');
+  return data[0] as { client_id: string; client_secret: string; tenant_id: string };
+}
 
-  const { client_id, client_secret, tenant_id } = data[0];
-  const tokenRes = await fetch(`https://login.microsoftonline.com/${tenant_id}/oauth2/v2.0/token`, {
+async function getAccessToken(supabase: any, tenantConnectionId: string, userId: string): Promise<string> {
+  const cred = await getStoredCredentials(supabase, tenantConnectionId, userId);
+  const tokenRes = await fetch(`https://login.microsoftonline.com/${cred.tenant_id}/oauth2/v2.0/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       grant_type: 'client_credentials',
-      client_id,
-      client_secret,
+      client_id: cred.client_id,
+      client_secret: cred.client_secret,
       scope: 'https://graph.microsoft.com/.default',
     }),
   });
@@ -98,12 +102,115 @@ async function listGroups(token: string, prefix: string) {
   return await graphGet(token, url);
 }
 
+// ---------- Defender for Endpoint tagging (issue #6 PR2) ----------
+//
+// MDE has its own API surface (api.securitycenter.microsoft.com), separate
+// from Microsoft Graph. Tagging a device requires:
+//   1. A token for the Defender API scope.
+//   2. POST /api/machines/{machineId}/tags with { Value, Action: "Add" }.
+//
+// We resolve the MDE machineId from the Entra device's azureADDeviceId via
+// /api/machines/findbyaaddeviceid?id=<aad-device-id>. If the device isn't
+// onboarded to MDE the lookup 404s and we skip it cleanly.
+//
+// Required app permissions on the service principal:
+//   - Machine.ReadWrite.All on WindowsDefenderATP API
+//
+// If the customer hasn't granted these yet, the tag call returns 403 and
+// the sync continues — devices land in the device group, just without the
+// MDE tag. Operators see this in the sync log details.reason.
+
+async function getDefenderToken(clientId: string, clientSecret: string, tenantId: string): Promise<string | null> {
+  try {
+    const params = new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      scope: 'https://api.securitycenter.microsoft.com/.default',
+      grant_type: 'client_credentials',
+    });
+    const res = await fetch(`https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString(),
+    });
+    if (!res.ok) {
+      console.warn(`Defender token acquisition failed (${res.status}). Skipping MDE tagging.`);
+      return null;
+    }
+    const data = await res.json();
+    return data.access_token as string;
+  } catch (e) {
+    console.warn('Defender token acquisition threw:', e);
+    return null;
+  }
+}
+
+async function findMdeMachineByAadDeviceId(defenderToken: string, azureADDeviceId: string): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `https://api.securitycenter.microsoft.com/api/machines/findbyaaddeviceid?id=${encodeURIComponent(azureADDeviceId)}`,
+      { headers: { Authorization: `Bearer ${defenderToken}`, Accept: 'application/json' } }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    return (data?.id as string) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function setMdeTag(defenderToken: string, machineId: string, tag: string): Promise<boolean> {
+  try {
+    const res = await fetch(`https://api.securitycenter.microsoft.com/api/machines/${machineId}/tags`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${defenderToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ Value: tag, Action: 'Add' }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function applyDefenderTags(
+  defenderToken: string | null,
+  tag: string,
+  azureADDeviceIds: string[]
+): Promise<{ tagged: number; skipped: number; reason?: string }> {
+  if (!defenderToken) {
+    return {
+      tagged: 0,
+      skipped: azureADDeviceIds.length,
+      reason: 'No Defender API token (Machine.ReadWrite.All not granted or MDE not licensed).',
+    };
+  }
+  let tagged = 0;
+  let skipped = 0;
+  for (const aadId of azureADDeviceIds) {
+    const machineId = await findMdeMachineByAadDeviceId(defenderToken, aadId);
+    if (!machineId) {
+      skipped++;
+      continue;
+    }
+    const ok = await setMdeTag(defenderToken, machineId, tag);
+    if (ok) tagged++;
+    else skipped++;
+  }
+  return { tagged, skipped };
+}
+
 // Resolve user group → devices
 async function resolveDevices(token: string, userGroupId: string, osFilter: string) {
   // Get transitive members (users) of the user group
   const members = await graphGet(token, `/groups/${userGroupId}/transitiveMembers?$select=id&$filter=@odata.type eq '#microsoft.graph.user'&$top=999`);
 
-  const deviceMap = new Map<string, { id: string; displayName: string; operatingSystem: string; userPrincipalName: string }>();
+  const deviceMap = new Map<string, {
+    id: string;                 // Entra object id (used for group membership writes)
+    azureADDeviceId: string;    // AAD device id (used for MDE lookups)
+    displayName: string;
+    operatingSystem: string;
+    userPrincipalName: string;
+  }>();
 
   // For each user, get their managed devices
   for (const user of members) {
@@ -126,6 +233,7 @@ async function resolveDevices(token: string, userGroupId: string, osFilter: stri
             if (entraDevices.length > 0) {
               deviceMap.set(device.azureADDeviceId, {
                 id: entraDevices[0].id, // Entra object ID
+                azureADDeviceId: device.azureADDeviceId,
                 displayName: device.deviceName || entraDevices[0].displayName,
                 operatingSystem: device.operatingSystem || entraDevices[0].operatingSystem,
                 userPrincipalName: device.userPrincipalName,
@@ -206,8 +314,16 @@ function checkPrefixAllowlist(
   return `Prefix allowlist violation: ${offenders.join(' and ')} must start with one of [${allowedPrefixes.join(', ')}].`;
 }
 
-// Execute sync
-async function executeSync(token: string, mapping: any, supabase: any, userId: string) {
+// Execute sync. `cred` is optional — when present, lets the function mint a
+// Defender API token for MDE tag application. Callers from `execute-sync`
+// and `bulk-sync` pass it; callers that only want a preview don't need to.
+async function executeSync(
+  token: string,
+  mapping: any,
+  supabase: any,
+  userId: string,
+  cred?: { client_id: string; client_secret: string; tenant_id: string }
+) {
   const startTime = Date.now();
   let status = 'success';
   let devicesAdded = 0;
@@ -279,6 +395,30 @@ async function executeSync(token: string, mapping: any, supabase: any, userId: s
         } catch (e) {
           details[`remove_error_${device.id}`] = String(e);
           devicesSkipped++;
+        }
+      }
+
+      // Apply Defender for Endpoint tag (issue #6 PR2). Tag every device that
+      // SHOULD be in the group, not just additions — keeps the tag in sync if
+      // a device was added by hand earlier or the tag was cleared in MDE.
+      // Skips quietly when the customer hasn't licensed MDE or hasn't granted
+      // Machine.ReadWrite.All on the WindowsDefenderATP API.
+      if (mapping.defender_tag && cred) {
+        try {
+          const aadIds = preview.resolvedDevices
+            .map((d: { azureADDeviceId?: string }) => d.azureADDeviceId)
+            .filter((id: string | undefined): id is string => Boolean(id));
+          const defenderToken = await getDefenderToken(cred.client_id, cred.client_secret, cred.tenant_id);
+          const tagResult = await applyDefenderTags(defenderToken, mapping.defender_tag, aadIds);
+          details.defenderTag = {
+            tag: mapping.defender_tag,
+            attempted: aadIds.length,
+            tagged: tagResult.tagged,
+            skipped: tagResult.skipped,
+            ...(tagResult.reason ? { reason: tagResult.reason } : {}),
+          };
+        } catch (e) {
+          details.defenderTag = { error: String(e) };
         }
       }
     }
@@ -360,10 +500,25 @@ serve(async (req) => {
       });
     }
 
-    // Get access token for Graph API
+    // Get access token for Graph API + cache the underlying credentials so
+    // the sync handler can mint a separate token for the Defender API when
+    // a mapping has defender_tag set.
     let token: string | null = null;
+    let cred: { client_id: string; client_secret: string; tenant_id: string } | undefined;
     if (tenantConnectionId && action !== 'list-groups-with-token') {
-      token = await getAccessToken(supabase, tenantConnectionId, user.id);
+      cred = await getStoredCredentials(supabase, tenantConnectionId, user.id);
+      const tokenRes = await fetch(`https://login.microsoftonline.com/${cred.tenant_id}/oauth2/v2.0/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'client_credentials',
+          client_id: cred.client_id,
+          client_secret: cred.client_secret,
+          scope: 'https://graph.microsoft.com/.default',
+        }),
+      });
+      if (!tokenRes.ok) throw new Error('Failed to get access token');
+      token = ((await tokenRes.json()) as { access_token: string }).access_token;
     }
 
     let result: any;
@@ -411,7 +566,7 @@ serve(async (req) => {
           .single();
         if (mapErr || !mapping) throw new Error('Mapping not found');
 
-        result = await executeSync(token, mapping, supabase, user.id);
+        result = await executeSync(token, mapping, supabase, user.id, cred);
         break;
       }
 
