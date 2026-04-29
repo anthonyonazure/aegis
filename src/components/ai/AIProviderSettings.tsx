@@ -51,7 +51,7 @@ export function AIProviderSettings() {
   const [showKey, setShowKey] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [defaultProvider, setDefaultProvider] = useState('gateway');
-  const [defaultModel, setDefaultModel] = useState('google/gemini-3-flash-preview');
+  const [defaultModel, setDefaultModel] = useState('gpt-4o-mini');
 
   useEffect(() => {
     loadProviderSettings();
@@ -177,7 +177,7 @@ export function AIProviderSettings() {
                   <SelectItem value="gateway">
                     <div className="flex items-center gap-2">
                       <Sparkles className="w-4 h-4 text-primary" />
-                      Built-in AI (Gemini & GPT)
+                      Built-in AI
                     </div>
                   </SelectItem>
                   {configuredProviders.map(p => (
@@ -211,7 +211,7 @@ export function AIProviderSettings() {
               <Sparkles className="w-4 h-4 text-primary mt-0.5" />
               <div className="text-sm">
                 <p className="font-medium text-foreground">Built-in AI is ready to use</p>
-                <p className="text-muted-foreground">No configuration needed. Access to Gemini & GPT models included.</p>
+                <p className="text-muted-foreground">Uses the platform-configured AI gateway. Or supply your own API key below to use a specific provider.</p>
               </div>
             </div>
           )}

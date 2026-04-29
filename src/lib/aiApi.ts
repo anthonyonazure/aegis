@@ -40,7 +40,7 @@ export interface AIAnalysisResult {
 
 // Available AI providers
 export const AI_PROVIDERS = [
-  { id: 'gateway', name: 'Built-in AI', description: 'Built-in AI (Gemini & GPT)', requiresKey: false },
+  { id: 'gateway', name: 'Built-in AI', description: 'Platform-configured AI gateway (OpenAI-compatible)', requiresKey: false },
   { id: 'openai', name: 'OpenAI', description: 'GPT-4o, GPT-4, GPT-3.5', requiresKey: true },
   { id: 'google', name: 'Google AI', description: 'Gemini Pro, Gemini Flash', requiresKey: true },
   { id: 'anthropic', name: 'Anthropic', description: 'Claude 3.5, Claude 3', requiresKey: true },
@@ -53,12 +53,9 @@ export const AI_PROVIDERS = [
 // Available models per provider
 export const PROVIDER_MODELS: Record<string, { id: string; name: string }[]> = {
   gateway: [
-    { id: 'google/gemini-3-flash-preview', name: 'Gemini 3 Flash (Fast)' },
-    { id: 'google/gemini-2.5-pro', name: 'Gemini 2.5 Pro (Best)' },
-    { id: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
-    { id: 'openai/gpt-5', name: 'GPT-5' },
-    { id: 'openai/gpt-5-mini', name: 'GPT-5 Mini' },
-    { id: 'openai/gpt-5.2', name: 'GPT-5.2 (Latest)' },
+    { id: 'gpt-4o-mini', name: 'GPT-4o Mini (Fast, default)' },
+    { id: 'gpt-4o', name: 'GPT-4o' },
+    { id: 'gpt-4-turbo', name: 'GPT-4 Turbo' },
   ],
   openai: [
     { id: 'gpt-4o', name: 'GPT-4o' },

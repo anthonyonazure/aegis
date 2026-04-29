@@ -153,7 +153,7 @@ Requirements: ${requirements || 'Minimize downtime, maintain security posture, p
       method: 'POST',
       headers: { 'Authorization': `Bearer ${AI_GATEWAY_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'google/gemini-3-flash-preview',
+        model: 'gpt-4o-mini',
         messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
         temperature: 0.4,
       }),

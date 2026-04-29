@@ -116,7 +116,7 @@ Provide JSON with: summary, portfolioHealth, securityComparison, commonIssues, c
     const response = await fetch(`${AI_GATEWAY_URL}/chat/completions`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${AI_GATEWAY_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'google/gemini-2.5-flash', messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], temperature: 0.7, max_tokens: 4000 }),
+      body: JSON.stringify({ model: 'gpt-4o-mini', messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], temperature: 0.7, max_tokens: 4000 }),
     });
 
     if (!response.ok) { const t = await response.text(); throw new Error(`AI error: ${response.status} ${t}`); }

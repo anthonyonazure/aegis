@@ -116,7 +116,7 @@ Create a comprehensive report suitable for ${audience || 'executive'} stakeholde
     const response = await fetch(`${AI_GATEWAY_URL}/chat/completions`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${AI_GATEWAY_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'google/gemini-3-flash-preview', messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], temperature: 0.4 }),
+      body: JSON.stringify({ model: 'gpt-4o-mini', messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], temperature: 0.4 }),
     });
 
     if (!response.ok) {

@@ -62,7 +62,7 @@ export function AIChat({
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [provider, setProvider] = useState('gateway');
-  const [model, setModel] = useState('google/gemini-3-flash-preview');
+  const [model, setModel] = useState('gpt-4o-mini');
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 

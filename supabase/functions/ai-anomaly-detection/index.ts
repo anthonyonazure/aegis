@@ -324,7 +324,7 @@ ${missingPermissions.length > 0 ? `\nNote: Some data sources were unavailable du
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: "gpt-4o-mini",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt }

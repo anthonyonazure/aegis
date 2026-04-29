@@ -179,7 +179,7 @@ serve(async (req) => {
     let apiKey = Deno.env.get('AI_GATEWAY_API_KEY');
     const AI_GATEWAY_URL = Deno.env.get('AI_GATEWAY_URL') ?? '';
     let endpoint = `${AI_GATEWAY_URL}/chat/completions`;
-    let selectedModel = model || 'google/gemini-3-flash-preview';
+    let selectedModel = model || 'gpt-4o-mini';
 
     if (provider !== 'gateway') {
       const { data: keyData } = await supabase.rpc('get_ai_api_key', { p_provider: provider });

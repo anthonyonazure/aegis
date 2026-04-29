@@ -156,7 +156,7 @@ serve(async (req) => {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${AI_GATEWAY_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'google/gemini-3-flash-preview',
+        model: 'gpt-4o-mini',
         messages: [
           { role: 'system', content: INCIDENT_RESPONDER_PROMPT },
           { role: 'user', content: `Analyze and provide response guidance for this security incident:\n\n${JSON.stringify(contextData, null, 2)}` }

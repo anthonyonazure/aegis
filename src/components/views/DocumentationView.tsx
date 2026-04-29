@@ -1087,22 +1087,17 @@ The platform supports multiple AI providers:
 
 ### Default Provider (Built-in AI)
 
-- No configuration required
-- Automatic model selection
-- Supports both Gemini and GPT models
+- Uses the platform-configured AI gateway (any OpenAI-compatible endpoint)
+- No per-user configuration needed
 - Best for most use cases
 
-### Available Models
+### Available Models (built-in gateway)
 
-**Google Gemini:**
-- \`gemini-3-flash-preview\` - Fast, balanced (default)
-- \`gemini-2.5-pro\` - Best for complex reasoning
-- \`gemini-2.5-flash\` - Cost-effective option
+- \`gpt-4o-mini\` - Fast, balanced (default)
+- \`gpt-4o\` - Best for complex reasoning
+- \`gpt-4-turbo\` - Long context
 
-**OpenAI:**
-- \`gpt-5\` - Most capable
-- \`gpt-5-mini\` - Balanced performance
-- \`gpt-5-nano\` - Fastest, most economical
+You can also bring your own key for OpenAI, Anthropic, Google, Azure OpenAI, Perplexity, Groq, or Mistral via Settings → AI Providers.
 
 ## Tips for Best Results
 

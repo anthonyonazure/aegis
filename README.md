@@ -103,11 +103,11 @@ You'll need:
 
 ### Supabase edge function secrets
 
-The built-in AI gateway is wired through env vars (no vendor strings in the source):
+The built-in AI gateway is wired through env vars (no vendor lock in the source). Point it at any OpenAI-compatible chat-completions endpoint:
 
-- `AI_GATEWAY_API_KEY` — key for the built-in AI gateway
-- `AI_GATEWAY_URL` — base URL for the built-in AI gateway (e.g. `https://your-gateway/v1`)
-- Per-provider keys (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.) are optional fallbacks; users can also supply their own via the in-app provider settings.
+- `AI_GATEWAY_API_KEY` — API key for the gateway
+- `AI_GATEWAY_URL` — base URL for an OpenAI-compatible endpoint (e.g. `https://api.openai.com/v1`, an Azure OpenAI deployment, OpenRouter, or your own proxy)
+- Per-provider keys (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.) are optional fallbacks. Users can also supply their own via the in-app provider settings (BYOK).
 
 ## Project Structure
 

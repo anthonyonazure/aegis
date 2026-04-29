@@ -34,7 +34,7 @@ function checkRateLimit(userId: string): { allowed: boolean; remaining: number }
 const PROVIDERS: Record<string, { endpoint: string; defaultModel: string }> = {
   gateway: {
     endpoint: `${AI_GATEWAY_URL}/chat/completions`,
-    defaultModel: 'google/gemini-3-flash-preview',
+    defaultModel: 'gpt-4o-mini',
   },
   openai: {
     endpoint: 'https://api.openai.com/v1/chat/completions',

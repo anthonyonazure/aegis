@@ -128,7 +128,7 @@ serve(async (req) => {
     const response = await fetch(`${AI_GATEWAY_URL}/chat/completions`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${AI_GATEWAY_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'google/gemini-3-flash-preview', messages: [{ role: 'system', content: BENCHMARK_PROMPT }, { role: 'user', content: `Analyze and benchmark this REAL tenant security data:\n\n${JSON.stringify(contextData, null, 2)}` }], temperature: 0.3, max_tokens: 8000 }),
+      body: JSON.stringify({ model: 'gpt-4o-mini', messages: [{ role: 'system', content: BENCHMARK_PROMPT }, { role: 'user', content: `Analyze and benchmark this REAL tenant security data:\n\n${JSON.stringify(contextData, null, 2)}` }], temperature: 0.3, max_tokens: 8000 }),
     });
 
     if (!response.ok) {
