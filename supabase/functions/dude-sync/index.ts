@@ -172,6 +172,105 @@ async function setMdeTag(defenderToken: string, machineId: string, tag: string):
   }
 }
 
+// ---------- Nested device groups + AU user sync (issue #6 PR4) ----------
+//
+// Nested device groups: ensure each id in mapping.nested_device_group_ids is
+// a member of mapping.device_group_id. We do this after the per-device sync
+// so newly-enrolled devices land via Entra's transitive expansion of the
+// nested group.
+async function ensureNestedGroups(
+  token: string,
+  parentGroupId: string,
+  nestedGroupIds: string[]
+): Promise<{ added: number; alreadyMember: number; failed: number }> {
+  let added = 0;
+  let alreadyMember = 0;
+  let failed = 0;
+  for (const childId of nestedGroupIds) {
+    if (!childId || childId === parentGroupId) continue;
+    try {
+      // graphPost already swallows "already exist" 400s as a no-op (line 52).
+      // We can't distinguish added-vs-already-member from the response alone,
+      // so use a quick membership check first.
+      const isMember = await checkIsMember(token, parentGroupId, childId);
+      if (isMember) {
+        alreadyMember++;
+        continue;
+      }
+      await graphPost(token, `/groups/${parentGroupId}/members/$ref`, {
+        '@odata.id': `https://graph.microsoft.com/v1.0/directoryObjects/${childId}`,
+      });
+      added++;
+    } catch (e) {
+      console.warn(`Nested group attach failed (parent=${parentGroupId}, child=${childId}):`, e);
+      failed++;
+    }
+  }
+  return { added, alreadyMember, failed };
+}
+
+async function checkIsMember(token: string, parentId: string, candidateId: string): Promise<boolean> {
+  try {
+    // /groups/{id}/members/{candidateId}/$ref returns 404 if not a member
+    const res = await fetch(`https://graph.microsoft.com/v1.0/groups/${parentId}/members/${candidateId}/$ref`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+// AU user sync: when admin_unit_id is set and sync_users_to_admin_unit is
+// true, add every resolved user from the user-group transitive membership
+// into the Administrative Unit. AU member adds use POST
+// /administrativeUnits/{id}/members/$ref which 400s on duplicates — graphPost
+// already handles that.
+async function addUsersToAdminUnit(
+  token: string,
+  adminUnitId: string,
+  userGroupId: string
+): Promise<{ added: number; alreadyMember: number; failed: number }> {
+  let added = 0;
+  let alreadyMember = 0;
+  let failed = 0;
+  const users = await graphGet(
+    token,
+    `/groups/${userGroupId}/transitiveMembers?$select=id&$filter=@odata.type eq '#microsoft.graph.user'&$top=999`
+  );
+  for (const u of users) {
+    try {
+      // Probe for existing membership to keep the counters honest.
+      const probe = await fetch(
+        `https://graph.microsoft.com/beta/administrativeUnits/${adminUnitId}/members/${u.id}/$ref`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (probe.ok) {
+        alreadyMember++;
+        continue;
+      }
+      const res = await fetch(`https://graph.microsoft.com/beta/administrativeUnits/${adminUnitId}/members/$ref`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          '@odata.id': `https://graph.microsoft.com/beta/users/${u.id}`,
+        }),
+      });
+      if (res.ok || res.status === 400) {
+        // 400 == "already a member" in the AU API
+        if (res.status === 400) alreadyMember++;
+        else added++;
+      } else {
+        failed++;
+      }
+    } catch (e) {
+      console.warn(`AU user add failed (au=${adminUnitId}, user=${u.id}):`, e);
+      failed++;
+    }
+  }
+  return { added, alreadyMember, failed };
+}
+
 async function applyDefenderTags(
   defenderToken: string | null,
   tag: string,
@@ -395,6 +494,33 @@ async function executeSync(
         } catch (e) {
           details[`remove_error_${device.id}`] = String(e);
           devicesSkipped++;
+        }
+      }
+
+      // Nested device groups (issue #6 PR4). Attach each nested device-group
+      // id as a member of the target group so newly-enrolled devices get
+      // policies via Entra's transitive expansion before the next sync runs.
+      const nestedIds: string[] = Array.isArray(mapping.nested_device_group_ids)
+        ? mapping.nested_device_group_ids
+        : [];
+      if (nestedIds.length > 0) {
+        try {
+          const nestedResult = await ensureNestedGroups(token, mapping.device_group_id, nestedIds);
+          details.nestedDeviceGroups = nestedResult;
+        } catch (e) {
+          details.nestedDeviceGroups = { error: String(e) };
+        }
+      }
+
+      // AU user sync (issue #6 PR4). When the mapping targets an Administrative
+      // Unit AND the operator opted into user sync, add resolved users from
+      // the user-group transitive membership into the AU.
+      if (mapping.admin_unit_id && mapping.sync_users_to_admin_unit) {
+        try {
+          const auResult = await addUsersToAdminUnit(token, mapping.admin_unit_id, mapping.user_group_id);
+          details.adminUnitUserSync = { adminUnitId: mapping.admin_unit_id, ...auResult };
+        } catch (e) {
+          details.adminUnitUserSync = { error: String(e) };
         }
       }
 

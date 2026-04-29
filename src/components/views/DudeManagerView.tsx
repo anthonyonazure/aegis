@@ -43,6 +43,8 @@ interface DudeMapping {
   admin_unit_id: string | null;
   admin_unit_name: string | null;
   defender_tag: string | null;
+  nested_device_group_ids: string[];
+  sync_users_to_admin_unit: boolean;
   max_removal_percent: number;
   last_sync_at: string | null;
   last_sync_status: string | null;
@@ -118,6 +120,8 @@ export const DudeManagerView = () => {
   const [formAdminUnitId, setFormAdminUnitId] = useState('');
   const [formAdminUnitName, setFormAdminUnitName] = useState('');
   const [formDefenderTag, setFormDefenderTag] = useState('');
+  const [formNestedGroups, setFormNestedGroups] = useState(''); // textarea, one id per line
+  const [formSyncUsersToAU, setFormSyncUsersToAU] = useState(false);
   const [formMaxRemoval, setFormMaxRemoval] = useState(25);
   const [selectedGroupField, setSelectedGroupField] = useState<'user' | 'device'>('user');
 
@@ -167,6 +171,7 @@ export const DudeManagerView = () => {
     setFormDeviceGroupId(''); setFormDeviceGroupName('');
     setFormOsFilter('All'); setFormAdminUnitId(''); setFormAdminUnitName('');
     setFormDefenderTag(''); setFormMaxRemoval(25);
+    setFormNestedGroups(''); setFormSyncUsersToAU(false);
     setGroupSearch(''); setGroupOptions([]);
   };
 
@@ -178,6 +183,8 @@ export const DudeManagerView = () => {
     setFormOsFilter(m.os_filter); setFormAdminUnitId(m.admin_unit_id || '');
     setFormAdminUnitName(m.admin_unit_name || ''); setFormDefenderTag(m.defender_tag || '');
     setFormMaxRemoval(m.max_removal_percent);
+    setFormNestedGroups((m.nested_device_group_ids ?? []).join('\n'));
+    setFormSyncUsersToAU(Boolean(m.sync_users_to_admin_unit));
     setShowAddDialog(true);
   };
 
@@ -196,6 +203,11 @@ export const DudeManagerView = () => {
       admin_unit_id: formAdminUnitId || null,
       admin_unit_name: formAdminUnitName || null,
       defender_tag: formDefenderTag || null,
+      nested_device_group_ids: formNestedGroups
+        .split('\n')
+        .map((s) => s.trim())
+        .filter(Boolean),
+      sync_users_to_admin_unit: formSyncUsersToAU,
       max_removal_percent: formMaxRemoval,
       tenant_connection_id: connectionId,
     };
@@ -864,6 +876,36 @@ export const DudeManagerView = () => {
                 <Label>Admin Unit ID (optional)</Label>
                 <Input value={formAdminUnitId} onChange={e => setFormAdminUnitId(e.target.value)} placeholder="Object ID" />
               </div>
+            </div>
+
+            {formAdminUnitId && (
+              <div className="flex items-center gap-3 px-1">
+                <Switch checked={formSyncUsersToAU} onCheckedChange={setFormSyncUsersToAU} id="sync-au-users" />
+                <Label htmlFor="sync-au-users" className="cursor-pointer">
+                  Also sync resolved users into the AU
+                </Label>
+                <Tooltip>
+                  <TooltipTrigger asChild><AlertTriangle className="h-3.5 w-3.5 text-muted-foreground" /></TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    Required for proper RBAC delegation — without this, an AU-scoped admin sees devices but not their owning users.
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+            )}
+
+            <div className="space-y-1">
+              <Label>Nested Device Group Object IDs (optional)</Label>
+              <textarea
+                className="w-full rounded-md border border-border/60 bg-background px-3 py-2 text-sm font-mono"
+                rows={3}
+                value={formNestedGroups}
+                onChange={(e) => setFormNestedGroups(e.target.value)}
+                placeholder="One Entra group object id per line, e.g. for an Autopilot enrollment group"
+              />
+              <p className="text-xs text-muted-foreground">
+                These groups become members of the target device group, so newly-enrolled devices land in the policy
+                target via Entra's transitive expansion before the next sync runs.
+              </p>
             </div>
 
             <div className="space-y-2">
