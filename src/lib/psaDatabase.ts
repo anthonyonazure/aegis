@@ -1,6 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 
-export type PSAProvider = 'halopsa' | 'autotask' | 'connectwise';
+export type PSAProvider = 'halopsa' | 'autotask' | 'connectwise' | 'servicenow' | 'jira';
 
 export interface PSAIntegration {
   id: string;
@@ -14,6 +14,8 @@ export interface PSAIntegration {
   auto_create_tickets: boolean;
   ticket_on_drift: boolean;
   ticket_on_compliance_fail: boolean;
+  ticket_on_anomaly: boolean;
+  external_project_key: string | null; // Required for Jira (project key); unused for others
   created_at: string;
   updated_at: string;
 }
@@ -29,7 +31,7 @@ export interface PSATicket {
   status: string;
   priority: string;
   ticket_type: string;
-  source_type: 'drift' | 'compliance' | 'manual' | 'scheduled_drift';
+  source_type: 'drift' | 'compliance' | 'manual' | 'scheduled_drift' | 'anomaly';
   source_id: string | null;
   created_at: string;
   updated_at: string;
@@ -39,6 +41,8 @@ export const PSA_PROVIDERS = [
   { id: 'halopsa' as const, name: 'HaloPSA', logo: '🟦' },
   { id: 'autotask' as const, name: 'Autotask (Datto)', logo: '🟩' },
   { id: 'connectwise' as const, name: 'ConnectWise Manage', logo: '🟧' },
+  { id: 'servicenow' as const, name: 'ServiceNow', logo: '🟥' },
+  { id: 'jira' as const, name: 'Jira (Atlassian)', logo: '🟦' },
 ] as const;
 
 export const TICKET_PRIORITIES = ['low', 'medium', 'high', 'critical'] as const;

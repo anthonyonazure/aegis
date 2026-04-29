@@ -132,6 +132,183 @@ async function fetchAuditData(accessToken: string): Promise<{ data: AuditData; m
   return { data, missingPermissions };
 }
 
+// ----- Notification helpers (Phase 2 #2) -----
+// Fan-out anomaly findings to user-configured webhooks and PSA integrations.
+// Failures here MUST NOT block the API response — wrapped in try/catch and
+// scheduled via EdgeRuntime.waitUntil when available.
+
+interface AnomalyFinding {
+  category?: string;
+  severity?: 'critical' | 'high' | 'medium' | 'low' | 'info';
+  description?: string;
+  recommendation?: string;
+  affectedUsers?: unknown;
+}
+
+async function fireAnomalyWebhooks(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  userId: string,
+  tenantConnectionId: string,
+  tenantName: string,
+  parsedResponse: { anomalies?: AnomalyFinding[]; summary?: Record<string, unknown> }
+): Promise<void> {
+  const findings = parsedResponse.anomalies ?? [];
+  if (findings.length === 0) return;
+
+  const { data: webhooks } = await supabaseAdmin
+    .from('webhook_configs')
+    .select('id, name, url, secret, failure_count')
+    .eq('user_id', userId)
+    .eq('is_active', true)
+    .or('events.cs.{anomaly.detected},events.cs.{anomaly}');
+
+  if (!webhooks || webhooks.length === 0) return;
+
+  const payload = {
+    event: 'anomaly.detected',
+    timestamp: new Date().toISOString(),
+    data: {
+      tenant_connection_id: tenantConnectionId,
+      tenant_name: tenantName,
+      summary: parsedResponse.summary,
+      anomalies: findings,
+    },
+  };
+
+  await Promise.allSettled(
+    webhooks.map(async (w) => {
+      try {
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (w.secret) {
+          const enc = new TextEncoder();
+          const key = await crypto.subtle.importKey(
+            'raw',
+            enc.encode(w.secret),
+            { name: 'HMAC', hash: 'SHA-256' },
+            false,
+            ['sign']
+          );
+          const sig = await crypto.subtle.sign('HMAC', key, enc.encode(JSON.stringify(payload)));
+          headers['X-Webhook-Signature'] = Array.from(new Uint8Array(sig))
+            .map((b) => b.toString(16).padStart(2, '0'))
+            .join('');
+        }
+        const res = await fetch(w.url, { method: 'POST', headers, body: JSON.stringify(payload) });
+        await supabaseAdmin.from('webhook_logs').insert({
+          webhook_config_id: w.id,
+          user_id: userId,
+          event_type: 'anomaly.detected',
+          payload,
+          response_status: res.status,
+          success: res.ok,
+        });
+        await supabaseAdmin
+          .from('webhook_configs')
+          .update({
+            last_triggered_at: new Date().toISOString(),
+            failure_count: res.ok ? 0 : (w.failure_count ?? 0) + 1,
+          })
+          .eq('id', w.id);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        await supabaseAdmin.from('webhook_logs').insert({
+          webhook_config_id: w.id,
+          user_id: userId,
+          event_type: 'anomaly.detected',
+          payload,
+          success: false,
+          response_body: message,
+        });
+      }
+    })
+  );
+}
+
+async function autoCreateAnomalyTickets(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  userId: string,
+  tenantName: string,
+  parsedResponse: { anomalies?: AnomalyFinding[] }
+): Promise<void> {
+  const findings = (parsedResponse.anomalies ?? []).filter(
+    (a) => a.severity === 'critical' || a.severity === 'high'
+  );
+  if (findings.length === 0) return;
+
+  const { data: integrations } = await supabaseAdmin
+    .from('psa_integrations')
+    .select('id, name, provider')
+    .eq('user_id', userId)
+    .eq('is_active', true)
+    .eq('auto_create_tickets', true)
+    .eq('ticket_on_anomaly', true);
+
+  if (!integrations || integrations.length === 0) return;
+
+  // One ticket summarizing all critical/high anomalies for this tenant — avoids
+  // ticket-storms when the AI returns lots of related findings at once.
+  const title = `AI anomaly detection: ${findings.length} ${findings.length === 1 ? 'finding' : 'findings'} on ${tenantName}`;
+  const description = findings
+    .map((f, i) => {
+      const sev = (f.severity || 'medium').toUpperCase();
+      const cat = f.category ? ` [${f.category}]` : '';
+      return `${i + 1}. ${sev}${cat}: ${f.description || ''}\n   Recommendation: ${f.recommendation || '—'}`;
+    })
+    .join('\n\n');
+
+  // Use the highest severity for ticket priority.
+  const highestSeverity = findings.some((f) => f.severity === 'critical') ? 'critical' : 'high';
+
+  await Promise.allSettled(
+    integrations.map(async (integ) => {
+      try {
+        // Delegate to create-psa-ticket function via supabase-js. We use the
+        // service-role client so we can invoke without a user JWT.
+        const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+        const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+        const res = await fetch(`${supabaseUrl}/functions/v1/create-psa-ticket`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${serviceKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'create-ticket',
+            integrationId: integ.id,
+            title,
+            description,
+            priority: highestSeverity,
+            sourceType: 'anomaly',
+          }),
+        });
+        if (!res.ok) {
+          console.error(`PSA ticket auto-create failed for ${integ.name}: ${res.status}`);
+        }
+      } catch (err) {
+        console.error('PSA ticket auto-create exception:', err);
+      }
+    })
+  );
+}
+
+async function notifyAnomalyFindings(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  userId: string,
+  tenantConnectionId: string,
+  tenantName: string,
+  parsedResponse: { anomalies?: AnomalyFinding[]; summary?: Record<string, unknown> }
+): Promise<void> {
+  try {
+    await Promise.allSettled([
+      fireAnomalyWebhooks(supabaseAdmin, userId, tenantConnectionId, tenantName, parsedResponse),
+      autoCreateAnomalyTickets(supabaseAdmin, userId, tenantName, parsedResponse),
+    ]);
+  } catch (err) {
+    // Top-level swallow so anomaly response is never blocked by side-effects.
+    console.error('notifyAnomalyFindings failed:', err);
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -144,7 +321,10 @@ serve(async (req) => {
   }
 
   try {
-    const { tenantConnectionId }: { tenantConnectionId?: string } = await req.json();
+    const {
+      tenantConnectionId,
+      notifyOnFindings = true,
+    }: { tenantConnectionId?: string; notifyOnFindings?: boolean } = await req.json();
 
     if (!tenantConnectionId) {
       return new Response(JSON.stringify({ error: 'No tenant connection selected. Please connect and select a tenant first.' }),
@@ -381,6 +561,49 @@ ${missingPermissions.length > 0 ? `\nNote: Some data sources were unavailable du
     };
 
     console.log('Anomaly detection completed:', parsedResponse.summary);
+
+    // Fan-out webhooks + auto-tickets when findings exist (does not block response).
+    // Caller can opt out with notifyOnFindings:false (e.g. preview/sandbox runs).
+    if (notifyOnFindings && Array.isArray(parsedResponse.anomalies) && parsedResponse.anomalies.length > 0) {
+      try {
+        const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+        if (serviceKey) {
+          const supabaseAdmin = createClient(supabaseUrl, serviceKey);
+          // Resolve a friendly tenant name for ticket text. tenantConnections row is
+          // already in scope via auth checks; cheapest path is one focused select.
+          const { data: tConn } = await supabaseAdmin
+            .from('tenant_connections')
+            .select('display_name, tenant_name, tenant_id')
+            .eq('id', tenantConnectionId)
+            .maybeSingle();
+          const tenantNameStr =
+            (tConn as { display_name?: string; tenant_name?: string; tenant_id?: string } | null)?.display_name ||
+            (tConn as { display_name?: string; tenant_name?: string; tenant_id?: string } | null)?.tenant_name ||
+            (tConn as { display_name?: string; tenant_name?: string; tenant_id?: string } | null)?.tenant_id ||
+            'unknown tenant';
+
+          const notifyPromise = notifyAnomalyFindings(
+            supabaseAdmin,
+            user.id,
+            tenantConnectionId,
+            tenantNameStr,
+            parsedResponse
+          );
+
+          // EdgeRuntime.waitUntil keeps the function alive past the response so
+          // notification I/O completes. Falls back to fire-and-forget where unsupported.
+          // deno-lint-ignore no-explicit-any
+          const er = (globalThis as any).EdgeRuntime;
+          if (er && typeof er.waitUntil === 'function') {
+            er.waitUntil(notifyPromise);
+          }
+          // (else: the awaited Promise.allSettled inside notifyAnomalyFindings will
+          // generally complete before the platform tears the function down.)
+        }
+      } catch (err) {
+        console.error('Notify dispatch failed (response not affected):', err);
+      }
+    }
 
     return new Response(JSON.stringify(parsedResponse), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

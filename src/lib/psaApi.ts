@@ -14,7 +14,7 @@ export interface CreateTicketRequest {
   priority?: string;
   ticketType?: string;
   customerId?: string;
-  sourceType: 'drift' | 'compliance' | 'manual' | 'scheduled_drift';
+  sourceType: 'drift' | 'compliance' | 'manual' | 'scheduled_drift' | 'anomaly';
   sourceId?: string;
 }
 

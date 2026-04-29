@@ -14,7 +14,7 @@ interface TicketRequest {
   priority?: string;
   ticketType?: string;
   customerId?: string;
-  sourceType?: 'drift' | 'compliance' | 'manual' | 'scheduled_drift';
+  sourceType?: 'drift' | 'compliance' | 'manual' | 'scheduled_drift' | 'anomaly';
   sourceId?: string;
 }
 
@@ -26,6 +26,7 @@ interface PSAIntegration {
   api_url: string;
   default_ticket_type: string | null;
   default_priority: string | null;
+  external_project_key?: string | null; // Jira project key
 }
 
 interface PSACredentials {
@@ -301,6 +302,171 @@ async function createConnectWiseTicket(
   }
 }
 
+// ----- ServiceNow -----
+// Auth: Basic with username (api_key) + password (api_secret).
+// api_url is the instance, e.g. https://acme.service-now.com.
+async function testServiceNowConnection(
+  apiUrl: string,
+  apiKey: string,
+  apiSecret: string
+): Promise<{ success: boolean; message: string }> {
+  try {
+    const auth = btoa(`${apiKey}:${apiSecret}`);
+    // Cheap probe — table API limited to 1 record.
+    const response = await fetch(`${apiUrl}/api/now/table/incident?sysparm_limit=1`, {
+      headers: { Authorization: `Basic ${auth}`, Accept: 'application/json' },
+    });
+    if (response.ok) return { success: true, message: 'Connected successfully to ServiceNow' };
+    return { success: false, message: `Connection test failed: ${response.status}` };
+  } catch (error) {
+    console.error('ServiceNow connection test error:', error);
+    return { success: false, message: error instanceof Error ? error.message : 'Connection failed' };
+  }
+}
+
+async function createServiceNowTicket(
+  apiUrl: string,
+  apiKey: string,
+  apiSecret: string,
+  ticket: { title: string; description: string; priority: string; ticketType: string }
+): Promise<{ ticketId: string } | { error: string }> {
+  try {
+    const auth = btoa(`${apiKey}:${apiSecret}`);
+    // ServiceNow priority: 1=critical .. 4=low (no 'low' below 4 in OOB).
+    const priorityMap: Record<string, string> = {
+      critical: '1',
+      high: '2',
+      medium: '3',
+      low: '4',
+    };
+    // Map ticket types to ServiceNow tables. service_request -> sc_request,
+    // problem -> problem, incident/change/anything else -> incident.
+    const table =
+      ticket.ticketType === 'service_request' ? 'sc_request'
+        : ticket.ticketType === 'problem' ? 'problem'
+        : 'incident';
+
+    const response = await fetch(`${apiUrl}/api/now/table/${table}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${auth}`,
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        short_description: ticket.title,
+        description: ticket.description,
+        priority: priorityMap[ticket.priority] || '3',
+        urgency: priorityMap[ticket.priority] || '3',
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('ServiceNow ticket creation error:', errorText);
+      return { error: `Ticket creation failed: ${response.status}` };
+    }
+
+    const result = await response.json();
+    // Prefer human-friendly number (e.g. "INC0010023"), fallback to sys_id.
+    const ticketId = result?.result?.number || result?.result?.sys_id || 'unknown';
+    return { ticketId };
+  } catch (error) {
+    console.error('ServiceNow ticket creation error:', error);
+    return { error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
+
+// ----- Jira -----
+// Auth: Basic with email (api_key) + API token (api_secret) — the modern Jira Cloud auth model.
+// api_url is the instance host, e.g. https://acme.atlassian.net.
+// projectKey is required (stored in psa_integrations.external_project_key).
+async function testJiraConnection(
+  apiUrl: string,
+  apiKey: string,
+  apiSecret: string
+): Promise<{ success: boolean; message: string }> {
+  try {
+    const auth = btoa(`${apiKey}:${apiSecret}`);
+    const response = await fetch(`${apiUrl}/rest/api/3/myself`, {
+      headers: { Authorization: `Basic ${auth}`, Accept: 'application/json' },
+    });
+    if (response.ok) return { success: true, message: 'Connected successfully to Jira' };
+    return { success: false, message: `Connection test failed: ${response.status}` };
+  } catch (error) {
+    console.error('Jira connection test error:', error);
+    return { success: false, message: error instanceof Error ? error.message : 'Connection failed' };
+  }
+}
+
+async function createJiraTicket(
+  apiUrl: string,
+  apiKey: string,
+  apiSecret: string,
+  projectKey: string,
+  ticket: { title: string; description: string; priority: string; ticketType: string }
+): Promise<{ ticketId: string } | { error: string }> {
+  if (!projectKey) {
+    return { error: 'Jira integration is missing external_project_key. Configure a project key.' };
+  }
+  try {
+    const auth = btoa(`${apiKey}:${apiSecret}`);
+    // Jira priorities are project/scheme dependent — use names; missing names fall back silently.
+    const priorityName: Record<string, string> = {
+      critical: 'Highest',
+      high: 'High',
+      medium: 'Medium',
+      low: 'Low',
+    };
+    // Issue type mapping. Jira projects vary, but "Bug" / "Task" / "Story" / "Incident" are common.
+    const issueTypeName =
+      ticket.ticketType === 'incident' ? 'Bug'
+        : ticket.ticketType === 'service_request' ? 'Task'
+        : ticket.ticketType === 'change' ? 'Task'
+        : 'Task';
+
+    const response = await fetch(`${apiUrl}/rest/api/3/issue`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${auth}`,
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        fields: {
+          project: { key: projectKey },
+          summary: ticket.title,
+          // Jira Cloud uses Atlassian Document Format for description.
+          description: {
+            type: 'doc',
+            version: 1,
+            content: [
+              {
+                type: 'paragraph',
+                content: [{ type: 'text', text: ticket.description || '' }],
+              },
+            ],
+          },
+          issuetype: { name: issueTypeName },
+          priority: { name: priorityName[ticket.priority] || 'Medium' },
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Jira ticket creation error:', errorText);
+      return { error: `Ticket creation failed: ${response.status}` };
+    }
+
+    const result = await response.json();
+    return { ticketId: result?.key || result?.id || 'unknown' };
+  } catch (error) {
+    console.error('Jira ticket creation error:', error);
+    return { error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -377,6 +543,12 @@ serve(async (req) => {
         case 'connectwise':
           testResult = await testConnectWiseConnection(integration.api_url, creds.api_key, creds.api_secret);
           break;
+        case 'servicenow':
+          testResult = await testServiceNowConnection(integration.api_url, creds.api_key, creds.api_secret);
+          break;
+        case 'jira':
+          testResult = await testJiraConnection(integration.api_url, creds.api_key, creds.api_secret);
+          break;
         default:
           testResult = { success: false, message: `Unknown provider: ${provider}` };
       }
@@ -423,6 +595,18 @@ serve(async (req) => {
           break;
         case 'connectwise':
           ticketResult = await createConnectWiseTicket(integration.api_url, creds.api_key, creds.api_secret, ticketData);
+          break;
+        case 'servicenow':
+          ticketResult = await createServiceNowTicket(integration.api_url, creds.api_key, creds.api_secret, ticketData);
+          break;
+        case 'jira':
+          ticketResult = await createJiraTicket(
+            integration.api_url,
+            creds.api_key,
+            creds.api_secret,
+            (integration as PSAIntegration).external_project_key || '',
+            ticketData
+          );
           break;
         default:
           ticketResult = { error: `Unknown provider: ${provider}` };

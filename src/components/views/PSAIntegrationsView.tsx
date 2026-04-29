@@ -67,6 +67,8 @@ export const PSAIntegrationsView = () => {
     auto_create_tickets: false,
     ticket_on_drift: true,
     ticket_on_compliance_fail: true,
+    ticket_on_anomaly: true,
+    external_project_key: '',
   });
 
   // Credentials form state
@@ -239,6 +241,8 @@ export const PSAIntegrationsView = () => {
       auto_create_tickets: false,
       ticket_on_drift: true,
       ticket_on_compliance_fail: true,
+      ticket_on_anomaly: true,
+      external_project_key: '',
     });
   };
 
@@ -253,6 +257,8 @@ export const PSAIntegrationsView = () => {
       auto_create_tickets: integration.auto_create_tickets,
       ticket_on_drift: integration.ticket_on_drift,
       ticket_on_compliance_fail: integration.ticket_on_compliance_fail,
+      ticket_on_anomaly: integration.ticket_on_anomaly ?? true,
+      external_project_key: integration.external_project_key ?? '',
     });
     setShowAddDialog(true);
   };
@@ -603,7 +609,45 @@ export const PSAIntegrationsView = () => {
                           onCheckedChange={(checked) => setFormData({ ...formData, ticket_on_compliance_fail: checked })}
                         />
                       </div>
+
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <Label>On Anomaly Detection</Label>
+                          <p className="text-sm text-muted-foreground">Create ticket when AI anomaly detection finds critical/high findings</p>
+                        </div>
+                        <Switch
+                          checked={formData.ticket_on_anomaly}
+                          onCheckedChange={(checked) => setFormData({ ...formData, ticket_on_anomaly: checked })}
+                        />
+                      </div>
                     </>
+                  )}
+
+                  {formData.provider === 'jira' && (
+                    <div className="space-y-2">
+                      <Label htmlFor="project-key">Jira Project Key *</Label>
+                      <Input
+                        id="project-key"
+                        placeholder="OPS"
+                        value={formData.external_project_key}
+                        onChange={(e) => setFormData({ ...formData, external_project_key: e.target.value.toUpperCase() })}
+                      />
+                      <p className="text-[11px] text-muted-foreground">
+                        The key of the Jira project tickets land in (e.g. <code>OPS</code>, <code>SEC</code>).
+                      </p>
+                    </div>
+                  )}
+
+                  {formData.provider === 'jira' && (
+                    <p className="text-[11px] text-muted-foreground">
+                      Jira auth: API key field = your Atlassian email; API secret = an API token from id.atlassian.com.
+                    </p>
+                  )}
+                  {formData.provider === 'servicenow' && (
+                    <p className="text-[11px] text-muted-foreground">
+                      ServiceNow auth: API key = a service-account username with table-write privileges; API secret = its password.
+                      The API URL is your instance host, e.g. <code>https://acme.service-now.com</code>.
+                    </p>
                   )}
                 </div>
               </div>
