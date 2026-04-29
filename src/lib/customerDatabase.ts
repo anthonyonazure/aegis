@@ -64,6 +64,9 @@ export async function updateCustomer(
   if (updates.supportEmail !== undefined) updateData.support_email = updates.supportEmail;
   if (updates.supportUrl !== undefined) updateData.support_url = updates.supportUrl;
   if (updates.customSubdomain !== undefined) updateData.custom_subdomain = updates.customSubdomain;
+  if (updates.customDomain !== undefined) updateData.custom_domain = updates.customDomain;
+  // Setting custom_domain ALWAYS clears verification — re-verify required.
+  if (updates.customDomain !== undefined) updateData.custom_domain_verified_at = null;
 
   const { data, error } = await supabase
     .from('customers')
@@ -305,6 +308,10 @@ function mapCustomerFromDb(row: Record<string, unknown>): Customer {
     supportEmail: row.support_email as string | undefined,
     supportUrl: row.support_url as string | undefined,
     customSubdomain: row.custom_subdomain as string | undefined,
+    customDomain: row.custom_domain as string | undefined,
+    customDomainVerifiedAt: row.custom_domain_verified_at
+      ? new Date(row.custom_domain_verified_at as string)
+      : undefined,
   };
 }
 

@@ -8,6 +8,7 @@ import { Shield, Save, Loader2, RotateCcw, Eye } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Customer } from '@/types/tenant';
 import { getCustomer, updateCustomer } from '@/lib/customerDatabase';
+import { CustomDomainSection } from '@/components/customers/CustomDomainSection';
 
 interface BrandingSettingsProps {
   customer: Customer;
@@ -293,6 +294,10 @@ export function BrandingSettings({ customer }: BrandingSettingsProps) {
           </div>
         </CardContent>
       </Card>
+
+      <Separator />
+
+      <CustomDomainSection customer={latest} />
 
       <Separator />
 

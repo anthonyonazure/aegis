@@ -106,6 +106,7 @@ The new `invite-portal-user` edge function calls `auth.admin.inviteUserByEmail` 
 ### 14. Deploy the new edge function (Phase 2 #3b)
 - [ ] **New**: `invite-portal-user`
 - [ ] **Modified**: `ai-anomaly-detection` (now persists rows into `anomaly_runs` after AI parse)
+- [ ] **New (Phase 2 #3c)**: `verify-custom-domain` (DNS-checks a customer's custom_domain CNAME)
 
 ### 15. Smoke-test the portal end-to-end (Phase 2 #3b)
 - [ ] Open a customer's detail page → Branding tab → set `custom_subdomain` (e.g. `acme`) and Save
@@ -113,6 +114,43 @@ The new `invite-portal-user` edge function calls `auth.admin.inviteUserByEmail` 
 - [ ] Confirm the invite email arrives, click the magic link, land on `/portal/acme/login` (signed in)
 - [ ] On the portal Dashboard, verify secure score / drift summary / tenant count populate
 - [ ] Run AI Anomaly Detection (MSP side) for the customer's tenant — confirm a row in `anomaly_runs`, then refresh the portal **Anomalies** tab and see the run listed
+
+### 16. Apply the custom-domains migration (Phase 2 #3c)
+File: `supabase/migrations/20260429140000_custom_domains_and_public_branding.sql`
+
+- [ ] Apply the migration
+- [ ] Verify `customers.custom_domain` and `customers.custom_domain_verified_at` columns exist
+- [ ] Confirm the function `public.get_portal_branding(text, text)` is callable by the `anon` role (Supabase Studio → Database → Functions). The portal login page uses this to fetch branding pre-auth.
+
+### 17. Wildcard DNS + SSL for portal subdomains (Phase 2 #3c)
+The shipping configuration is `<slug>.<your-base-host>` for each customer. You need:
+
+- [ ] **Pick a base host** — e.g. `aegis.io`, `app.aegis.io`, or whatever lives at the MSP app today
+- [ ] **DNS**: add a wildcard A/AAAA/CNAME record `*.<base-host>` pointing at the same target as the base host (your Vercel/Netlify/Cloudflare deployment, etc.)
+- [ ] **SSL**: ensure your hosting provider issues a wildcard cert for `*.<base-host>` automatically. Vercel, Cloudflare-for-SaaS, and Netlify all handle this via DNS challenge once the wildcard CNAME is in place. For self-hosted setups: add a Let's Encrypt DNS-01 wildcard cert.
+- [ ] **Frontend env**: in your hosting provider, set `VITE_PORTAL_BASE_HOST=<base-host>` (no protocol, no path) and redeploy. Without this, host-based portal routing stays disabled and only the `/portal/<slug>` path-prefixed routes work.
+
+### 18. Custom domain target (Phase 2 #3c — only if you offer customer-owned domains)
+If MSPs want to give individual customers their own DNS hostname (e.g. `portal.acme.com`):
+
+- [ ] In Supabase edge function secrets, set `CUSTOM_DOMAIN_CNAME_TARGET` = the canonical hostname customers point CNAMEs at (typically your base host or its hosting target). Comma-separate multiple acceptable targets if your hosting platform uses several.
+- [ ] (Optional) Set `CUSTOM_DOMAIN_A_TARGETS` for apex-domain support — comma-separated IPv4 addresses, used as a fallback when no CNAME match is found.
+- [ ] Deploy the new edge function `verify-custom-domain`.
+- [ ] At the hosting provider, configure custom-domain handling so traffic for unmapped hostnames lands on the same app. For Vercel use the "Domains" feature with the "for SaaS" option; for Cloudflare use SaaS Custom Hostnames; for Netlify use Branch Subdomains + custom domains. Each request's `Host` header reaches the SPA, which then calls `get_portal_branding({host})` to identify the customer.
+
+### 19. Test the portal subdomain (Phase 2 #3c)
+After items 16-17 are done:
+
+- [ ] Open `https://<your-customer-slug>.<base-host>/login` in an incognito window
+- [ ] Confirm the page loads with the customer's branding pre-applied (logo + colors)
+- [ ] Sign in with a portal user — should redirect to `/` (not `/portal/<slug>`) on the same host
+- [ ] Verify the dashboard / drift / anomalies views all work
+
+### 20. Test a custom domain (Phase 2 #3c — only if item 18 is done)
+- [ ] On a customer with a portal user already set up, Branding tab → set Custom domain (e.g. `portal.acme.com`) and Save (clears any prior verification)
+- [ ] At your customer's DNS, add CNAME: `portal.acme.com` → `<your CUSTOM_DOMAIN_CNAME_TARGET>`
+- [ ] Wait a few minutes, click Verify. On success the portal becomes available at `https://portal.acme.com`
+- [ ] Open `https://portal.acme.com/login` and sign in
 
 ## Done
 _Move items here as you complete them so we have a running history._

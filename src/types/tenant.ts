@@ -20,7 +20,9 @@ export interface Customer {
   accentColor?: string;      // HSL string
   supportEmail?: string;
   supportUrl?: string;
-  customSubdomain?: string;  // Reserved for customer portal (Phase 2 #3)
+  customSubdomain?: string;  // Subdomain prefix: <slug>.aegis.io
+  customDomain?: string;     // Full hostname for white-label: portal.acme.com (Phase 2 #3c)
+  customDomainVerifiedAt?: Date;
 }
 
 export type CustomerUserRole = 'customer_admin' | 'customer_viewer';

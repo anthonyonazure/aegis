@@ -120,11 +120,14 @@ export async function removeCustomerUser(id: string): Promise<void> {
 }
 
 /**
- * Resolve a customer by its portal slug (custom_subdomain). Used by the
- * portal route to know which customer is being accessed BEFORE login.
- * Returns only the public-facing branding fields — RLS still applies.
+ * Public-safe lookup of a customer's portal branding. Phase 2 #3c moved this
+ * to a SECURITY DEFINER RPC so the portal login page can fetch branding
+ * BEFORE the user signs in (anonymous role can't read customers under RLS).
+ *
+ * Pass either a slug (matches custom_subdomain) OR a host (matches
+ * custom_domain — only when verified). At least one must be supplied.
  */
-export async function getCustomerBySlug(slug: string): Promise<{
+export interface PortalBrandingLookup {
   id: string;
   name: string;
   brandName: string | null;
@@ -133,22 +136,69 @@ export async function getCustomerBySlug(slug: string): Promise<{
   accentColor: string | null;
   supportEmail: string | null;
   supportUrl: string | null;
-} | null> {
-  const { data, error } = await supabase
-    .from('customers')
-    .select('id, name, brand_name, logo_url, primary_color, accent_color, support_email, support_url')
-    .eq('custom_subdomain', slug)
-    .maybeSingle();
+  customSubdomain: string | null;
+  customDomain: string | null;
+}
 
-  if (error || !data) return null;
+export async function getPortalBranding(input: {
+  slug?: string;
+  host?: string;
+}): Promise<PortalBrandingLookup | null> {
+  const { slug, host } = input;
+  if (!slug && !host) return null;
+  const { data, error } = await supabase.rpc('get_portal_branding', {
+    p_slug: slug ?? null,
+    p_host: host ?? null,
+  });
+  if (error || !data) {
+    if (error) console.error('get_portal_branding RPC error:', error);
+    return null;
+  }
+  // SECURITY DEFINER RETURNS TABLE: the client gets an array
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) return null;
   return {
-    id: data.id as string,
-    name: data.name as string,
-    brandName: (data.brand_name as string) ?? null,
-    logoUrl: (data.logo_url as string) ?? null,
-    primaryColor: (data.primary_color as string) ?? null,
-    accentColor: (data.accent_color as string) ?? null,
-    supportEmail: (data.support_email as string) ?? null,
-    supportUrl: (data.support_url as string) ?? null,
+    id: row.id as string,
+    name: row.name as string,
+    brandName: (row.brand_name as string) ?? null,
+    logoUrl: (row.logo_url as string) ?? null,
+    primaryColor: (row.primary_color as string) ?? null,
+    accentColor: (row.accent_color as string) ?? null,
+    supportEmail: (row.support_email as string) ?? null,
+    supportUrl: (row.support_url as string) ?? null,
+    customSubdomain: (row.custom_subdomain as string) ?? null,
+    customDomain: (row.custom_domain as string) ?? null,
   };
+}
+
+/** Back-compat wrapper retained so existing callers keep working. */
+export async function getCustomerBySlug(slug: string): Promise<PortalBrandingLookup | null> {
+  return getPortalBranding({ slug });
+}
+
+/**
+ * DNS-verify a customer's custom_domain via the verify-custom-domain edge
+ * function. Returns the function's full response so the UI can surface the
+ * "expected vs actual" diagnostic on failure.
+ */
+export interface VerifyCustomDomainResult {
+  success: boolean;
+  verified: boolean;
+  via?: 'cname' | 'a';
+  matched?: string;
+  verifiedAt?: string;
+  error?: string;
+  checked?: string;
+  expected?: { cname?: string[]; a?: string[] };
+  actual?: { cname?: string[] };
+}
+
+export async function verifyCustomDomain(customerId: string): Promise<VerifyCustomDomainResult> {
+  const { data, error } = await supabase.functions.invoke('verify-custom-domain', {
+    body: { customerId },
+  });
+  if (error) {
+    return { success: false, verified: false, error: error.message };
+  }
+  return data as VerifyCustomDomainResult;
 }

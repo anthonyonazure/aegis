@@ -1,10 +1,11 @@
 import { ReactNode } from 'react';
-import { NavLink, useNavigate, useParams } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { Shield, LogOut, LayoutDashboard, GitCompare, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
+import { usePortalSlug } from '@/contexts/PortalHostContext';
 
 /**
  * Phase 2 #3a — portal shell. Minimal nav (no MSP-side workflows), branding
@@ -33,14 +34,17 @@ const NAV: Array<{ to: string; label: string; icon: typeof LayoutDashboard }> = 
 ];
 
 export function PortalLayout({ customerName, branding, children }: PortalLayoutProps) {
-  const { slug } = useParams<{ slug: string }>();
+  const { slug, source } = usePortalSlug();
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  // Custom-domain mode → /login; URL/subdomain mode → /portal/<slug>/login
+  const loginPath = source === 'custom-domain' ? '/login' : `/portal/${slug ?? ''}/login`;
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     toast({ title: 'Signed out' });
-    navigate(`/portal/${slug}/login`, { replace: true });
+    navigate(loginPath, { replace: true });
   };
 
   const brandName = branding.brandName?.trim() || customerName;

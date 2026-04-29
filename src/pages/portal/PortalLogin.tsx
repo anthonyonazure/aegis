@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Loader2, Shield } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { getCustomerBySlug, getCurrentPortalUser } from '@/lib/customerUsersDatabase';
+import { getPortalBranding, getCurrentPortalUser } from '@/lib/customerUsersDatabase';
+import { usePortalSlug } from '@/contexts/PortalHostContext';
 
 interface PortalCustomerSummary {
   id: string;
@@ -29,7 +30,7 @@ const HSL = /^\s*\d{1,3}(\.\d+)?\s+\d{1,3}(\.\d+)?%\s+\d{1,3}(\.\d+)?%\s*$/;
  *    the current slug. Mismatches are signed out + rejected.
  */
 export default function PortalLogin() {
-  const { slug } = useParams<{ slug: string }>();
+  const { slug, source, resolvedFromHost, loading: slugLoading } = usePortalSlug();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [customer, setCustomer] = useState<PortalCustomerSummary | null>(null);
@@ -39,14 +40,34 @@ export default function PortalLogin() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
 
+  // Subdomain/URL: navigate to /portal/<slug>; custom-domain: navigate to /
+  // (the host already identifies the customer).
+  const portalRoot = source === 'custom-domain' ? '/' : `/portal/${slug ?? ''}`;
+
   // Resolve customer + apply branding pre-login
   useEffect(() => {
     let cancelled = false;
+    if (slugLoading) return;
+    // Custom-domain mode: branding already came back via PortalHostContext.
+    if (source === 'custom-domain') {
+      setCustomer(resolvedFromHost);
+      if (resolvedFromHost) {
+        if (resolvedFromHost.primaryColor && HSL.test(resolvedFromHost.primaryColor)) {
+          document.documentElement.style.setProperty('--primary', resolvedFromHost.primaryColor);
+          document.documentElement.style.setProperty('--ring', resolvedFromHost.primaryColor);
+        }
+        if (resolvedFromHost.accentColor && HSL.test(resolvedFromHost.accentColor)) {
+          document.documentElement.style.setProperty('--accent', resolvedFromHost.accentColor);
+        }
+      }
+      setLoading(false);
+      return;
+    }
     if (!slug) {
       setLoading(false);
       return;
     }
-    getCustomerBySlug(slug)
+    getPortalBranding({ slug })
       .then((c) => {
         if (cancelled) return;
         setCustomer(c);
@@ -69,26 +90,26 @@ export default function PortalLogin() {
     return () => {
       cancelled = true;
     };
-  }, [slug]);
+  }, [slug, source, resolvedFromHost, slugLoading]);
 
-  // If already signed in as a portal user for this slug, redirect into the portal.
+  // If already signed in as a portal user for this customer, redirect into the portal.
   useEffect(() => {
     let cancelled = false;
     (async () => {
       const portalUser = await getCurrentPortalUser();
       if (cancelled || !portalUser || !customer) return;
       if (portalUser.customerId === customer.id) {
-        navigate(`/portal/${slug}`, { replace: true });
+        navigate(portalRoot, { replace: true });
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [customer, slug, navigate]);
+  }, [customer, navigate, portalRoot]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!customer || !slug) return;
+    if (!customer) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -98,7 +119,7 @@ export default function PortalLogin() {
         return;
       }
 
-      // Verify portal-user membership matches the slug
+      // Verify portal-user membership matches the resolved customer
       const portalUser = await getCurrentPortalUser();
       if (!portalUser || portalUser.customerId !== customer.id) {
         await supabase.auth.signOut();
@@ -113,7 +134,7 @@ export default function PortalLogin() {
         .eq('id', portalUser.id);
 
       toast({ title: 'Signed in', description: `Welcome to ${customer.brandName || customer.name}.` });
-      navigate(`/portal/${slug}`, { replace: true });
+      navigate(portalRoot, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sign-in failed');
     } finally {

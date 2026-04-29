@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Navigate, Route, Routes, useParams } from 'react-router-dom';
+import { Navigate, Route, Routes } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { PortalLayout } from '@/components/portal/PortalLayout';
 import { PortalDashboard } from '@/components/portal/PortalDashboard';
 import { PortalDriftView } from '@/components/portal/PortalDriftView';
 import { PortalAnomaliesView } from '@/components/portal/PortalAnomaliesView';
-import { getCustomerBySlug, getCurrentPortalUser } from '@/lib/customerUsersDatabase';
+import { getPortalBranding, getCurrentPortalUser } from '@/lib/customerUsersDatabase';
+import { usePortalSlug } from '@/contexts/PortalHostContext';
 
 interface PortalCustomer {
   id: string;
@@ -37,27 +38,50 @@ function applyBranding(customer: PortalCustomer | null) {
 }
 
 /**
- * Phase 2 #3a — portal app shell.
- * Resolves the customer by URL slug, verifies the active session is a portal
- * user for that customer, applies branding, and renders the portal views.
- * Anything else (no session / wrong customer / unknown slug) routes back to
- * the portal login.
+ * Phase 2 #3a + #3c — portal app shell.
+ * Resolves the customer by URL slug OR host (subdomain / verified custom
+ * domain), verifies the active session is a portal user for that customer,
+ * applies branding, and renders the portal views. Anything else routes
+ * back to the portal login (host-aware path).
  */
 export default function PortalApp() {
-  const { slug } = useParams<{ slug: string }>();
+  const { slug, source, resolvedFromHost, loading: slugLoading } = usePortalSlug();
   const [customer, setCustomer] = useState<PortalCustomer | null>(null);
   const [authorized, setAuthorized] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  // Login URL: custom-domain mode lives at /login; everything else lives
+  // at /portal/<slug>/login.
+  const loginPath = source === 'custom-domain' ? '/login' : `/portal/${slug ?? ''}/login`;
+
   useEffect(() => {
     let cancelled = false;
-    if (!slug) {
-      setLoading(false);
-      return;
-    }
+    if (slugLoading) return;
     (async () => {
       try {
-        const c = await getCustomerBySlug(slug);
+        // Custom-domain mode: branding is already in the context — skip
+        // the extra round-trip and just authorize.
+        if (source === 'custom-domain') {
+          if (!resolvedFromHost) {
+            setCustomer(null);
+            setAuthorized(false);
+            return;
+          }
+          setCustomer(resolvedFromHost);
+          applyBranding(resolvedFromHost);
+          const portalUser = await getCurrentPortalUser();
+          if (cancelled) return;
+          setAuthorized(Boolean(portalUser && portalUser.customerId === resolvedFromHost.id));
+          return;
+        }
+
+        if (!slug) {
+          setCustomer(null);
+          setAuthorized(false);
+          return;
+        }
+
+        const c = await getPortalBranding({ slug });
         if (cancelled) return;
         setCustomer(c);
         applyBranding(c);
@@ -76,9 +100,9 @@ export default function PortalApp() {
     return () => {
       cancelled = true;
     };
-  }, [slug]);
+  }, [slug, source, resolvedFromHost, slugLoading]);
 
-  if (loading) {
+  if (loading || slugLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
@@ -86,13 +110,8 @@ export default function PortalApp() {
     );
   }
 
-  if (!customer) {
-    return <Navigate to={`/portal/${slug}/login`} replace />;
-  }
-
-  if (!authorized) {
-    return <Navigate to={`/portal/${slug}/login`} replace />;
-  }
+  if (!customer) return <Navigate to={loginPath} replace />;
+  if (!authorized) return <Navigate to={loginPath} replace />;
 
   return (
     <PortalLayout
@@ -107,7 +126,15 @@ export default function PortalApp() {
       }}
     >
       <Routes>
-        <Route index element={<PortalDashboard customerId={customer.id} customerName={customer.brandName || customer.name} />} />
+        <Route
+          index
+          element={
+            <PortalDashboard
+              customerId={customer.id}
+              customerName={customer.brandName || customer.name}
+            />
+          }
+        />
         <Route path="drift" element={<PortalDriftView customerId={customer.id} />} />
         <Route path="anomalies" element={<PortalAnomaliesView customerId={customer.id} />} />
         <Route path="*" element={<Navigate to="" replace />} />
