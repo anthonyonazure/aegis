@@ -27,7 +27,7 @@ Multi-customer · multi-tenant · open-source under MIT.
 
 ## Why Aegis
 
-Most MSP M365 tooling is read-only dashboards or pre-AI scripting platforms. **Aegis is built differently:** every workflow an MSP runs against Microsoft 365 — drift detection, anomaly response, policy generation, compliance evidence — has AI woven through it, with safety controls and audit trails designed to survive a security review rather than bypass one.
+Most MSP M365 tooling is read-only dashboards or pre-AI scripting platforms. **Aegis is built differently:** every workflow an MSP runs against Microsoft 365 drift detection, anomaly response, policy generation, compliance evidence has AI woven through it, with safety controls and audit trails designed to survive a security review rather than bypass one.
 
 Designed for the operator running 5–500 customers who needs **leverage**, not just visibility.
 
@@ -137,7 +137,7 @@ flowchart LR
 <summary><b>Intune & Device Management</b></summary>
 
 - **Intune Manager** — centralized device, app, policy, and configuration management across tenants
-- **DUDE Sync** — Dynamic User & Device Enumeration. Auto-tag Defender devices and sync user-group → device-group membership with transitive resolution, blast-radius limiter, prefix allowlists, dry-run-by-default, scheduled execution, and AU user sync. Concept inspired by Daniel Petri's [DUDE-Manager](https://github.com/danielpetri666/DUDE-Manager) (MIT).
+- **DUDE Sync** — Dynamic User & Device Enumeration. Auto-tag Defender devices and sync user-group → device-group membership with transitive resolution, blast-radius limiter, prefix allowlists, dry-run-by-default, scheduled execution, and AU user sync. Concept inspired by Daniel Petri's 😊 [DUDE-Manager](https://github.com/danielpetri666/DUDE-Manager) (MIT).
 
 </details>
 
