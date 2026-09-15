@@ -1,5 +1,5 @@
 name: gauntlet
-# gauntlet-generator: 418f98ece91c
+# gauntlet-generator: 4b26261c5498
 # Regenerate with `arm-gauntlet.ts --upgrade`. A repo whose stamp differs from
 # the installer's is running an older set of gates, which is what the sweep
 # checks rather than guessing from what the file happens to contain.
@@ -59,6 +59,12 @@ jobs:
             echo "::warning title=GATE typecheck NOT_APPLICABLE::package.json defines no real 'typecheck' script — nothing was checked, so this tick verifies nothing"
             exit 0
           fi
+          src_files=$(git ls-files -- '*.ts' '*.tsx' '*.mts' '*.cts' '*.js' '*.jsx' '*.mjs' ':!:*.config.*' ':!:**/*.config.*' ':!:.claude/**' | wc -l | tr -d ' ')
+          if [ "$src_files" -eq 0 ]; then
+            echo "GATE typecheck = NOT_APPLICABLE (the repository has no source files for it to check yet)" >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning title=GATE typecheck NOT_APPLICABLE::the repository has no source files for it to check yet — nothing was checked, so this tick verifies nothing"
+            exit 0
+          fi
           bun run typecheck
           echo "GATE typecheck = VERIFIED" >> "$GITHUB_STEP_SUMMARY"
       - name: lint
@@ -69,12 +75,23 @@ jobs:
             echo "::warning title=GATE lint NOT_APPLICABLE::package.json defines no real 'lint' script — nothing was checked, so this tick verifies nothing"
             exit 0
           fi
+          src_files=$(git ls-files -- '*.ts' '*.tsx' '*.mts' '*.cts' '*.js' '*.jsx' '*.mjs' ':!:*.config.*' ':!:**/*.config.*' ':!:.claude/**' | wc -l | tr -d ' ')
+          if [ "$src_files" -eq 0 ]; then
+            echo "GATE lint = NOT_APPLICABLE (the repository has no source files for it to check yet)" >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning title=GATE lint NOT_APPLICABLE::the repository has no source files for it to check yet — nothing was checked, so this tick verifies nothing"
+            exit 0
+          fi
           bun run lint
           echo "GATE lint = VERIFIED" >> "$GITHUB_STEP_SUMMARY"
       - name: tests
         run: |
           script=$(node -p "JSON.parse(require('fs').readFileSync('package.json','utf8')).scripts?.test ?? ''" 2>/dev/null || echo "")
           if [ -z "$script" ] || printf '%s' "$script" | grep -Eq '^[[:space:]]*(true|:|exit[[:space:]]+[0-9]+)[[:space:]]*$|^[[:space:]]*echo[^&|;]*([[:space:]]*(&&|;)[[:space:]]*(echo[^&|;]*|true|:|exit[[:space:]]+[0-9]+))*[[:space:]]*$'; then
+            if grep -Eq '"tier"[[:space:]]*:[[:space:]]*"production"' .gauntlet.json 2>/dev/null; then
+              echo "GATE tests = FAILED (this repo is marked production, and package.json defines no real 'test' script)" >> "$GITHUB_STEP_SUMMARY"
+              echo "::error title=GATE tests FAILED::marked production in .gauntlet.json, and package.json defines no real 'test' script"
+              exit 1
+            fi
             echo "GATE tests = NOT_APPLICABLE (package.json defines no real 'test' script)" >> "$GITHUB_STEP_SUMMARY"
             echo "::warning title=GATE tests NOT_APPLICABLE::package.json defines no real 'test' script — nothing was checked, so this tick verifies nothing"
             exit 0
@@ -95,6 +112,11 @@ jobs:
           set -e
           echo "$out"
           if printf '%s' "$out" | grep -Eq '0 test files matching|[Nn]o tests? found'; then
+            if grep -Eq '"tier"[[:space:]]*:[[:space:]]*"production"' .gauntlet.json 2>/dev/null; then
+              echo "GATE tests = FAILED (this repo is marked production, and the test runner found no tests in this repo)" >> "$GITHUB_STEP_SUMMARY"
+              echo "::error title=GATE tests FAILED::marked production in .gauntlet.json, and the test runner found no tests in this repo"
+              exit 1
+            fi
             echo "GATE tests = NOT_APPLICABLE (the test runner found no tests in this repo)" >> "$GITHUB_STEP_SUMMARY"
             echo "::warning title=GATE tests NOT_APPLICABLE::the test runner found no tests in this repo — nothing was checked, so this tick verifies nothing"
             exit 0
@@ -139,6 +161,10 @@ jobs:
             Invoke-Pester -CI
             "GATE pester = VERIFIED" >> $env:GITHUB_STEP_SUMMARY
           } else {
+            if ((Test-Path .gauntlet.json) -and ((Get-Content .gauntlet.json -Raw) -match '"tier"\s*:\s*"production"')) {
+              "GATE pester = FAILED (this repo is marked production, and it has no *.Tests.ps1)" >> $env:GITHUB_STEP_SUMMARY
+              exit 1
+            }
             "GATE pester = NOT_APPLICABLE (no *.Tests.ps1 in this repo)" >> $env:GITHUB_STEP_SUMMARY
           }
   secrets:
