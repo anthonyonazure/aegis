@@ -481,7 +481,15 @@ function generateImportScript(resources: Array<{ resourceType: string; resourceN
     if (config) {
       modules.add(config.module);
       const cmd = config.createCommand(resource.data);
-      const safeName = (resource.resourceName || resource.resourceType).replace(/"/g, '\\"');
+      // Used inside a PowerShell double-quoted string and a comment in the
+      // generated script. PowerShell escapes with a backtick (a backslash
+      // before a quote escapes nothing, and a dollar subexpression would run),
+      // and a line break would end the comment and start a new statement.
+      const safeName = (resource.resourceName || resource.resourceType)
+        .replace(/`/g, '``')
+        .replace(/"/g, '`"')
+        .replace(/\$/g, '`$')
+        .replace(/[\r\n]+/g, ' ');
       importCommands.push(`
       # Import ${safeName}
       try {

@@ -215,7 +215,24 @@ function escapeHcl(str: string): string {
 // Escape strings for Bicep
 function escapeBicep(str: string): string {
   if (!str) return '';
-  return str.replace(/'/g, "\\'").replace(/\n/g, '\\n');
+  // Backslash is Bicep's escape character, so it is escaped first; otherwise a
+  // value ending in a backslash swallows the closing quote.
+  return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n');
+}
+
+// Escape a value for the inside of a PowerShell double-quoted string.
+// PowerShell's escape character is the backtick, not backslash: a backslash
+// before a quote escapes nothing, and an unescaped dollar sign or subexpression
+// is expanded when the generated script runs. Backtick goes first so the
+// escapes added after it are not re-escaped; line breaks would end the
+// statement (or a comment), so they are flattened to spaces.
+function escapePsDoubleQuoted(str: string): string {
+  if (!str) return '';
+  return str
+    .replace(/`/g, '``')
+    .replace(/"/g, '`"')
+    .replace(/\$/g, '`$')
+    .replace(/[\r\n]+/g, ' ');
 }
 
 // ===== TERRAFORM GENERATORS =====
@@ -1022,16 +1039,16 @@ function generateGroupPowerShell(group: Group): string {
   const isUnified = group.groupTypes?.includes('Unified');
   const isDynamic = group.membershipRule ? true : false;
   
-  return `#region Group: ${group.displayName}
+  return `#region Group: ${escapePsDoubleQuoted(group.displayName || '')}
 $groupParams = @{
-    DisplayName = "${group.displayName || ''}"
-    Description = "${(group.description || '').replace(/"/g, '\\"')}"
+    DisplayName = "${escapePsDoubleQuoted(group.displayName || '')}"
+    Description = "${escapePsDoubleQuoted(group.description || '')}"
     MailEnabled = $${group.mailEnabled || false}
-    MailNickname = "${group.mailNickname || 'group'}"
+    MailNickname = "${escapePsDoubleQuoted(group.mailNickname || 'group')}"
     SecurityEnabled = $${group.securityEnabled ?? true}
 ${isUnified ? '    GroupTypes = @("Unified")' : ''}
 ${isDynamic ? `    GroupTypes = @("DynamicMembership")
-    MembershipRule = "${(group.membershipRule || '').replace(/"/g, '\\"')}"
+    MembershipRule = "${escapePsDoubleQuoted(group.membershipRule || '')}"
     MembershipRuleProcessingState = "On"` : ''}
 }
 

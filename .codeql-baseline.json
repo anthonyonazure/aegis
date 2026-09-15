@@ -1,0 +1,10 @@
+{
+  "reviewed": [
+    {
+      "rule": "js/clear-text-logging",
+      "file": "supabase/functions/convert-format/index.ts",
+      "count": 1,
+      "reason": "Reviewed 2026-09-15, false positive. The flagged line is `console.log(`Conversion successful, output size: ${result.length} bytes`)`. CodeQL taints `result` because it is built from Graph data that includes oauth2PermissionScopes, but only the integer length is logged, never the content."
+    }
+  ]
+}
