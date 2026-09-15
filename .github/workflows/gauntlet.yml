@@ -1,4 +1,8 @@
 name: gauntlet
+# gauntlet-generator: 418f98ece91c
+# Regenerate with `arm-gauntlet.ts --upgrade`. A repo whose stamp differs from
+# the installer's is running an older set of gates, which is what the sweep
+# checks rather than guessing from what the file happens to contain.
 on:
   push:
   pull_request:
@@ -11,38 +15,120 @@ on:
     - cron: "17 6 * * *"
   workflow_dispatch:
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # A literal, not ${{ github.workflow }}. That expression is the workflow's
+  # display NAME, so any two workflow files that happen to share a name share a
+  # concurrency group and cancel each other — and a cancelled run is neither a
+  # pass nor a failure, so the dashboard recorded it as CANCELLED and the gates
+  # simply never reported. Naming the group after this file makes the collision
+  # structurally impossible instead of merely unlikely.
+  group: gauntlet-gates-${{ github.ref }}
   cancel-in-progress: true
+# Read-only by default, and every job that needs more says so itself. The
+# default token is otherwise write-capable across the repository, so a scanner
+# that pulls a compromised package is a scanner that can push to main. Only
+# codeql widens this, and only to publish its own findings.
+permissions:
+  contents: read
 jobs:
   node:
     name: Node / TypeScript (bun)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with: { persist-credentials: false }
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with: { bun-version: latest }
-      - run: bun install --frozen-lockfile
-      - run: bun run typecheck
-      - run: bun run lint
-      - name: tests
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with: { node-version: '22' }
+      - run: npm ci
+      - name: install nested packages
         run: |
-          set +e
-          out=$(bun test --coverage 2>&1); code=$?
-          set -e
-          echo "$out"
-          if echo "$out" | grep -q "0 test files matching"; then
-            echo "GATE tests = NOT_APPLICABLE (no test files in this repo)" >> "$GITHUB_STEP_SUMMARY"
+          # A second package.json beside a second lockfile is a second package.
+          find . -mindepth 2 -maxdepth 3 -name package-lock.json \
+            -not -path "*/node_modules/*" -print0 2>/dev/null |
+            while IFS= read -r -d '' lock; do
+              dir=$(dirname "$lock")
+              echo "installing $dir"
+              npm ci --prefix "$dir" --no-audit --no-fund --ignore-scripts
+            done
+      - name: typecheck
+        run: |
+          script=$(node -p "JSON.parse(require('fs').readFileSync('package.json','utf8')).scripts?.typecheck ?? ''" 2>/dev/null || echo "")
+          if [ -z "$script" ] || printf '%s' "$script" | grep -Eq '^[[:space:]]*(true|:|exit[[:space:]]+[0-9]+)[[:space:]]*$|^[[:space:]]*echo[^&|;]*([[:space:]]*(&&|;)[[:space:]]*(echo[^&|;]*|true|:|exit[[:space:]]+[0-9]+))*[[:space:]]*$'; then
+            echo "GATE typecheck = NOT_APPLICABLE (package.json defines no real 'typecheck' script)" >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning title=GATE typecheck NOT_APPLICABLE::package.json defines no real 'typecheck' script — nothing was checked, so this tick verifies nothing"
             exit 0
           fi
+          bun run typecheck
+          echo "GATE typecheck = VERIFIED" >> "$GITHUB_STEP_SUMMARY"
+      - name: lint
+        run: |
+          script=$(node -p "JSON.parse(require('fs').readFileSync('package.json','utf8')).scripts?.lint ?? ''" 2>/dev/null || echo "")
+          if [ -z "$script" ] || printf '%s' "$script" | grep -Eq '^[[:space:]]*(true|:|exit[[:space:]]+[0-9]+)[[:space:]]*$|^[[:space:]]*echo[^&|;]*([[:space:]]*(&&|;)[[:space:]]*(echo[^&|;]*|true|:|exit[[:space:]]+[0-9]+))*[[:space:]]*$'; then
+            echo "GATE lint = NOT_APPLICABLE (package.json defines no real 'lint' script)" >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning title=GATE lint NOT_APPLICABLE::package.json defines no real 'lint' script — nothing was checked, so this tick verifies nothing"
+            exit 0
+          fi
+          bun run lint
+          echo "GATE lint = VERIFIED" >> "$GITHUB_STEP_SUMMARY"
+      - name: tests
+        run: |
+          script=$(node -p "JSON.parse(require('fs').readFileSync('package.json','utf8')).scripts?.test ?? ''" 2>/dev/null || echo "")
+          if [ -z "$script" ] || printf '%s' "$script" | grep -Eq '^[[:space:]]*(true|:|exit[[:space:]]+[0-9]+)[[:space:]]*$|^[[:space:]]*echo[^&|;]*([[:space:]]*(&&|;)[[:space:]]*(echo[^&|;]*|true|:|exit[[:space:]]+[0-9]+))*[[:space:]]*$'; then
+            echo "GATE tests = NOT_APPLICABLE (package.json defines no real 'test' script)" >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning title=GATE tests NOT_APPLICABLE::package.json defines no real 'test' script — nothing was checked, so this tick verifies nothing"
+            exit 0
+          fi
+          # The repo's OWN test command, not an assumption about it. Running
+          # `bun test` in a vitest repo finds nothing and reports "no tests".
+          # Shared with the stryker config this installer writes (testCommand),
+          # because the two answers differing is exactly what broke mutation
+          # testing on every vitest repo in the fleet.
+          if printf '%s' "$script" | grep -Eq '^[[:space:]]*bun[[:space:]]+test([[:space:]]|$)'; then
+            runner="$script --coverage"
+          else
+            runner="bun run test"
+          fi
+          echo "running: $runner"
+          set +e
+          out=$(eval "$runner" 2>&1); code=$?
+          set -e
+          echo "$out"
+          if printf '%s' "$out" | grep -Eq '0 test files matching|[Nn]o tests? found'; then
+            echo "GATE tests = NOT_APPLICABLE (the test runner found no tests in this repo)" >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning title=GATE tests NOT_APPLICABLE::the test runner found no tests in this repo — nothing was checked, so this tick verifies nothing"
+            exit 0
+          fi
+          # An `[ ... ] && exit` one-liner here is a trap: under `set -e` the list
+          # evaluates false on the success path and can abort the step precisely
+          # when the tests passed. Explicit `if` has no such ambiguity.
           if [ "$code" -ne 0 ]; then exit "$code"; fi
-          echo "GATE tests = VERIFIED" >> "$GITHUB_STEP_SUMMARY"
+          echo "GATE tests = VERIFIED (ran: $script)" >> "$GITHUB_STEP_SUMMARY"
+          # Coverage: the floor is a project total, and it is compared here
+          # rather than by bun, whose scalar coverageThreshold is applied per
+          # file — one weak module failing a run whose output reads "N pass,
+          # 0 fail" is a coverage failure wearing the costume of a broken suite.
+          floor=$(node -p "JSON.parse(require('fs').readFileSync('package.json','utf8')).gauntlet?.coverageFloorPercent ?? ''" 2>/dev/null || echo "")
+          total=$(printf '%s' "$out" | awk -F'|' '/^ *All files/ { f=$2+0; l=$3+0; print (f<l?f:l) }')
+          if [ -z "$floor" ]; then
+            echo "GATE coverage = NOT_APPLICABLE (no gauntlet.coverageFloorPercent in package.json)" >> "$GITHUB_STEP_SUMMARY"
+          elif [ -z "$total" ]; then
+            echo "GATE coverage = NOT_APPLICABLE (this test command printed no coverage table)" >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning title=GATE coverage NOT_APPLICABLE::this test command printed no coverage table — nothing was checked, so this tick verifies nothing"
+          elif awk -v a="$total" -v b="$floor" 'BEGIN { exit !(a < b) }'; then
+            echo "GATE coverage = FAILED (project total $total% is below the floor $floor%)" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          else
+            echo "GATE coverage = VERIFIED (project total $total% >= floor $floor%)" >> "$GITHUB_STEP_SUMMARY"
+          fi
       - name: dependency audit
-        run: bun audit --audit-level=high
+        run: npm audit --audit-level=high
   powershell:
     name: PowerShell
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with: { persist-credentials: false }
       - shell: pwsh
         run: Install-Module PSScriptAnalyzer,Pester -Force -Scope CurrentUser
       - shell: pwsh
@@ -59,18 +145,48 @@ jobs:
     name: secret scan (gitleaks)
     runs-on: ubuntu-latest
     container:
-      image: zricethezav/gitleaks:latest
+      image: zricethezav/gitleaks:latest@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
     steps:
-      - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with: { fetch-depth: 0, persist-credentials: false }
       # gitleaks CLI is license-free; the gitleaks-action wrapper is NOT (it requires
       # a paid GITLEAKS_LICENSE on org accounts). Run the binary directly to avoid that.
-      - run: gitleaks detect --source . --redact --exit-code 1 --no-banner
+      - name: secret scan
+        run: |
+          # actions/checkout announces "Temporarily overriding HOME=..." before
+          # it registers its own safe.directory exception, i.e. it writes it to
+          # a throwaway global config and takes it away again. The image's
+          # /root/.gitconfig is bypassed too, because job containers run with
+          # HOME=/github/home. Without this line git cannot open the repo and
+          # gitleaks reports a clean scan of nothing.
+          git config --global --add safe.directory "$(pwd)"
+          set +e
+          out=$(gitleaks detect --source . --redact --exit-code 1 --no-banner 2>&1); code=$?
+          set -e
+          echo "$out"
+          # --exit-code covers "leaks were found". Nothing in it covers "the
+          # scan could not start", which gitleaks downgrades to a log line
+          # before exiting 0.
+          if printf '%s' "$out" | grep -Eq 'detected dubious ownership|\[git\] fatal:|stderr is not empty'; then
+            echo "GATE secrets = FAILED (gitleaks could not read this repository, so nothing was scanned)" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          if printf '%s' "$out" | grep -Eq '(^|[^0-9])0 commits scanned|scanned ~0 bytes'; then
+            echo "GATE secrets = FAILED (gitleaks read 0 commits / 0 bytes — an armed repo always has committed files)" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          if [ "$code" -ne 0 ]; then
+            echo "GATE secrets = FAILED (gitleaks found secrets in this repository)" >> "$GITHUB_STEP_SUMMARY"
+            exit "$code"
+          fi
+          scanned=$(printf '%s' "$out" | grep -Eo '[0-9]+ commits scanned' | tail -1)
+          echo "GATE secrets = VERIFIED (no leaks in $scanned)" >> "$GITHUB_STEP_SUMMARY"
   deps:
     name: dependency CVEs (osv-scanner)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with: { persist-credentials: false }
       - name: scan lockfiles for known vulnerabilities
         run: |
           curl -sSfL -o osv-scanner \
@@ -90,11 +206,236 @@ jobs:
             echo "GATE deps = VERIFIED" >> "$GITHUB_STEP_SUMMARY"
           fi
           exit $code
+  confusion:
+    name: dependency confusion
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with: { persist-credentials: false }
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with: { go-version: 'stable' }
+      - run: go install github.com/visma-prodsec/confused@latest
+      - name: check every manifest for unpublished package names
+        run: |
+          SCOPES="${{ vars.GAUNTLET_PRIVATE_SCOPES }}"
+          blocked=""; broken=""; total=0
+          manifest_names() {
+            python3 - "$1" <<'GAUNTLET_MANIFEST_PY'
+          import re
+          import sys
+
+          path = sys.argv[1]
+
+          try:
+              import tomllib
+          except ImportError as exc:  # pragma: no cover - only on python < 3.11
+              sys.stderr.write("gauntlet: no tomllib (%s); cannot read %s\n" % (exc, path))
+              raise SystemExit(3)
+
+          NAME = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)")
+          DIRECT_REF = re.compile(r"^[A-Za-z0-9._-]+\s*@\s*\S+")
+
+
+          def dist_name(req):
+              """The distribution name out of a PEP 508 requirement string."""
+              if not isinstance(req, str):
+                  return None
+              req = req.strip()
+              if not req or req.startswith("#") or req.startswith("-"):
+                  return None
+              if "://" in req or req.startswith("git+") or DIRECT_REF.match(req):
+                  return None
+              m = NAME.match(req)
+              return m.group(1) if m else None
+
+
+          def from_pyproject(text):
+              data = tomllib.loads(text)
+              project = data.get("project") or {}
+              lists = [project.get("dependencies") or []]
+              lists.extend((project.get("optional-dependencies") or {}).values())
+              lists.extend((data.get("dependency-groups") or {}).values())
+              for group in lists:
+                  for req in group or []:
+                      name = dist_name(req)
+                      if name:
+                          yield name
+              poetry = (data.get("tool") or {}).get("poetry") or {}
+              tables = [poetry.get("dependencies") or {}]
+              for group in (poetry.get("group") or {}).values():
+                  tables.append(group.get("dependencies") or {})
+              for table in tables:
+                  for name, spec in table.items():
+                      if name.lower() == "python":
+                          continue
+                      if isinstance(spec, dict) and any(k in spec for k in ("path", "git", "url")):
+                          continue
+                      yield name
+
+
+          def from_requirements(text):
+              for raw in re.sub(r"\\\n", "", text).splitlines():
+                  line = raw.split(" #", 1)[0].split("\t#", 1)[0].strip()
+                  name = dist_name(line)
+                  if name:
+                      yield name
+
+
+          try:
+              with open(path, encoding="utf-8") as fh:
+                  text = fh.read()
+              reader = from_pyproject if path.endswith("pyproject.toml") else from_requirements
+              names = sorted(set(reader(text)))
+          except Exception as exc:
+              sys.stderr.write("gauntlet: could not read %s: %s\n" % (path, exc))
+              raise SystemExit(3)
+
+          for name in names:
+              print(name)
+          GAUNTLET_MANIFEST_PY
+          }
+          PYPI_SIMPLE="${PYPI_SIMPLE:-https://pypi.org/simple}"
+          pypi_check() {
+            unclaimed=""; unresolved=""; checked=0
+            while IFS= read -r name; do
+              [ -n "$name" ] || continue
+              skip=0
+              if [ -n "$SCOPES" ]; then
+                set -f
+                for pat in $(printf '%s' "$SCOPES" | tr ',' ' '); do
+                  # shellcheck disable=SC2254 # $pat is a glob on purpose: GAUNTLET_PRIVATE_SCOPES
+                  # holds patterns like "@vortex/*", and quoting it would match that string
+                  # literally and skip nothing.
+                  case "$name" in $pat) skip=1 ;; esac
+                done
+                set +f
+              fi
+              [ "$skip" -eq 0 ] || { echo "  skip $name (declared private via GAUNTLET_PRIVATE_SCOPES)"; continue; }
+              norm=$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]' | sed -e 's/[-_.][-_.]*/-/g')
+              code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 --retry 2 "$PYPI_SIMPLE/$norm/" || echo 000)
+              checked=$((checked+1))
+              echo "  $name -> $PYPI_SIMPLE/$norm/ : $code"
+              case "$code" in
+                200) ;;
+                404) unclaimed="$unclaimed $name" ;;
+                *) unresolved="$unresolved $name(HTTP $code)" ;;
+              esac
+            done
+          }
+          # npm, maven and rubygems: confused queries those registries through
+          # their real APIs and still works. -v so this can count what it read,
+          # because "all packages seem to be available" is what it prints over
+          # an empty manifest too.
+          scan_confused() {
+            [ -f "$2" ] || return 0
+            echo "== $2 ($1)"
+            set +e
+            if [ -n "$SCOPES" ]; then
+              out=$(confused -v -l "$1" -s "$SCOPES" "$2" 2>&1); code=$?
+            else
+              out=$(confused -v -l "$1" "$2" 2>&1); code=$?
+            fi
+            set -e
+            echo "$out"
+            n=$(printf '%s' "$out" | grep -cE '^Checking: https?://' || true)
+            total=$((total+n))
+            if [ "$code" -ne 0 ]; then
+              if printf '%s' "$out" | grep -Eq 'not available in public package repositories'; then
+                blocked="$blocked $2"
+              else
+                broken="$broken $2(confused exit $code)"
+              fi
+            fi
+          }
+          # The Python half, done here rather than by confused. A manifest that
+          # declares no names is not a manifest that was scanned, so it adds
+          # nothing to the total and cannot buy a VERIFIED on its own.
+          scan_python() {
+            [ -f "$1" ] || return 0
+            echo "== $1 (pip)"
+            nf=$(mktemp)
+            if ! manifest_names "$1" > "$nf"; then
+              broken="$broken $1(unreadable)"
+              return 0
+            fi
+            pypi_check < "$nf"
+            total=$((total+checked))
+            [ -z "$unclaimed" ] || blocked="$blocked $1:$unclaimed"
+            [ -z "$unresolved" ] || broken="$broken $1:$unresolved"
+          }
+          scan_confused npm package.json
+          scan_confused mvn pom.xml
+          scan_confused rubygems Gemfile.lock
+          for f in pyproject.toml requirements.txt requirements-dev.txt dev-requirements.txt requirements/dev.txt test-requirements.txt; do
+            scan_python "$f"
+          done
+          # Order matters. "I could not look this up" is not "I looked and it
+          # was fine", and it outranks a finding because a half-completed scan
+          # cannot be trusted about the half it did complete.
+          if [ -n "$broken" ]; then
+            echo "GATE dependency-confusion = FAILED (a registry lookup did not happen:$broken — those names were NOT checked)" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          if [ -n "$blocked" ]; then
+            echo "GATE dependency-confusion = FAILED (a dependency name is not published on the public registry:$blocked)" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          if [ "$total" -eq 0 ]; then
+            echo "GATE dependency-confusion = NOT_APPLICABLE (no manifest in this repo declares a package name)" >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning title=GATE dependency-confusion NOT_APPLICABLE::no manifest in this repo declares a package name — nothing was checked, so this tick verifies nothing"
+            exit 0
+          fi
+          echo "GATE dependency-confusion = VERIFIED ($total package names checked against their public registries)" >> "$GITHUB_STEP_SUMMARY"
+  phi:
+    name: PHI in logs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with: { persist-credentials: false }
+      - name: scan log statements for patient identifiers
+        run: |
+          # Log call on the same line as an unambiguous identifier.
+          HARD='(console\.(log|info|warn|error|debug)|logger?\.(log|info|warn|error|debug)|context\.log)[^;]{0,200}\b(ssn|social_security|date_of_birth|dateOfBirth|\bdob\b|medical_record|\bmrn\b|diagnosis_code|icd10)\b'
+          # Whole objects stringified into a log — usually carries everything.
+          SOFT='(console\.(log|info|warn|error)|logger?\.(log|info|warn|error)|context\.log)[^;]{0,120}JSON\.stringify\((patient|user|profile|subject)'
+          hard=$(grep -rInE "$HARD" --include='*.ts' --include='*.tsx' --include='*.js' \
+                 --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=__tests__ . || true)
+          soft=$(grep -rInE "$SOFT" --include='*.ts' --include='*.tsx' --include='*.js' \
+                 --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=__tests__ . || true)
+          {
+            echo "### PHI-in-logs scan"
+            echo "<pre>"
+            echo "blocking matches:"; echo "${hard:-  (none)}"
+            echo ""; echo "review these (whole object logged):"; echo "${soft:-  (none)}"
+            echo "</pre>"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "$hard" ]; then
+            echo "GATE phi-in-logs = FAILED" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "GATE phi-in-logs = VERIFIED" >> "$GITHUB_STEP_SUMMARY"
+  sbom:
+    name: software bill of materials
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with: { persist-credentials: false }
+      - uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          format: cyclonedx-json
+          artifact-name: sbom.cyclonedx.json
+          output-file: sbom.cyclonedx.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: sbom
+          path: sbom.cyclonedx.json
+          retention-days: 365
   licenses:
     name: licence policy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with: { persist-credentials: false }
       - name: inventory dependency licences
         run: |
           curl -sSfL -o osv-scanner \
@@ -126,11 +467,13 @@ jobs:
     name: static analysis (semgrep)
     runs-on: ubuntu-latest
     container:
-      image: semgrep/semgrep:latest
+      image: semgrep/semgrep:latest@sha256:34ab619bf1391a24bfda3f05debd0d8a6ce3093c2d5f9d39cfc00f83c1397823
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with: { persist-credentials: false }
       - name: advisory scan (all severities, never blocks)
         run: |
+          git config --global --add safe.directory "$(pwd)"
           semgrep scan --config=p/default --metrics=off --no-error \
             --text --output=advisory.txt . || true
           {
@@ -141,5 +484,228 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
       - name: blocking scan (high-confidence only)
         run: |
-          semgrep scan --config=p/default --metrics=off --severity=ERROR --error .
-          echo "GATE sast = VERIFIED (no ERROR-severity findings)" >> "$GITHUB_STEP_SUMMARY"
+          # Repeated deliberately: each step must stand on its own, so that
+          # deleting the step above can never silently disarm this one.
+          git config --global --add safe.directory "$(pwd)"
+          set +e
+          out=$(semgrep scan --config=p/default --metrics=off --severity=ERROR --error . 2>&1); code=$?
+          set -e
+          echo "$out"
+          targets=$(printf '%s' "$out" | awk '/Ran [0-9]+ rules? on [0-9]+ files?:/ { n = $5 } END { if (n != "") print n }')
+          if [ -z "$targets" ]; then
+            echo "GATE sast = FAILED (semgrep printed no scan summary, so it cannot be said to have run)" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          if [ "$targets" -eq 0 ]; then
+            echo "GATE sast = NOT_APPLICABLE (semgrep found no files it can analyse in this repo)" >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning title=GATE sast NOT_APPLICABLE::semgrep found no files it can analyse in this repo — nothing was checked, so this tick verifies nothing"
+            exit 0
+          fi
+          if [ "$code" -ne 0 ]; then exit "$code"; fi
+          echo "GATE sast = VERIFIED (no ERROR-severity findings across $targets files)" >> "$GITHUB_STEP_SUMMARY"
+  pipeline:
+    name: pipeline security (zizmor, actionlint)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with: { persist-credentials: false }
+      - name: audit the workflows that run every other gate
+        # Versions resolved when this repo was armed, not "latest" at run time:
+        # a gate whose scanner can change under it is a gate whose verdict can
+        # change without a commit. --upgrade moves both forward deliberately.
+        env:
+          ACTIONLINT_VERSION: "1.7.12"
+          ZIZMOR_VERSION: "1.30.1"
+        run: |
+          shopt -s nullglob
+          set -- .github/workflows/*.yml .github/workflows/*.yaml
+          if [ "$#" -eq 0 ]; then
+            echo "GATE pipeline = NOT_APPLICABLE (this repo has no workflow files to audit)" >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning title=GATE pipeline NOT_APPLICABLE::this repo has no workflow files to audit — nothing was checked, so this tick verifies nothing"
+            exit 0
+          fi
+          echo "auditing $# workflow file(s)" >> "$GITHUB_STEP_SUMMARY"
+
+          curl -sSfL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"             | tar xz -C /usr/local/bin actionlint
+          pipx install "zizmor==${ZIZMOR_VERSION}" >/dev/null
+          actionlint --version
+          zizmor --version
+
+          set +e
+          actionlint -no-color "$@" 2>&1 | tee actionlint.out; lint=${PIPESTATUS[0]}
+          zizmor --no-progress --min-severity=medium "$@" 2>&1 | tee zizmor.out; zz=${PIPESTATUS[0]}
+          set -e
+          echo "actionlint exit=$lint  zizmor exit=$zz"
+
+          # tee, not a bare redirect: findings that reach only the step summary
+          # are invisible in the log, and the log is where anyone looking at a
+          # red tick starts. The first version of this gate hid its own failure
+          # that way and cost an extra round trip to diagnose.
+          {
+            echo "### pipeline security"
+            echo '<pre>'
+            cat actionlint.out
+            cat zizmor.out
+            echo '</pre>'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # zizmor exits 14 for "findings at or above the threshold" and 0 for
+          # none. Any other non-zero is the tool failing to run, which must not
+          # read as a pass: a crashed scanner and a clean repo both print
+          # nothing useful.
+          if [ "$zz" -ne 0 ] && [ "$zz" -ne 14 ]; then
+            echo "GATE pipeline = FAILED (zizmor could not complete, exit $zz — nothing was audited)" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          if [ "$zz" -eq 14 ] || [ "$lint" -ne 0 ]; then
+            echo "GATE pipeline = FAILED (see the findings above)" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "GATE pipeline = VERIFIED ($# workflow file(s) audited, no findings at medium or above)" >> "$GITHUB_STEP_SUMMARY"
+  supplychain:
+    name: supply chain posture (scorecard) — ADVISORY
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with: { persist-credentials: false }
+      - name: score this repository's own practices
+        env:
+          GITHUB_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SCORECARD_VERSION: "5.5.0"
+        run: |
+          curl -sSfL "https://github.com/ossf/scorecard/releases/download/v${SCORECARD_VERSION}/scorecard_${SCORECARD_VERSION}_linux_amd64.tar.gz"             | tar xz -C /usr/local/bin scorecard
+          set +e
+          scorecard --repo="github.com/${{ github.repository }}" --format=default > scorecard.out 2>&1; code=$?
+          set -e
+          {
+            echo "### supply chain posture (advisory, never blocks)"
+            echo '<pre>'
+            cat scorecard.out
+            echo '</pre>'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$code" -ne 0 ] || ! grep -q "Aggregate score" scorecard.out; then
+            echo "TIER supplychain = NOT_ARMED (scorecard could not read this repository; it needs a public repo or a token with read access)" >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning title=scorecard NOT_ARMED::supply chain posture was not measured"
+            exit 0
+          fi
+          echo "TIER supplychain = REPORTED ($(grep 'Aggregate score' scorecard.out))" >> "$GITHUB_STEP_SUMMARY"
+  codeql:
+    name: deep analysis (codeql)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ["javascript-typescript"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with: { persist-credentials: false }
+      - uses: github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4
+        with:
+          languages: ${{ matrix.language }}
+          # security-extended adds the lower-precision rules. This gate exists
+          # to find what pattern matching cannot, so trading some noise for
+          # reach is the whole point of running it.
+          queries: security-extended
+      - uses: github/codeql-action/autobuild@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4
+      - id: analyze
+        uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4
+        with:
+          category: "/language:${{ matrix.language }}"
+          # A private repo without Advanced Security cannot receive the upload.
+          # Failing the gate there would mean a red tick that says nothing about
+          # the code, so the upload is allowed to fail and the analysis is not.
+          upload: failure-only
+          output: codeql-results
+      - name: report
+        if: always()
+        # A deep analysis of a codebase nobody has reviewed reports dozens of
+        # findings, most of them true statements about code that is not
+        # actually reachable by an attacker. Failing on the total forever means
+        # a gate that is red on every commit, and a gate that is always red is
+        # one people stop reading — the same failure the secret scanner had.
+        #
+        # So the verdict is against a baseline the repo commits after triage:
+        # .codeql-baseline.json, one entry per rule and file with the count
+        # that was reviewed and the reason it was accepted. Anything NEW fails.
+        # The debt can only shrink, because a count above the recorded one
+        # fails just as loudly as a rule that was never reviewed at all.
+        run: |
+          sarif=$(find codeql-results -name '*.sarif' | head -1)
+          if [ -z "$sarif" ]; then
+            echo "GATE codeql = FAILED (no results file — the analysis did not complete)" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          python3 - "$sarif" .codeql-baseline.json <<'GAUNTLET_CODEQL_PY' | tee codeql-report.txt
+          import collections, json, os, sys
+
+          sarif, baseline_path = sys.argv[1], sys.argv[2]
+
+          found = collections.Counter()
+          for run in json.load(open(sarif))["runs"]:
+              for res in run.get("results", []):
+                  # A result CodeQL itself considers suppressed by an
+                  # inline "// codeql[rule-id]" comment is not a finding.
+                  if res.get("suppressions"):
+                      continue
+                  loc = res["locations"][0]["physicalLocation"]
+                  found[(res.get("ruleId", "?"), loc["artifactLocation"]["uri"])] += 1
+
+          baseline = {}
+          if os.path.exists(baseline_path):
+              raw = json.load(open(baseline_path))
+              for entry in raw.get("reviewed", []):
+                  baseline[(entry["rule"], entry["file"])] = entry["count"]
+
+          new = {k: n for k, n in found.items() if n > baseline.get(k, 0)}
+          gone = {k: n for k, n in baseline.items() if found.get(k, 0) < n}
+
+          print(f"findings: {sum(found.values())}   reviewed baseline: {sum(baseline.values())}")
+          for (rule, path), n in sorted(new.items()):
+              print(f"NEW  {n - baseline.get((rule, path), 0):3}  {rule}  {path}")
+          for (rule, path), n in sorted(gone.items()):
+              print(f"FIXED     {rule}  {path} (baseline {n}, now {found.get((rule, path), 0)})")
+
+          if new:
+              print("VERDICT=FAILED")
+          elif gone:
+              # Not a failure: a fixed finding is the point. But the baseline
+              # has to be regenerated or it silently re-permits the finding.
+              print("VERDICT=STALE")
+          else:
+              print("VERDICT=OK")
+          GAUNTLET_CODEQL_PY
+
+          verdict=$(grep -o 'VERDICT=[A-Z]*' codeql-report.txt | cut -d= -f2)
+          {
+            echo "### deep analysis (${{ matrix.language }})"
+            echo '<pre>'
+            cat codeql-report.txt
+            echo '</pre>'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          case "$verdict" in
+            FAILED)
+              echo "GATE codeql = FAILED (${{ matrix.language }}: findings above the reviewed baseline)" >> "$GITHUB_STEP_SUMMARY"
+              exit 1 ;;
+            STALE)
+              echo "GATE codeql = VERIFIED (${{ matrix.language }}: nothing new; the baseline lists findings that no longer occur — regenerate it)" >> "$GITHUB_STEP_SUMMARY"
+              echo "::warning title=codeql baseline is stale::findings were fixed; regenerate .codeql-baseline.json so they cannot come back unnoticed" ;;
+            *)
+              echo "GATE codeql = VERIFIED (${{ matrix.language }}: nothing above the reviewed baseline)" >> "$GITHUB_STEP_SUMMARY" ;;
+          esac
+      - name: keep the results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: codeql-${{ matrix.language }}
+          path: codeql-results
+          retention-days: 30
