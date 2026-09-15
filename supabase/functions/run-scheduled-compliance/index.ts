@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 /**
  * Phase 2 #4c — scheduled compliance evidence runner.
@@ -78,8 +78,7 @@ function nextRun(cron: string): string {
 interface TenantConn { id: string; tenant_id: string; }
 
 async function getTargetTenants(
-  // deno-lint-ignore no-explicit-any
-  supabase: any,
+  supabase: SupabaseClient,
   schedule: ScheduleConfig
 ): Promise<TenantConn[]> {
   let q = supabase

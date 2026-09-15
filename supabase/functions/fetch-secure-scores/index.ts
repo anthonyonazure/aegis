@@ -30,6 +30,31 @@ interface ImprovementAction {
   threats: string[];
 }
 
+interface GraphControlScore {
+  controlCategory?: string;
+  controlName?: string;
+  score?: number | string;
+  maxScore?: number | string;
+  description?: string;
+}
+
+interface GraphControlProfile {
+  id?: string;
+  title?: string;
+  controlCategory?: string;
+  maxScore?: number;
+  implementationStatus?: string;
+  userImpact?: string;
+  implementationCost?: string;
+  threats?: string[];
+}
+
+interface TenantScoreError {
+  tenantId: string;
+  tenantName?: string;
+  error: string;
+}
+
 async function getGraphAccessToken(clientId: string, clientSecret: string, tenantId: string): Promise<string> {
   const tokenUrl = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`;
   
@@ -87,11 +112,11 @@ async function fetchSecureScore(accessToken: string): Promise<{
   console.log('Raw secure score response:', JSON.stringify(latestScore, null, 2));
   
   // Parse control scores - Microsoft returns score and maxScore for each control
-  const controlScores: ControlScore[] = (latestScore.controlScores || []).map((cs: any) => ({
+  const controlScores: ControlScore[] = (latestScore.controlScores || []).map((cs: GraphControlScore) => ({
     controlCategory: cs.controlCategory || 'Unknown',
     controlName: cs.controlName || 'Unknown',
-    score: parseFloat(cs.score) || 0,
-    maxScore: parseFloat(cs.maxScore) || 0,
+    score: parseFloat(String(cs.score)) || 0,
+    maxScore: parseFloat(String(cs.maxScore)) || 0,
     description: cs.description,
   }));
 
@@ -131,7 +156,7 @@ async function fetchImprovementActions(accessToken: string): Promise<Improvement
 
     const data = await response.json();
     
-    return (data.value || []).map((action: any) => ({
+    return (data.value || []).map((action: GraphControlProfile) => ({
       id: action.id || '',
       title: action.title || action.id || 'Unknown',
       category: action.controlCategory || 'Unknown',
@@ -202,8 +227,8 @@ serve(async (req) => {
       );
     }
 
-    const results: any[] = [];
-    const errors: any[] = [];
+    const results: Record<string, unknown>[] = [];
+    const errors: TenantScoreError[] = [];
 
     for (const tenant of tenants) {
       try {

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Badge, type BadgeProps } from '@/components/ui/badge';
 import { Sparkles, Loader2, CheckCircle2, HelpCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenant } from '@/contexts/TenantContext';
@@ -21,7 +21,7 @@ export const RecommendationsSection = () => {
   const { connectionId } = useTenant();
   const { toast } = useToast();
 
-  const severityColor: Record<string, string> = {
+  const severityColor: Record<string, BadgeProps['variant']> = {
     critical: 'destructive',
     high: 'destructive',
     medium: 'secondary',
@@ -42,8 +42,8 @@ export const RecommendationsSection = () => {
 
       if (error) throw error;
       setRecommendations(data?.data?.recommendations || data?.recommendations || []);
-    } catch (err: any) {
-      toast({ title: 'Analysis failed', description: err?.message, variant: 'destructive' });
+    } catch (err) {
+      toast({ title: 'Analysis failed', description: err instanceof Error ? err.message : String(err), variant: 'destructive' });
     } finally {
       setIsLoading(false);
     }
@@ -89,7 +89,7 @@ export const RecommendationsSection = () => {
                 <h3 className="font-medium text-foreground">{rec.title}</h3>
                 <div className="flex items-center gap-2">
                   <ConfidenceBadge confidence={rec.confidence} />
-                  <Badge variant={severityColor[rec.severity] as any}>{rec.severity}</Badge>
+                  <Badge variant={severityColor[rec.severity]}>{rec.severity}</Badge>
                 </div>
               </div>
               <p className="text-sm text-muted-foreground mb-2">{rec.description}</p>

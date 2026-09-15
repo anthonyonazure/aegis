@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
+import { Badge, type BadgeProps } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -13,7 +13,7 @@ import { format } from 'date-fns';
 
 const IOC_TYPES = ['all', 'ip', 'domain', 'hash-sha256', 'hash-md5', 'url', 'email'] as const;
 
-const severityColor: Record<string, string> = {
+const severityColor: Record<string, BadgeProps['variant']> = {
   critical: 'destructive',
   high: 'default',
   medium: 'secondary',
@@ -141,7 +141,7 @@ export const IocBrowserSection = () => {
                   <TableCell><Badge variant="outline" className="text-[10px] font-mono">{ioc.type}</Badge></TableCell>
                   <TableCell className="font-mono text-xs max-w-[250px] truncate">{ioc.value}</TableCell>
                   <TableCell className="hidden md:table-cell text-xs text-muted-foreground max-w-[250px] truncate">{ioc.description}</TableCell>
-                  <TableCell><Badge variant={severityColor[ioc.severity] as any} className="text-[10px]">{ioc.severity}</Badge></TableCell>
+                  <TableCell><Badge variant={severityColor[ioc.severity]} className="text-[10px]">{ioc.severity}</Badge></TableCell>
                   <TableCell className="hidden lg:table-cell text-xs text-muted-foreground">{ioc.source}</TableCell>
                   {isConnected && (
                     <TableCell>

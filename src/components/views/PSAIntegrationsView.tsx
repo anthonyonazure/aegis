@@ -747,7 +747,7 @@ export const PSAIntegrationsView = () => {
             <div className="grid gap-4">
               {integrations.map((integration) => {
                 const provider = getProviderInfo(integration.provider);
-                const hasCredentials = !!(integration as any).vault_secret_id;
+                const hasCredentials = !!integration.vault_secret_id;
                 return (
                   <Card key={integration.id}>
                     <CardContent className="p-4">
@@ -762,7 +762,7 @@ export const PSAIntegrationsView = () => {
                               ) : (
                                 <Badge variant="secondary">Inactive</Badge>
                               )}
-                              {getConnectionStatusBadge((integration as any).connection_status)}
+                              {getConnectionStatusBadge(integration.connection_status)}
                             </h3>
                             <p className="text-sm text-muted-foreground">{provider.name}</p>
                             <p className="text-xs text-muted-foreground font-mono">{integration.api_url}</p>

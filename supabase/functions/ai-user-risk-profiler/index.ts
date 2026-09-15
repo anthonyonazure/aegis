@@ -24,6 +24,32 @@ async function getGraphToken(clientId: string, clientSecret: string, tenantId: s
   return (await resp.json()).access_token;
 }
 
+interface GraphAuthRegistration {
+  isMfaRegistered?: boolean;
+}
+
+interface GraphRiskyUser {
+  id: string;
+  userDisplayName?: string;
+  userPrincipalName?: string;
+  riskLevel?: string;
+  riskState?: string;
+  riskDetail?: string;
+  riskLastUpdatedDateTime?: string;
+}
+
+interface GraphSignIn {
+  userDisplayName?: string;
+  userPrincipalName?: string;
+  location?: { city?: string; countryOrRegion?: string };
+  ipAddress?: string;
+  createdDateTime?: string;
+  status?: { errorCode?: number };
+  riskLevelDuringSignIn?: string;
+  appDisplayName?: string;
+  clientAppUsed?: string;
+}
+
 async function graphGet(token: string, ep: string, beta = false) {
   const r = await fetch(`${beta ? 'https://graph.microsoft.com/beta' : 'https://graph.microsoft.com/v1.0'}${ep}`, { headers: { Authorization: `Bearer ${token}` } });
   if (!r.ok) { console.error(`Graph ${ep}: ${r.status}`); return null; }
@@ -46,12 +72,12 @@ async function fetchUserRiskData(token: string) {
   }
 
   return {
-    riskyUsers: (riskyUsers?.value || []).map((u: any) => ({
+    riskyUsers: (riskyUsers?.value || []).map((u: GraphRiskyUser) => ({
       displayName: u.userDisplayName, userPrincipalName: u.userPrincipalName,
       riskLevel: u.riskLevel, riskState: u.riskState, riskDetail: u.riskDetail,
       lastUpdated: u.riskLastUpdatedDateTime, isAdmin: adminUserIds.has(u.id),
     })),
-    recentSignIns: (signInLogs?.value || []).slice(0, 50).map((s: any) => ({
+    recentSignIns: (signInLogs?.value || []).slice(0, 50).map((s: GraphSignIn) => ({
       user: s.userDisplayName || s.userPrincipalName, location: s.location?.city ? `${s.location.city}, ${s.location.countryOrRegion}` : 'Unknown',
       ip: s.ipAddress, timestamp: s.createdDateTime, status: s.status?.errorCode === 0 ? 'Success' : 'Failed',
       riskLevel: s.riskLevelDuringSignIn || 'none', app: s.appDisplayName, clientApp: s.clientAppUsed,
@@ -59,7 +85,7 @@ async function fetchUserRiskData(token: string) {
     adminCount: adminUserIds.size,
     mfaRegistration: {
       total: (authMethods?.value || []).length,
-      registered: (authMethods?.value || []).filter((u: any) => u.isMfaRegistered).length,
+      registered: (authMethods?.value || []).filter((u: GraphAuthRegistration) => u.isMfaRegistered).length,
     },
   };
 }
@@ -76,8 +102,8 @@ serve(async (req) => {
     const AI_GATEWAY_URL = Deno.env.get('AI_GATEWAY_URL');
     if (!AI_GATEWAY_URL) throw new Error('AI_GATEWAY_URL is not configured');
 
-    let realUserData: any = legacyData || {};
-    let realContext: any = legacyContext || {};
+    let realUserData: unknown = legacyData || {};
+    let realContext: unknown = legacyContext || {};
 
     if (tenantConnectionIds?.length > 0) {
       const authHeader = req.headers.get('authorization');

@@ -82,7 +82,14 @@ serve(async (req) => {
           }),
         });
 
-        let analysisResult: any = {};
+        let analysisResult: {
+          score?: number | null;
+          overallScore?: number | null;
+          recommendations?: string[];
+          summary?: string;
+          analysis?: string;
+          [key: string]: unknown;
+        } = {};
         let score: number | null = null;
         let recommendations: string[] = [];
         let summary = '';

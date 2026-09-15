@@ -177,7 +177,16 @@ async function getAzureAccessToken(
   }
 }
 
-async function listSubscriptions(accessToken: string): Promise<{ subscriptions: any[] } | { error: string }> {
+interface AzureSubscription {
+  subscriptionId: string;
+  displayName: string;
+  state: string;
+}
+
+/** Azure Resource Manager resource as returned by the list or detail endpoints. */
+type AzureResource = Record<string, unknown>;
+
+async function listSubscriptions(accessToken: string): Promise<{ subscriptions: AzureSubscription[] } | { error: string }> {
   try {
     const response = await fetch(
       'https://management.azure.com/subscriptions?api-version=2022-12-01',
@@ -208,8 +217,8 @@ async function fetchAzureResources(
   subscriptionId: string,
   resourceType: string,
   apiVersion: string
-): Promise<any[]> {
-  const allResources: any[] = [];
+): Promise<AzureResource[]> {
+  const allResources: AzureResource[] = [];
   
   // First, get all resources of this type in the subscription
   const listUrl = `https://management.azure.com/subscriptions/${subscriptionId}/resources?$filter=resourceType eq '${resourceType}'&api-version=2021-04-01`;
@@ -414,7 +423,7 @@ serve(async (req) => {
           success: true,
           accessToken: tokenResult.token,
           expiresIn: tokenResult.expiresIn,
-          subscriptions: subsResult.subscriptions.map((s: any) => ({
+          subscriptions: subsResult.subscriptions.map((s: AzureSubscription) => ({
             subscriptionId: s.subscriptionId,
             displayName: s.displayName,
             state: s.state,
@@ -480,7 +489,7 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({
           success: true,
-          subscriptions: subsResult.subscriptions.map((s: any) => ({
+          subscriptions: subsResult.subscriptions.map((s: AzureSubscription) => ({
             subscriptionId: s.subscriptionId,
             displayName: s.displayName,
             state: s.state,

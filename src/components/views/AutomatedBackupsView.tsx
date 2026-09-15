@@ -93,7 +93,7 @@ export function AutomatedBackupsView() {
   const [configs, setConfigs] = useState<BackupConfig[]>([]);
   const [allRuns, setAllRuns] = useState<BackupRun[]>([]);
   const [runs, setRuns] = useState<BackupRun[]>([]);
-  const [stats, setStats] = useState<any>(null);
+  const [stats, setStats] = useState<Awaited<ReturnType<typeof getBackupStats>> | null>(null);
   const [loading, setLoading] = useState(true);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [selectedConfig, setSelectedConfig] = useState<BackupConfig | null>(null);
@@ -168,7 +168,7 @@ export function AutomatedBackupsView() {
           .from('tenant_groups')
           .select('id, name, customer_id')
           .order('name');
-        setGroups((groupsData || []).map((g: any) => ({
+        setGroups((groupsData || []).map((g) => ({
           id: g.id,
           name: g.name,
           customerId: g.customer_id,

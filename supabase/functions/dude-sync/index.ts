@@ -1,10 +1,48 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
+
+type DbClient = SupabaseClient;
+
+interface GraphObject {
+  id: string;
+  displayName?: string;
+  operatingSystem?: string;
+}
+
+interface GraphPage<T> {
+  value?: T[];
+  '@odata.nextLink'?: string;
+}
+
+interface ManagedDevice {
+  azureADDeviceId: string | null;
+  deviceName: string;
+  operatingSystem: string;
+  userPrincipalName: string;
+}
+
+// Row shape of dude_mappings as read by this function.
+interface DudeMapping {
+  id: string;
+  tenant_connection_id: string;
+  user_group_id: string;
+  user_group_name: string;
+  device_group_id: string;
+  device_group_name: string;
+  os_filter: string;
+  max_removal_percent?: number | null;
+  dry_run?: boolean;
+  nested_device_group_ids?: string[] | null;
+  admin_unit_id?: string | null;
+  sync_users_to_admin_unit?: boolean;
+  defender_tag?: string | null;
+}
 
 // Rate limiting
 const requestCounts = new Map<string, { count: number; resetAt: number }>();
@@ -20,8 +58,8 @@ function checkRateLimit(userId: string): boolean {
   return true;
 }
 
-async function graphGet(token: string, url: string): Promise<any[]> {
-  const results: any[] = [];
+async function graphGet<T = GraphObject>(token: string, url: string): Promise<T[]> {
+  const results: T[] = [];
   let nextUrl: string | null = url.startsWith('https://') ? url : `https://graph.microsoft.com/v1.0${url}`;
 
   while (nextUrl) {
@@ -32,14 +70,14 @@ async function graphGet(token: string, url: string): Promise<any[]> {
       const errText = await res.text();
       throw new Error(`Graph API ${res.status}: ${errText}`);
     }
-    const data = await res.json();
+    const data = (await res.json()) as GraphPage<T>;
     if (data.value) results.push(...data.value);
     nextUrl = data['@odata.nextLink'] || null;
   }
   return results;
 }
 
-async function graphPost(token: string, url: string, body: any): Promise<void> {
+async function graphPost(token: string, url: string, body: unknown): Promise<void> {
   const fullUrl = url.startsWith('https://') ? url : `https://graph.microsoft.com/v1.0${url}`;
   const res = await fetch(fullUrl, {
     method: 'POST',
@@ -69,7 +107,7 @@ async function graphDelete(token: string, url: string): Promise<void> {
 }
 
 // Stored tenant credentials, decrypted on demand.
-async function getStoredCredentials(supabase: any, tenantConnectionId: string, userId: string) {
+async function getStoredCredentials(supabase: DbClient, tenantConnectionId: string, userId: string) {
   const { data, error } = await supabase.rpc('get_decrypted_credential', {
     p_tenant_connection_id: tenantConnectionId,
     p_user_id: userId,
@@ -78,7 +116,7 @@ async function getStoredCredentials(supabase: any, tenantConnectionId: string, u
   return data[0] as { client_id: string; client_secret: string; tenant_id: string };
 }
 
-async function getAccessToken(supabase: any, tenantConnectionId: string, userId: string): Promise<string> {
+async function getAccessToken(supabase: DbClient, tenantConnectionId: string, userId: string): Promise<string> {
   const cred = await getStoredCredentials(supabase, tenantConnectionId, userId);
   const tokenRes = await fetch(`https://login.microsoftonline.com/${cred.tenant_id}/oauth2/v2.0/token`, {
     method: 'POST',
@@ -314,7 +352,7 @@ async function resolveDevices(token: string, userGroupId: string, osFilter: stri
   // For each user, get their managed devices
   for (const user of members) {
     try {
-      const devices = await graphGet(token, `/users/${user.id}/managedDevices?$select=azureADDeviceId,deviceName,operatingSystem,userPrincipalName`);
+      const devices = await graphGet<ManagedDevice>(token, `/users/${user.id}/managedDevices?$select=azureADDeviceId,deviceName,operatingSystem,userPrincipalName`);
       for (const device of devices) {
         if (!device.azureADDeviceId) continue;
 
@@ -328,7 +366,7 @@ async function resolveDevices(token: string, userGroupId: string, osFilter: stri
         // Look up the Entra ID device object by azureADDeviceId
         if (!deviceMap.has(device.azureADDeviceId)) {
           try {
-            const entraDevices = await graphGet(token, `/devices?$filter=deviceId eq '${device.azureADDeviceId}'&$select=id,displayName,operatingSystem`);
+            const entraDevices = await graphGet<{ id: string; displayName: string; operatingSystem: string }>(token, `/devices?$filter=deviceId eq '${device.azureADDeviceId}'&$select=id,displayName,operatingSystem`);
             if (entraDevices.length > 0) {
               deviceMap.set(device.azureADDeviceId, {
                 id: entraDevices[0].id, // Entra object ID
@@ -354,7 +392,7 @@ async function resolveDevices(token: string, userGroupId: string, osFilter: stri
 // Get current device group members
 async function getCurrentGroupMembers(token: string, groupId: string) {
   const members = await graphGet(token, `/groups/${groupId}/members?$select=id,displayName,operatingSystem&$filter=@odata.type eq '#microsoft.graph.device'&$top=999`);
-  return members.map((m: any) => ({
+  return members.map((m: GraphObject) => ({
     id: m.id,
     displayName: m.displayName,
     operatingSystem: m.operatingSystem,
@@ -362,15 +400,15 @@ async function getCurrentGroupMembers(token: string, groupId: string) {
 }
 
 // Preview sync (dry run)
-async function previewSync(token: string, mapping: any) {
+async function previewSync(token: string, mapping: DudeMapping) {
   const resolvedDevices = await resolveDevices(token, mapping.user_group_id, mapping.os_filter);
   const currentMembers = await getCurrentGroupMembers(token, mapping.device_group_id);
 
-  const resolvedIds = new Set(resolvedDevices.map((d: any) => d.id));
-  const currentIds = new Set(currentMembers.map((m: any) => m.id));
+  const resolvedIds = new Set(resolvedDevices.map((d: { id: string }) => d.id));
+  const currentIds = new Set(currentMembers.map((m: { id: string }) => m.id));
 
-  const toAdd = resolvedDevices.filter((d: any) => !currentIds.has(d.id));
-  const toRemove = currentMembers.filter((m: any) => !resolvedIds.has(m.id));
+  const toAdd = resolvedDevices.filter((d: { id: string }) => !currentIds.has(d.id));
+  const toRemove = currentMembers.filter((m: { id: string }) => !resolvedIds.has(m.id));
 
   // Check blast radius
   const removalPercent = currentMembers.length > 0 ? (toRemove.length / currentMembers.length) * 100 : 0;
@@ -389,7 +427,7 @@ async function previewSync(token: string, mapping: any) {
 
 // Load the per-MSP safety settings (allowed group-name prefixes).
 // Empty / missing row = no restriction, for backwards compat.
-async function loadSettings(supabase: any, userId: string): Promise<{ allowedPrefixes: string[] }> {
+async function loadSettings(supabase: DbClient, userId: string): Promise<{ allowedPrefixes: string[] }> {
   const { data } = await supabase
     .from('dude_settings')
     .select('allowed_group_prefixes')
@@ -418,8 +456,8 @@ function checkPrefixAllowlist(
 // and `bulk-sync` pass it; callers that only want a preview don't need to.
 async function executeSync(
   token: string,
-  mapping: any,
-  supabase: any,
+  mapping: DudeMapping,
+  supabase: DbClient,
   userId: string,
   cred?: { client_id: string; client_secret: string; tenant_id: string }
 ) {
@@ -428,7 +466,7 @@ async function executeSync(
   let devicesAdded = 0;
   let devicesRemoved = 0;
   let devicesSkipped = 0;
-  const details: any = {};
+  const details: Record<string, unknown> = {};
 
   try {
     // Safety: per-MSP prefix allowlist (issue #6 PR1).
@@ -481,7 +519,7 @@ async function executeSync(
           });
           devicesAdded++;
         } catch (e) {
-          details[`add_error_${device.id}`] = String(e);
+          details[`add_error_${device.id}`] = (e instanceof Error ? e.message : 'Unknown error');
           devicesSkipped++;
         }
       }
@@ -492,7 +530,7 @@ async function executeSync(
           await graphDelete(token, `/groups/${mapping.device_group_id}/members/${device.id}/$ref`);
           devicesRemoved++;
         } catch (e) {
-          details[`remove_error_${device.id}`] = String(e);
+          details[`remove_error_${device.id}`] = (e instanceof Error ? e.message : 'Unknown error');
           devicesSkipped++;
         }
       }
@@ -508,7 +546,7 @@ async function executeSync(
           const nestedResult = await ensureNestedGroups(token, mapping.device_group_id, nestedIds);
           details.nestedDeviceGroups = nestedResult;
         } catch (e) {
-          details.nestedDeviceGroups = { error: String(e) };
+          details.nestedDeviceGroups = { error: (e instanceof Error ? e.message : 'Unknown error') };
         }
       }
 
@@ -520,7 +558,7 @@ async function executeSync(
           const auResult = await addUsersToAdminUnit(token, mapping.admin_unit_id, mapping.user_group_id);
           details.adminUnitUserSync = { adminUnitId: mapping.admin_unit_id, ...auResult };
         } catch (e) {
-          details.adminUnitUserSync = { error: String(e) };
+          details.adminUnitUserSync = { error: (e instanceof Error ? e.message : 'Unknown error') };
         }
       }
 
@@ -544,13 +582,13 @@ async function executeSync(
             ...(tagResult.reason ? { reason: tagResult.reason } : {}),
           };
         } catch (e) {
-          details.defenderTag = { error: String(e) };
+          details.defenderTag = { error: (e instanceof Error ? e.message : 'Unknown error') };
         }
       }
     }
   } catch (e) {
     status = 'error';
-    details.error = String(e);
+    details.error = (e instanceof Error ? e.message : 'Unknown error');
   }
 
   const durationMs = Date.now() - startTime;
@@ -662,7 +700,7 @@ serve(async (req) => {
       token = ((await tokenRes.json()) as { access_token: string }).access_token;
     }
 
-    let result: any;
+    let result: unknown;
 
     switch (action) {
       case 'list-groups': {

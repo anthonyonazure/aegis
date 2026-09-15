@@ -24,6 +24,19 @@ async function getGraphToken(clientId: string, clientSecret: string, tenantId: s
   return (await resp.json()).access_token;
 }
 
+interface GraphSku {
+  skuPartNumber?: string;
+  consumedUnits?: number;
+  prepaidUnits?: { enabled?: number };
+}
+
+interface LicenseSummary {
+  name: string;
+  total: number;
+  assigned: number;
+  pricePerUser: number;
+}
+
 async function fetchLicenseData(token: string) {
   const [skus, users] = await Promise.all([
     fetch('https://graph.microsoft.com/v1.0/subscribedSkus', { headers: { Authorization: `Bearer ${token}` } }).then(r => r.ok ? r.json() : null),
@@ -38,11 +51,11 @@ async function fetchLicenseData(token: string) {
   };
 
   return {
-    licenses: (skus?.value || []).map((s: any) => {
+    licenses: (skus?.value || []).map((s: GraphSku): LicenseSummary => {
       const total = s.prepaidUnits?.enabled || 0, assigned = s.consumedUnits || 0;
       const name = s.skuPartNumber || 'Unknown';
       return { name, total, assigned, pricePerUser: priceMap[name] || 0 };
-    }).filter((l: any) => l.total > 0),
+    }).filter((l: LicenseSummary) => l.total > 0),
     totalUsers: users?.value?.length || 0,
   };
 }
@@ -59,7 +72,7 @@ serve(async (req) => {
     const AI_GATEWAY_URL = Deno.env.get('AI_GATEWAY_URL');
     if (!AI_GATEWAY_URL) throw new Error('AI_GATEWAY_URL is not configured');
 
-    let realLicenseData: any = legacyData || {};
+    let realLicenseData: unknown = legacyData || {};
     let realUserCount = legacyUserCount || 0;
 
     if (tenantConnectionIds?.length > 0) {

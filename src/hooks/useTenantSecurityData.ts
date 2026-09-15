@@ -36,6 +36,19 @@ export interface RiskySignIn {
   appDisplayName: string;
 }
 
+/** Raw alerts_v2 item as returned by Graph; only the fields mapped below. */
+interface GraphAlert {
+  id: string;
+  title?: string;
+  severity?: string;
+  status?: string;
+  category?: string;
+  description?: string;
+  createdDateTime?: string;
+  detectionSource?: string;
+  serviceSource?: string;
+}
+
 export interface TenantSecurityData {
   alerts: SecurityAlert[];
   riskyUsers: RiskyUser[];
@@ -90,7 +103,7 @@ export function useTenantSecurityData(): TenantSecurityData {
 
       // Process alerts
       if (alertsRes.status === 'fulfilled' && alertsRes.value.data?.value) {
-        const mapped: SecurityAlert[] = (alertsRes.value.data.value || []).map((a: any) => ({
+        const mapped: SecurityAlert[] = (alertsRes.value.data.value || []).map((a: GraphAlert) => ({
           id: a.id,
           title: a.title || 'Untitled Alert',
           severity: (a.severity || 'informational').toLowerCase(),
@@ -105,7 +118,7 @@ export function useTenantSecurityData(): TenantSecurityData {
 
       // Process risky users
       if (riskyUsersRes.status === 'fulfilled' && riskyUsersRes.value.data?.value) {
-        const mapped: RiskyUser[] = (riskyUsersRes.value.data.value || []).map((u: any) => ({
+        const mapped: RiskyUser[] = (riskyUsersRes.value.data.value || []).map((u: Partial<RiskyUser>) => ({
           id: u.id,
           userDisplayName: u.userDisplayName || 'Unknown',
           userPrincipalName: u.userPrincipalName || '',
@@ -119,7 +132,7 @@ export function useTenantSecurityData(): TenantSecurityData {
 
       // Process risky sign-ins
       if (riskySignInsRes.status === 'fulfilled' && riskySignInsRes.value.data?.value) {
-        const mapped: RiskySignIn[] = (riskySignInsRes.value.data.value || []).map((s: any) => ({
+        const mapped: RiskySignIn[] = (riskySignInsRes.value.data.value || []).map((s: Partial<RiskySignIn>) => ({
           id: s.id,
           userDisplayName: s.userDisplayName || 'Unknown',
           userPrincipalName: s.userPrincipalName || '',

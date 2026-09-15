@@ -1,5 +1,5 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -82,7 +82,7 @@ function shouldRunNow(cronExpression: string, lastRunAt: string | null): boolean
 }
 
 async function getTargetTenants(
-  supabase: any,
+  supabase: SupabaseClient,
   config: BackupConfig
 ): Promise<TenantConnection[]> {
   let query = supabase
@@ -119,7 +119,7 @@ async function getTargetTenants(
 }
 
 async function cleanupOldBackups(
-  supabase: any,
+  supabase: SupabaseClient,
   configId: string,
   retentionDays: number,
   maxBackups: number
@@ -149,7 +149,7 @@ async function cleanupOldBackups(
     .order('created_at', { ascending: false });
 
   if (allRuns && allRuns.length > maxBackups) {
-    const runsToDelete = allRuns.slice(maxBackups).map((r: any) => r.id);
+    const runsToDelete = allRuns.slice(maxBackups).map((r: { id: string }) => r.id);
     const { data: deletedRuns } = await supabase
       .from('automated_backup_runs')
       .delete()
@@ -203,10 +203,18 @@ const GRAPH_ENDPOINTS: Record<string, { endpoint: string; useBeta?: boolean }> =
   'security/defender-policies': { endpoint: 'deviceManagement/intents', useBeta: true },
 };
 
+interface GraphResource {
+  id?: string;
+  '@odata.id'?: string;
+  displayName?: string;
+  name?: string;
+  [key: string]: unknown;
+}
+
 async function fetchGraphData(
   accessToken: string,
   resourceId: string
-): Promise<any[]> {
+): Promise<GraphResource[]> {
   const config = GRAPH_ENDPOINTS[resourceId];
   if (!config) return [];
 
@@ -270,7 +278,7 @@ serve(async (req) => {
       );
     }
 
-    const results: any[] = [];
+    const results: Record<string, unknown>[] = [];
 
     for (const config of configs as BackupConfig[]) {
       // Check if should run based on schedule
@@ -313,7 +321,7 @@ serve(async (req) => {
           .update({ total_tenants: tenants.length })
           .eq('id', backupRun.id);
 
-        const tenantResults: any[] = [];
+        const tenantResults: Record<string, unknown>[] = [];
         const exportJobIds: string[] = [];
         let completedCount = 0;
         let failedCount = 0;

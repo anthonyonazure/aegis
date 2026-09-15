@@ -1,0 +1,5 @@
+# Verified false positive (2026-09-15): the Supabase anon key (JWT role=anon),
+# i.e. VITE_SUPABASE_PUBLISHABLE_KEY. It is public by design, shipped in the
+# browser bundle, with row-level security doing the protecting. .env is no
+# longer tracked; this entry only covers that one historical commit.
+d705b9281d5afbb3cbcab8a6064f979032c41f6d:.env:jwt:2

@@ -82,9 +82,10 @@ export const BillingView = () => {
     switch (selectedPeriod) {
       case 'current':
         return { start: startOfMonth(now), end: endOfMonth(now) };
-      case 'last':
+      case 'last': {
         const lastMonth = subMonths(now, 1);
         return { start: startOfMonth(lastMonth), end: endOfMonth(lastMonth) };
+      }
       case 'last3':
         return { start: startOfMonth(subMonths(now, 2)), end: endOfMonth(now) };
       case 'last6':

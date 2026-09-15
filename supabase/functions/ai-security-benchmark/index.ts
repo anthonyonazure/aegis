@@ -15,6 +15,40 @@ function _checkRate(key: string, max = 15, windowMs = 60000): boolean {
   e.count++; return true;
 }
 
+interface GraphList<T> {
+  value?: T[];
+}
+
+interface GraphUser {
+  id: string;
+  userType?: string;
+  accountEnabled?: boolean;
+}
+
+interface UserRegistrationDetail {
+  id: string;
+  isMfaRegistered?: boolean;
+}
+
+interface SecureScore {
+  currentScore: number;
+  maxScore: number;
+}
+
+interface CaPolicy {
+  displayName?: string;
+  state?: string;
+}
+
+interface RiskyUser {
+  riskLevel?: string;
+}
+
+interface SubscribedSku {
+  skuPartNumber?: string;
+  prepaidUnits?: { enabled?: number };
+}
+
 async function getGraphToken(clientId: string, clientSecret: string, tenantId: string): Promise<string> {
   const resp = await fetch(`https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`, {
     method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -24,7 +58,7 @@ async function getGraphToken(clientId: string, clientSecret: string, tenantId: s
   return (await resp.json()).access_token;
 }
 
-async function graphGet(token: string, ep: string, beta = false) {
+async function graphGet<T>(token: string, ep: string, beta = false): Promise<GraphList<T> | null> {
   const r = await fetch(`${beta ? 'https://graph.microsoft.com/beta' : 'https://graph.microsoft.com/v1.0'}${ep}`, { headers: { Authorization: `Bearer ${token}` } });
   if (!r.ok) { console.error(`Graph ${ep}: ${r.status}`); return null; }
   return r.json();
@@ -32,35 +66,35 @@ async function graphGet(token: string, ep: string, beta = false) {
 
 async function fetchSecurityTelemetry(token: string) {
   const [users, secureScore, caPolicies, authMethods, riskyUsers, skus] = await Promise.all([
-    graphGet(token, '/users?$select=id,userType,accountEnabled&$top=999'),
-    graphGet(token, '/security/secureScores?$top=1', true),
-    graphGet(token, '/identity/conditionalAccess/policies'),
-    graphGet(token, '/reports/authenticationMethods/userRegistrationDetails?$top=999', true),
-    graphGet(token, '/identityProtection/riskyUsers?$top=50', true),
-    graphGet(token, '/subscribedSkus'),
+    graphGet<GraphUser>(token, '/users?$select=id,userType,accountEnabled&$top=999'),
+    graphGet<SecureScore>(token, '/security/secureScores?$top=1', true),
+    graphGet<CaPolicy>(token, '/identity/conditionalAccess/policies'),
+    graphGet<UserRegistrationDetail>(token, '/reports/authenticationMethods/userRegistrationDetails?$top=999', true),
+    graphGet<RiskyUser>(token, '/identityProtection/riskyUsers?$top=50', true),
+    graphGet<SubscribedSku>(token, '/subscribedSkus'),
   ]);
 
   const usersData = users?.value || [];
   const authData = authMethods?.value || [];
-  const mfaEnabled = authData.filter((u: any) => u.isMfaRegistered).length;
+  const mfaEnabled = authData.filter((u: UserRegistrationDetail) => u.isMfaRegistered).length;
   const ss = secureScore?.value?.[0];
   const caData = caPolicies?.value || [];
 
   return {
     totalUsers: usersData.length,
-    guestUsers: usersData.filter((u: any) => u.userType === 'Guest').length,
+    guestUsers: usersData.filter((u: GraphUser) => u.userType === 'Guest').length,
     mfaCoverage: usersData.length > 0 ? Math.round((mfaEnabled / usersData.length) * 100) : 0,
     secureScore: ss?.currentScore || 0,
     maxSecureScore: ss?.maxScore || 0,
     secureScorePercentage: ss ? Math.round((ss.currentScore / ss.maxScore) * 100) : 0,
     conditionalAccessPolicies: caData.length,
-    enabledCAPolicies: caData.filter((p: any) => p.state === 'enabled').length,
-    caPolicySummary: caData.map((p: any) => ({ name: p.displayName, state: p.state })),
+    enabledCAPolicies: caData.filter((p: CaPolicy) => p.state === 'enabled').length,
+    caPolicySummary: caData.map((p: CaPolicy) => ({ name: p.displayName, state: p.state })),
     riskyUsersCount: riskyUsers?.value?.length || 0,
-    highRiskUsers: (riskyUsers?.value || []).filter((u: any) => u.riskLevel === 'high').length,
-    totalLicenses: (skus?.value || []).reduce((acc: number, s: any) => acc + (s.prepaidUnits?.enabled || 0), 0),
-    hasE5: (skus?.value || []).some((s: any) => s.skuPartNumber?.includes('SPE_E5')),
-    hasAadP2: (skus?.value || []).some((s: any) => s.skuPartNumber?.includes('AAD_PREMIUM_P2')),
+    highRiskUsers: (riskyUsers?.value || []).filter((u: RiskyUser) => u.riskLevel === 'high').length,
+    totalLicenses: (skus?.value || []).reduce((acc: number, s: SubscribedSku) => acc + (s.prepaidUnits?.enabled || 0), 0),
+    hasE5: (skus?.value || []).some((s: SubscribedSku) => s.skuPartNumber?.includes('SPE_E5')),
+    hasAadP2: (skus?.value || []).some((s: SubscribedSku) => s.skuPartNumber?.includes('AAD_PREMIUM_P2')),
   };
 }
 
@@ -100,7 +134,7 @@ serve(async (req) => {
     const AI_GATEWAY_URL = Deno.env.get('AI_GATEWAY_URL');
     if (!AI_GATEWAY_URL) throw new Error('AI_GATEWAY_URL is not configured');
 
-    let realData: any = legacyData || {};
+    let realData: unknown = legacyData || {};
 
     if (tenantConnectionIds?.length > 0) {
       const authHeader = req.headers.get('authorization');
@@ -108,7 +142,7 @@ serve(async (req) => {
       const { data: { user }, error: authErr } = await supabase.auth.getUser();
       if (authErr || !user) return new Response(JSON.stringify({ error: 'Authentication required' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
-      const tenantsData: any[] = [];
+      const tenantsData: Record<string, unknown>[] = [];
       for (let i = 0; i < tenantConnectionIds.length; i++) {
         try {
           const { data: creds } = await supabase.rpc('get_decrypted_credential', { p_tenant_connection_id: tenantConnectionIds[i], p_user_id: user.id });

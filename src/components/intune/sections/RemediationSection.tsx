@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Badge } from '@/components/ui/badge';
+import { Badge, type BadgeProps } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -34,7 +34,7 @@ const categoryIcons: Record<RemediationCategory, React.ElementType> = {
   Defender: ShieldCheck,
 };
 
-const categoryColors: Record<RemediationCategory, string> = {
+const categoryColors: Record<RemediationCategory, BadgeProps['variant']> = {
   Security: 'destructive',
   Cleanup: 'warning',
   Maintenance: 'info',
@@ -86,8 +86,8 @@ export const RemediationSection = () => {
       if (data?.error) throw new Error(data.error);
       toast.success(`"${script.name}" deployed successfully! Script ID: ${data.scriptId}`);
       setSelectedScript(null);
-    } catch (err: any) {
-      toast.error(err?.message || 'Failed to deploy script to tenant.');
+    } catch (err) {
+      toast.error((err instanceof Error && err.message) || 'Failed to deploy script to tenant.');
     } finally {
       setDeploying(false);
     }
@@ -214,7 +214,7 @@ export const RemediationSection = () => {
                     <Icon className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
                   </div>
                   <div className="flex items-center gap-2">
-                    <Badge variant={categoryColors[script.category] as any} className="text-[10px] px-1.5 py-0">
+                    <Badge variant={categoryColors[script.category]} className="text-[10px] px-1.5 py-0">
                       {script.category}
                     </Badge>
                     <Badge variant="outline" className="text-[10px] px-1.5 py-0">
@@ -246,7 +246,7 @@ export const RemediationSection = () => {
                   <p className="text-sm font-medium truncate">{script.name}</p>
                   <p className="text-xs text-muted-foreground truncate">{script.description}</p>
                 </div>
-                <Badge variant={categoryColors[script.category] as any} className="text-[10px] flex-shrink-0">
+                <Badge variant={categoryColors[script.category]} className="text-[10px] flex-shrink-0">
                   {script.category}
                 </Badge>
                 <Badge variant="outline" className="text-[10px] flex-shrink-0">
@@ -273,7 +273,7 @@ export const RemediationSection = () => {
               <DialogHeader>
                 <div className="flex items-center gap-2 flex-wrap">
                   <DialogTitle>{selectedScript.name}</DialogTitle>
-                  <Badge variant={categoryColors[selectedScript.category] as any}>
+                  <Badge variant={categoryColors[selectedScript.category]}>
                     {selectedScript.category}
                   </Badge>
                   <Badge variant="outline">Run as: {selectedScript.runAs}</Badge>

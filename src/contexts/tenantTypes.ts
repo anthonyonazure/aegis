@@ -1,3 +1,4 @@
+import type { TestConnectionResult } from '@/lib/graphApi';
 export interface TenantConnectionInfo {
   id: string;
   tenantId: string;
@@ -65,7 +66,7 @@ export interface TenantContextValue {
   isLoading: boolean;
 
   // Connection methods
-  connect: (tenantId: string, clientId: string, clientSecret: string, customerId?: string) => Promise<any>;
+  connect: (tenantId: string, clientId: string, clientSecret: string, customerId?: string) => Promise<TestConnectionResult>;
   disconnect: () => Promise<void>;
   disconnectTenant: (connectionId: string) => Promise<void>;
   refreshToken: (connectionId?: string) => Promise<string | null>;

@@ -56,28 +56,28 @@ export function generateReportPdf(report: Report, customerName?: string): void {
 
   switch (report.report_type) {
     case 'executive_summary':
-      yPos = generateExecutiveSummaryContent(doc, data, yPos);
+      generateExecutiveSummaryContent(doc, data, yPos);
       break;
     case 'compliance':
-      yPos = generateComplianceContent(doc, data, yPos);
+      generateComplianceContent(doc, data, yPos);
       break;
     case 'drift':
-      yPos = generateDriftContent(doc, data, yPos);
+      generateDriftContent(doc, data, yPos);
       break;
     case 'billing':
-      yPos = generateBillingContent(doc, data, yPos);
+      generateBillingContent(doc, data, yPos);
       break;
     case 'security':
-      yPos = generateSecurityContent(doc, data, yPos);
+      generateSecurityContent(doc, data, yPos);
       break;
     case 'tenant_summary':
-      yPos = generateTenantSummaryContent(doc, data, yPos);
+      generateTenantSummaryContent(doc, data, yPos);
       break;
     case 'psa_tickets':
-      yPos = generatePsaTicketsContent(doc, data, yPos);
+      generatePsaTicketsContent(doc, data, yPos);
       break;
     default:
-      yPos = generateGenericContent(doc, data, yPos);
+      generateGenericContent(doc, data, yPos);
   }
 
   // Footer

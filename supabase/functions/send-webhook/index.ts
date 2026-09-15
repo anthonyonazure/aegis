@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -153,7 +153,7 @@ Deno.serve(async (req) => {
 });
 
 async function handleRetry(
-  supabase: any,
+  supabase: SupabaseClient,
   logId: string
 ): Promise<Response> {
   // Fetch the original log entry
@@ -216,7 +216,7 @@ async function handleRetry(
 }
 
 async function sendWebhookWithRetry(
-  supabase: any,
+  supabase: SupabaseClient,
   webhook: WebhookConfig,
   event: string,
   data: Record<string, unknown>,
@@ -252,7 +252,7 @@ async function sendWebhookWithRetry(
 }
 
 async function sendWebhookAttempt(
-  supabase: any,
+  supabase: SupabaseClient,
   webhook: WebhookConfig,
   event: string,
   data: Record<string, unknown>,

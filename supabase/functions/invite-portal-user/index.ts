@@ -118,8 +118,10 @@ serve(async (req) => {
     let existingUserId: string | null = null;
     try {
       // listUsers supports email filter via query param in supabase-js v2.
-      // deno-lint-ignore no-explicit-any
-      const listResp: any = await (adminClient.auth.admin as any).listUsers({ filter: `email.eq.${email}` });
+      type ListUsersByFilter = {
+        listUsers(params: { filter: string }): Promise<{ data?: { users?: { id?: string; email?: string }[] } }>;
+      };
+      const listResp = await (adminClient.auth.admin as unknown as ListUsersByFilter).listUsers({ filter: `email.eq.${email}` });
       const matched = listResp?.data?.users?.find((u: { email?: string }) => u.email?.toLowerCase() === email.toLowerCase());
       if (matched?.id) existingUserId = matched.id;
     } catch (e) {

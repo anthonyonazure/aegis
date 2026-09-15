@@ -26,7 +26,12 @@ async function getGraphToken(clientId: string, clientSecret: string, tenantId: s
   return (await resp.json()).access_token;
 }
 
-async function fetchGraph(token: string, endpoint: string): Promise<any> {
+interface GraphCollection<T> {
+  value?: T[];
+  '@odata.count'?: number;
+}
+
+async function fetchGraph<T>(token: string, endpoint: string): Promise<GraphCollection<T> | null> {
   const resp = await fetch(`https://graph.microsoft.com/v1.0${endpoint}`, {
     headers: { Authorization: `Bearer ${token}`, ConsistencyLevel: 'eventual' },
   });
@@ -36,21 +41,21 @@ async function fetchGraph(token: string, endpoint: string): Promise<any> {
 
 async function fetchTenantSnapshot(token: string) {
   const [users, groups, skus, caPolicies, apps, domains] = await Promise.all([
-    fetchGraph(token, '/users?$count=true&$top=1&$select=id'),
-    fetchGraph(token, '/groups?$count=true&$top=1&$select=id'),
-    fetchGraph(token, '/subscribedSkus'),
-    fetchGraph(token, '/identity/conditionalAccess/policies'),
-    fetchGraph(token, '/applications?$count=true&$top=1&$select=id'),
-    fetchGraph(token, '/domains'),
+    fetchGraph<{ id: string }>(token, '/users?$count=true&$top=1&$select=id'),
+    fetchGraph<{ id: string }>(token, '/groups?$count=true&$top=1&$select=id'),
+    fetchGraph<{ skuPartNumber?: string }>(token, '/subscribedSkus'),
+    fetchGraph<{ id: string }>(token, '/identity/conditionalAccess/policies'),
+    fetchGraph<{ id: string }>(token, '/applications?$count=true&$top=1&$select=id'),
+    fetchGraph<{ id: string }>(token, '/domains'),
   ]);
 
   return {
     totalUsers: users?.['@odata.count'] || users?.value?.length || 0,
     totalGroups: groups?.['@odata.count'] || groups?.value?.length || 0,
     totalApps: apps?.['@odata.count'] || apps?.value?.length || 0,
-    licenses: (skus?.value || []).map((s: any) => s.skuPartNumber),
+    licenses: (skus?.value || []).map((s: { skuPartNumber?: string }) => s.skuPartNumber),
     conditionalAccessPolicies: caPolicies?.value?.length || 0,
-    domains: (domains?.value || []).map((d: any) => d.id),
+    domains: (domains?.value || []).map((d: { id: string }) => d.id),
   };
 }
 
@@ -74,8 +79,9 @@ serve(async (req) => {
     if (!AI_GATEWAY_URL) throw new Error('AI_GATEWAY_URL is not configured');
 
     // Fetch real tenant snapshots if connections provided
-    let sourceSnapshot: any = null;
-    let targetSnapshot: any = null;
+    type TenantSnapshot = { tenantName: string } & Awaited<ReturnType<typeof fetchTenantSnapshot>>;
+    let sourceSnapshot: TenantSnapshot | null = null;
+    let targetSnapshot: TenantSnapshot | null = null;
     const connIds = tenantConnectionIds || [];
 
     if (connIds.length > 0) {

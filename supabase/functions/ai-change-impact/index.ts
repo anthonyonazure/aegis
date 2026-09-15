@@ -26,7 +26,25 @@ async function getGraphToken(clientId: string, clientSecret: string, tenantId: s
   return (await resp.json()).access_token;
 }
 
-async function fetchGraph(token: string, endpoint: string): Promise<any> {
+interface GraphCollection<T> {
+  value?: T[];
+  '@odata.count'?: number;
+}
+
+interface GraphCAPolicy {
+  displayName?: string;
+  state?: string;
+  conditions?: unknown;
+  grantControls?: { builtInControls?: string[] } | null;
+}
+
+interface GraphSku {
+  skuPartNumber?: string;
+  consumedUnits?: number;
+  prepaidUnits?: { enabled?: number };
+}
+
+async function fetchGraph<T>(token: string, endpoint: string): Promise<GraphCollection<T> | null> {
   const resp = await fetch(`https://graph.microsoft.com/v1.0${endpoint}`, {
     headers: { Authorization: `Bearer ${token}`, ConsistencyLevel: 'eventual' },
   });
@@ -36,22 +54,22 @@ async function fetchGraph(token: string, endpoint: string): Promise<any> {
 
 async function fetchCurrentConfig(token: string) {
   const [users, caPolicies, groups, skus] = await Promise.all([
-    fetchGraph(token, '/users?$count=true&$top=1&$select=id'),
-    fetchGraph(token, '/identity/conditionalAccess/policies'),
-    fetchGraph(token, '/groups?$count=true&$top=1&$select=id'),
-    fetchGraph(token, '/subscribedSkus'),
+    fetchGraph<{ id: string }>(token, '/users?$count=true&$top=1&$select=id'),
+    fetchGraph<GraphCAPolicy>(token, '/identity/conditionalAccess/policies'),
+    fetchGraph<{ id: string }>(token, '/groups?$count=true&$top=1&$select=id'),
+    fetchGraph<GraphSku>(token, '/subscribedSkus'),
   ]);
 
   return {
     totalUsers: users?.['@odata.count'] || 0,
     totalGroups: groups?.['@odata.count'] || 0,
-    conditionalAccessPolicies: (caPolicies?.value || []).map((p: any) => ({
+    conditionalAccessPolicies: (caPolicies?.value || []).map((p: GraphCAPolicy) => ({
       name: p.displayName,
       state: p.state,
       conditions: p.conditions,
       grantControls: p.grantControls?.builtInControls || [],
     })),
-    licenses: (skus?.value || []).map((s: any) => ({
+    licenses: (skus?.value || []).map((s: GraphSku) => ({
       sku: s.skuPartNumber,
       consumed: s.consumedUnits,
       total: s.prepaidUnits?.enabled || 0,
@@ -109,7 +127,7 @@ serve(async (req) => {
     if (!AI_GATEWAY_URL) throw new Error('AI_GATEWAY_URL is not configured');
 
     // Fetch real current config if available
-    let liveConfig: any = null;
+    let liveConfig: Awaited<ReturnType<typeof fetchCurrentConfig>> | null = null;
     const connIds = tenantConnectionIds || [];
 
     if (connIds.length > 0) {

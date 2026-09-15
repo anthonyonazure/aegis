@@ -62,6 +62,50 @@ interface DynamicAction {
   affectedCount?: number;
 }
 
+interface GraphList<T> {
+  value?: T[];
+}
+
+interface GraphUser {
+  id: string;
+  userType?: string;
+  signInActivity?: { lastSignInDateTime?: string };
+}
+
+interface UserRegistrationDetail {
+  id: string;
+  isMfaRegistered?: boolean;
+}
+
+interface DirectoryRole {
+  members?: Array<{ '@odata.type'?: string; id: string }>;
+}
+
+interface RiskDetection {
+  riskLevel?: string;
+}
+
+interface RiskyUser {
+  riskState?: string;
+}
+
+interface SecureScore {
+  currentScore?: number;
+  maxScore?: number;
+}
+
+interface SubscribedSku {
+  skuPartNumber?: string;
+  consumedUnits?: number;
+  prepaidUnits?: { enabled?: number };
+}
+
+interface DecryptedCredential {
+  client_id: string;
+  client_secret: string;
+  tenant_id: string;
+}
+
 async function getGraphAccessToken(clientId: string, clientSecret: string, tenantId: string): Promise<string> {
   const tokenEndpoint = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`;
   
@@ -86,7 +130,7 @@ async function getGraphAccessToken(clientId: string, clientSecret: string, tenan
   return data.access_token;
 }
 
-async function fetchGraphData(accessToken: string, endpoint: string, useBeta = false): Promise<any> {
+async function fetchGraphData<T>(accessToken: string, endpoint: string, useBeta = false): Promise<GraphList<T> | null> {
   const baseUrl = useBeta ? 'https://graph.microsoft.com/beta' : 'https://graph.microsoft.com/v1.0';
   const url = `${baseUrl}${endpoint}`;
 
@@ -109,10 +153,10 @@ async function fetchGraphData(accessToken: string, endpoint: string, useBeta = f
 
 // Fetch full paginated collections from Microsoft Graph.
 // Many list endpoints return partial results with @odata.nextLink.
-async function fetchGraphCollection(accessToken: string, endpoint: string, useBeta = false): Promise<any[]> {
+async function fetchGraphCollection<T>(accessToken: string, endpoint: string, useBeta = false): Promise<T[]> {
   const baseUrl = useBeta ? 'https://graph.microsoft.com/beta' : 'https://graph.microsoft.com/v1.0';
   let nextUrl: string | null = `${baseUrl}${endpoint}`;
-  const results: any[] = [];
+  const results: T[] = [];
 
   while (nextUrl) {
     const response: Response = await fetch(nextUrl, {
@@ -128,8 +172,8 @@ async function fetchGraphCollection(accessToken: string, endpoint: string, useBe
       return results;
     }
 
-    const page: any = await response.json();
-    const pageValues = Array.isArray(page?.value) ? page.value : [];
+    const page = (await response.json()) as { value?: unknown; '@odata.nextLink'?: unknown } | null;
+    const pageValues = Array.isArray(page?.value) ? (page.value as T[]) : [];
     results.push(...pageValues);
 
     nextUrl = typeof page?.['@odata.nextLink'] === 'string' ? page['@odata.nextLink'] : null;
@@ -140,14 +184,14 @@ async function fetchGraphCollection(accessToken: string, endpoint: string, useBe
 
 async function fetchSecurityMetrics(accessToken: string): Promise<GovernanceMetrics['security']> {
   const [riskySignIns, secureScore, conditionalAccess] = await Promise.all([
-    fetchGraphData(accessToken, '/identityProtection/riskySignInDetections?$top=100', true).catch(() => null),
-    fetchGraphData(accessToken, '/security/secureScores?$top=1', true).catch(() => null),
-    fetchGraphData(accessToken, '/identity/conditionalAccess/policies').catch(() => null),
+    fetchGraphData<RiskDetection>(accessToken, '/identityProtection/riskySignInDetections?$top=100', true).catch(() => null),
+    fetchGraphData<SecureScore>(accessToken, '/security/secureScores?$top=1', true).catch(() => null),
+    fetchGraphData<{ id: string }>(accessToken, '/identity/conditionalAccess/policies').catch(() => null),
   ]);
 
   const riskySignInsData = riskySignIns?.value || [];
-  const riskyHigh = riskySignInsData.filter((r: any) => r.riskLevel === 'high').length;
-  const riskyMedium = riskySignInsData.filter((r: any) => r.riskLevel === 'medium').length;
+  const riskyHigh = riskySignInsData.filter((r: RiskDetection) => r.riskLevel === 'high').length;
+  const riskyMedium = riskySignInsData.filter((r: RiskDetection) => r.riskLevel === 'medium').length;
 
   const secureScoreData = secureScore?.value?.[0];
   const currentScore = secureScoreData?.currentScore || 0;
@@ -168,27 +212,27 @@ async function fetchSecurityMetrics(accessToken: string): Promise<GovernanceMetr
 
 async function fetchIdentityMetrics(accessToken: string): Promise<GovernanceMetrics['identity'] & { adminsMissingMfa: number; mfaGapsCount: number }> {
   const [users, directoryRoles, riskyUsers, authMethods] = await Promise.all([
-    fetchGraphData(accessToken, '/users?$select=id,displayName,userType,accountEnabled,signInActivity&$top=999').catch(() => null),
-    fetchGraphData(accessToken, '/directoryRoles?$expand=members').catch(() => null),
-    fetchGraphData(accessToken, '/identityProtection/riskyUsers?$top=100', true).catch(() => null),
-    fetchGraphData(accessToken, '/reports/authenticationMethods/userRegistrationDetails?$top=999', true).catch(() => null),
+    fetchGraphData<GraphUser>(accessToken, '/users?$select=id,displayName,userType,accountEnabled,signInActivity&$top=999').catch(() => null),
+    fetchGraphData<DirectoryRole>(accessToken, '/directoryRoles?$expand=members').catch(() => null),
+    fetchGraphData<RiskyUser>(accessToken, '/identityProtection/riskyUsers?$top=100', true).catch(() => null),
+    fetchGraphData<UserRegistrationDetail>(accessToken, '/reports/authenticationMethods/userRegistrationDetails?$top=999', true).catch(() => null),
   ]);
 
   const usersData = users?.value || [];
   const totalUsers = usersData.length;
-  const guestUsers = usersData.filter((u: any) => u.userType === 'Guest').length;
+  const guestUsers = usersData.filter((u: GraphUser) => u.userType === 'Guest').length;
   
   // Calculate stale accounts (no sign-in in 90 days)
   const ninetyDaysAgo = new Date();
   ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
   
-  const staleGuests = usersData.filter((u: any) => {
+  const staleGuests = usersData.filter((u: GraphUser) => {
     if (u.userType !== 'Guest') return false;
     const lastSignIn = u.signInActivity?.lastSignInDateTime;
     return !lastSignIn || new Date(lastSignIn) < ninetyDaysAgo;
   }).length;
 
-  const staleUsers = usersData.filter((u: any) => {
+  const staleUsers = usersData.filter((u: GraphUser) => {
     if (u.userType === 'Guest') return false;
     const lastSignIn = u.signInActivity?.lastSignInDateTime;
     return !lastSignIn || new Date(lastSignIn) < ninetyDaysAgo;
@@ -215,11 +259,11 @@ async function fetchIdentityMetrics(accessToken: string): Promise<GovernanceMetr
 
   // MFA registration data
   const authMethodsData = authMethods?.value || [];
-  const mfaEnabledUsers = authMethodsData.filter((u: any) => u.isMfaRegistered).length;
-  const usersWithoutMfa = authMethodsData.filter((u: any) => !u.isMfaRegistered);
+  const mfaEnabledUsers = authMethodsData.filter((u: UserRegistrationDetail) => u.isMfaRegistered).length;
+  const usersWithoutMfa = authMethodsData.filter((u: UserRegistrationDetail) => !u.isMfaRegistered);
   
   // Check which admins are missing MFA
-  const adminsMissingMfa = usersWithoutMfa.filter((u: any) => adminUserIds.has(u.id)).length;
+  const adminsMissingMfa = usersWithoutMfa.filter((u: UserRegistrationDetail) => adminUserIds.has(u.id)).length;
 
   const riskyUsersData = riskyUsers?.value || [];
 
@@ -231,7 +275,7 @@ async function fetchIdentityMetrics(accessToken: string): Promise<GovernanceMetr
     staleGuestAccounts: staleGuests,
     staleUserAccounts: staleUsers,
     privilegedRoleHolders: adminUserIds.size,
-    riskyUsers: riskyUsersData.filter((u: any) => u.riskState === 'atRisk').length,
+    riskyUsers: riskyUsersData.filter((u: RiskyUser) => u.riskState === 'atRisk').length,
     adminsMissingMfa,
     mfaGapsCount: totalUsers - mfaEnabledUsers,
   };
@@ -239,11 +283,11 @@ async function fetchIdentityMetrics(accessToken: string): Promise<GovernanceMetr
 
 async function fetchLicensingMetrics(accessToken: string): Promise<GovernanceMetrics['licensing']> {
   // NOTE: Graph may paginate subscribedSkus; fetch all pages.
-  const skusData = await fetchGraphCollection(accessToken, '/subscribedSkus?$top=999').catch(() => []);
+  const skusData = await fetchGraphCollection<SubscribedSku>(accessToken, '/subscribedSkus?$top=999').catch(() => []);
   let totalLicenses = 0;
   let assignedLicenses = 0;
 
-  const licensesByProduct = skusData.map((sku: any) => {
+  const licensesByProduct = skusData.map((sku: SubscribedSku) => {
     const total = sku.prepaidUnits?.enabled || 0;
     const assigned = sku.consumedUnits || 0;
     
@@ -256,7 +300,7 @@ async function fetchLicensingMetrics(accessToken: string): Promise<GovernanceMet
       assigned,
       available: total - assigned,
     };
-  }).filter((l: any) => l.total > 0);
+  }).filter((l: { total: number }) => l.total > 0);
 
   return {
     totalLicenses,
@@ -473,7 +517,7 @@ serve(async (req) => {
     }
 
     // Get credentials from database
-    let credentials: any[] | null = null;
+    let credentials: DecryptedCredential[] | null = null;
     let credentialConnectionId = tenantConnectionId;
 
     const { data: directCreds, error: directCredError } = await supabase.rpc('get_decrypted_credential', {
@@ -504,7 +548,7 @@ serve(async (req) => {
           .eq('user_id', authData.user.id)
           .eq('tenant_id', currentConn.tenant_id);
 
-        const siblingIds = (siblingConnections || []).map((c: any) => c.id);
+        const siblingIds = (siblingConnections || []).map((c: { id: string }) => c.id);
 
         if (!siblingError && siblingIds.length > 0) {
           const { data: credentialCandidates, error: candidateError } = await adminSupabase
@@ -548,7 +592,7 @@ serve(async (req) => {
     const accessToken = await getGraphAccessToken(client_id, client_secret, tenant_id);
 
     // Fetch tenant info (helps ensure the connected tenant matches what the user expects)
-    const organization = await fetchGraphData(accessToken, '/organization?$select=id,displayName').catch(() => null);
+    const organization = await fetchGraphData<{ id: string; displayName?: string }>(accessToken, '/organization?$select=id,displayName').catch(() => null);
     const tenantInfo = organization?.value?.[0]
       ? { id: organization.value[0].id, displayName: organization.value[0].displayName }
       : null;

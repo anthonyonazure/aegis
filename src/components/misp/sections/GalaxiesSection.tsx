@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Badge, type BadgeProps } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { galaxyClusters } from '@/lib/mispData';
@@ -8,7 +8,7 @@ import { Globe, Search } from 'lucide-react';
 
 const galaxyTypes = ['All', 'Ransomware', 'Tool', 'Malware', 'Sector'] as const;
 
-const galaxyColor: Record<string, string> = {
+const galaxyColor: Record<string, BadgeProps['variant']> = {
   Ransomware: 'destructive',
   Tool: 'default',
   Malware: 'secondary',
@@ -48,7 +48,7 @@ export const GalaxiesSection = () => {
             <CardContent className="p-4 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="font-medium text-sm">{g.name}</span>
-                <Badge variant={galaxyColor[g.galaxy] as any} className="text-[10px]">{g.galaxy}</Badge>
+                <Badge variant={galaxyColor[g.galaxy]} className="text-[10px]">{g.galaxy}</Badge>
               </div>
               <p className="text-xs text-muted-foreground line-clamp-2">{g.description}</p>
               {g.synonyms.length > 0 && (

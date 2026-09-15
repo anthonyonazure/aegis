@@ -42,7 +42,7 @@ export interface ExportResult {
   results?: Array<{
     resource: string;
     success: boolean;
-    data?: any;
+    data?: unknown;
     error?: string;
   }>;
   completed?: number;
@@ -229,7 +229,7 @@ export async function exportResources(
 }
 
 export async function convertToFormat(
-  data: any,
+  data: unknown,
   resourceType: string,
   format: 'terraform' | 'bicep' | 'powershell'
 ): Promise<ConvertResult> {

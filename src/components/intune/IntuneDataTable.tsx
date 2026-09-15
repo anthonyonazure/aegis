@@ -28,7 +28,7 @@ interface IntuneDataTableProps<T> {
   searchKey?: string;
 }
 
-export function IntuneDataTable<T extends Record<string, any>>({
+export function IntuneDataTable<T extends object>({
   data,
   columns,
   isLoading,
@@ -42,7 +42,7 @@ export function IntuneDataTable<T extends Record<string, any>>({
 
   const filtered = data.filter((item) => {
     if (!search) return true;
-    const val = item[searchKey];
+    const val = (item as Record<string, unknown>)[searchKey];
     return typeof val === 'string' && val.toLowerCase().includes(search.toLowerCase());
   });
 
@@ -112,10 +112,10 @@ export function IntuneDataTable<T extends Record<string, any>>({
                 </TableRow>
               ) : (
                 filtered.map((item, idx) => (
-                  <TableRow key={item.id || idx} className="hover:bg-muted/20 cursor-pointer">
+                  <TableRow key={(item as { id?: string | number }).id || idx} className="hover:bg-muted/20 cursor-pointer">
                     {columns.map((col) => (
                       <TableCell key={col.key} className="text-sm">
-                        {col.render ? col.render(item) : String(item[col.key] ?? '—')}
+                        {col.render ? col.render(item) : String((item as Record<string, unknown>)[col.key] ?? '—')}
                       </TableCell>
                     ))}
                   </TableRow>

@@ -8,6 +8,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { useTenant } from '@/contexts/TenantContext';
+import type { Tables } from '@/integrations/supabase/types';
 import { supabase } from '@/integrations/supabase/client';
 import { motion } from 'framer-motion';
 import {
@@ -133,7 +134,7 @@ export function TenantComparisonView() {
         .order('recorded_at', { ascending: false });
 
       // Get latest metrics for each tenant
-      const latestMetrics = new Map<string, any>();
+      const latestMetrics = new Map<string, Tables<'governance_metrics_history'>>();
       metricsData?.forEach(m => {
         if (!latestMetrics.has(m.tenant_connection_id!)) {
           latestMetrics.set(m.tenant_connection_id!, m);
@@ -152,7 +153,7 @@ export function TenantComparisonView() {
           tenantId: tc.id,
           tenantName: tc.display_name || tc.tenant_name || tc.tenant_id,
           customerId: tc.customer_id || undefined,
-          customerName: (tc.customers as any)?.name || 'Unassigned',
+          customerName: (tc.customers as { name: string } | null)?.name || 'Unassigned',
           secureScore: m?.max_secure_score 
             ? Math.round((m.secure_score / m.max_secure_score) * 100)
             : 65 + Math.floor(Math.random() * 25),

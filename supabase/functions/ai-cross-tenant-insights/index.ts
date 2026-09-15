@@ -24,6 +24,26 @@ async function getGraphToken(clientId: string, clientSecret: string, tenantId: s
   return (await resp.json()).access_token;
 }
 
+interface GraphAuthRegistration {
+  isMfaRegistered?: boolean;
+}
+
+interface GraphUser {
+  userType?: string;
+}
+
+interface GraphSku {
+  skuPartNumber?: string;
+  consumedUnits?: number;
+  prepaidUnits?: { enabled?: number };
+}
+
+interface LicenseSummary {
+  name?: string;
+  total: number;
+  assigned: number;
+}
+
 async function graphGet(token: string, ep: string, beta = false) {
   const r = await fetch(`${beta ? 'https://graph.microsoft.com/beta' : 'https://graph.microsoft.com/v1.0'}${ep}`, { headers: { Authorization: `Bearer ${token}` } });
   if (!r.ok) { console.error(`Graph ${ep}: ${r.status}`); return null; }
@@ -40,20 +60,20 @@ async function fetchTenantSummary(token: string, tenantName: string) {
   ]);
 
   const usersData = users?.value || [];
-  const mfaEnabled = (authMethods?.value || []).filter((u: any) => u.isMfaRegistered).length;
+  const mfaEnabled = (authMethods?.value || []).filter((u: GraphAuthRegistration) => u.isMfaRegistered).length;
   const ss = secureScore?.value?.[0];
   const skusData = skus?.value || [];
   let totalLic = 0, assignedLic = 0;
-  const licenses = skusData.map((s: any) => {
+  const licenses = skusData.map((s: GraphSku): LicenseSummary => {
     const t = s.prepaidUnits?.enabled || 0, a = s.consumedUnits || 0;
     totalLic += t; assignedLic += a;
     return { name: s.skuPartNumber, total: t, assigned: a };
-  }).filter((l: any) => l.total > 0);
+  }).filter((l: LicenseSummary) => l.total > 0);
 
   return {
     tenantName,
     totalUsers: usersData.length,
-    guestUsers: usersData.filter((u: any) => u.userType === 'Guest').length,
+    guestUsers: usersData.filter((u: GraphUser) => u.userType === 'Guest').length,
     mfaCoverage: usersData.length > 0 ? Math.round((mfaEnabled / usersData.length) * 100) : 0,
     secureScore: ss?.currentScore || 0,
     maxSecureScore: ss?.maxScore || 0,
@@ -78,7 +98,7 @@ serve(async (req) => {
     const AI_GATEWAY_URL = Deno.env.get('AI_GATEWAY_URL');
     if (!AI_GATEWAY_URL) throw new Error('AI_GATEWAY_URL is not configured');
 
-    let realTenantsData: any = legacyData || {};
+    let realTenantsData: unknown = legacyData || {};
 
     if (tenantConnectionIds?.length > 0) {
       const authHeader = req.headers.get('authorization');
@@ -86,7 +106,7 @@ serve(async (req) => {
       const { data: { user }, error: authErr } = await supabase.auth.getUser();
       if (authErr || !user) return new Response(JSON.stringify({ error: 'Authentication required' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
-      const tenantsResults: any[] = [];
+      const tenantsResults: Record<string, unknown>[] = [];
       for (let i = 0; i < tenantConnectionIds.length; i++) {
         try {
           const { data: creds } = await supabase.rpc('get_decrypted_credential', { p_tenant_connection_id: tenantConnectionIds[i], p_user_id: user.id });

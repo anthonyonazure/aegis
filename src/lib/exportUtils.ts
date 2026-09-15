@@ -78,8 +78,8 @@ export async function downloadExportAsZip(jobId: string): Promise<void> {
           },
         ],
       });
-    } catch (err: any) {
-      if (err?.name === 'AbortError') return;
+    } catch (err) {
+      if ((err as { name?: string } | null)?.name === 'AbortError') return;
       saveHandle = null;
     }
   }

@@ -833,7 +833,7 @@ Connect-MgGraph -Scopes "User.Read.All", "AuditLog.Read.All"
 $threshold = (Get-Date).AddDays(-60)
 
 # Get all licensed users
-$licensedUsers = Get-MgUser -Filter "assignedLicenses/\$count ne 0" -All \\
+$licensedUsers = Get-MgUser -Filter "assignedLicenses/$count ne 0" -All \\
     -Property Id, DisplayName, UserPrincipalName, SignInActivity, AssignedLicenses, AccountEnabled
 
 # Find inactive users
@@ -861,7 +861,7 @@ foreach ($user in $inactiveUsers) {
 }
 
 Write-Host "Found $($inactiveUsers.Count) inactive users with licenses" -ForegroundColor Yellow
-Write-Host "Potential monthly savings: \$$totalSavings" -ForegroundColor Green
+Write-Host "Potential monthly savings: $$totalSavings" -ForegroundColor Green
 
 # Export for review
 $inactiveUsers | Select-Object DisplayName, UserPrincipalName, @{

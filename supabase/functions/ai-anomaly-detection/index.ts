@@ -41,7 +41,7 @@ async function getGraphAccessToken(clientId: string, clientSecret: string, tenan
   return data.access_token;
 }
 
-async function fetchGraph(accessToken: string, endpoint: string): Promise<any> {
+async function fetchGraph<T>(accessToken: string, endpoint: string): Promise<GraphList<T> | null> {
   const response = await fetch(`https://graph.microsoft.com/v1.0${endpoint}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -58,10 +58,46 @@ async function fetchGraph(accessToken: string, endpoint: string): Promise<any> {
   return await response.json();
 }
 
+interface GraphList<T> {
+  value?: T[];
+}
+
+interface GraphSignIn {
+  userDisplayName?: string;
+  userPrincipalName?: string;
+  location?: { city?: string; countryOrRegion?: string };
+  ipAddress?: string;
+  createdDateTime?: string;
+  status?: { errorCode?: number };
+  riskLevelDuringSignIn?: string;
+  appDisplayName?: string;
+  clientAppUsed?: string;
+  conditionalAccessStatus?: string;
+}
+
+interface GraphDirectoryAudit {
+  targetResources?: Array<{ displayName?: string }>;
+  activityDisplayName?: string;
+  operationType?: string;
+  initiatedBy?: { user?: { displayName?: string }; app?: { displayName?: string } };
+  activityDateTime?: string;
+  result?: string;
+  category?: string;
+}
+
+interface GraphRiskyUser {
+  userDisplayName?: string;
+  userPrincipalName?: string;
+  riskLevel?: string;
+  riskState?: string;
+  riskDetail?: string;
+  riskLastUpdatedDateTime?: string;
+}
+
 interface AuditData {
-  signInLogs: any[];
-  configChanges: any[];
-  riskyUsers: any[];
+  signInLogs: Record<string, unknown>[];
+  configChanges: Record<string, unknown>[];
+  riskyUsers: Record<string, unknown>[];
 }
 
 async function fetchAuditData(accessToken: string): Promise<{ data: AuditData; missingPermissions: string[] }> {
@@ -70,9 +106,9 @@ async function fetchAuditData(accessToken: string): Promise<{ data: AuditData; m
 
   // Fetch sign-in logs (requires AuditLog.Read.All)
   try {
-    const signIns = await fetchGraph(accessToken, '/auditLogs/signIns?$top=50&$orderby=createdDateTime desc');
+    const signIns = await fetchGraph<GraphSignIn>(accessToken, '/auditLogs/signIns?$top=50&$orderby=createdDateTime desc');
     if (signIns?.value) {
-      data.signInLogs = signIns.value.map((s: any) => ({
+      data.signInLogs = signIns.value.map((s: GraphSignIn) => ({
         user: s.userDisplayName || s.userPrincipalName || 'Unknown',
         location: s.location?.city ? `${s.location.city}, ${s.location.countryOrRegion}` : 'Unknown',
         ip: s.ipAddress || 'Unknown',
@@ -92,9 +128,9 @@ async function fetchAuditData(accessToken: string): Promise<{ data: AuditData; m
 
   // Fetch directory audit logs (requires AuditLog.Read.All)
   try {
-    const audits = await fetchGraph(accessToken, '/auditLogs/directoryAudits?$top=50&$orderby=activityDateTime desc');
+    const audits = await fetchGraph<GraphDirectoryAudit>(accessToken, '/auditLogs/directoryAudits?$top=50&$orderby=activityDateTime desc');
     if (audits?.value) {
-      data.configChanges = audits.value.map((a: any) => ({
+      data.configChanges = audits.value.map((a: GraphDirectoryAudit) => ({
         resource: a.targetResources?.[0]?.displayName || 'Unknown',
         action: a.activityDisplayName || a.operationType || 'Unknown',
         actor: a.initiatedBy?.user?.displayName || a.initiatedBy?.app?.displayName || 'System',
@@ -113,9 +149,9 @@ async function fetchAuditData(accessToken: string): Promise<{ data: AuditData; m
 
   // Fetch risky users (requires IdentityRiskyUser.Read.All)
   try {
-    const risky = await fetchGraph(accessToken, '/identityProtection/riskyUsers?$top=20');
+    const risky = await fetchGraph<GraphRiskyUser>(accessToken, '/identityProtection/riskyUsers?$top=20');
     if (risky?.value) {
-      data.riskyUsers = risky.value.map((r: any) => ({
+      data.riskyUsers = risky.value.map((r: GraphRiskyUser) => ({
         user: r.userDisplayName || r.userPrincipalName || 'Unknown',
         riskLevel: r.riskLevel,
         riskState: r.riskState,
@@ -351,6 +387,9 @@ serve(async (req) => {
       p_user_id: user.id,
     });
 
+    let clientId: string;
+    let clientSecret: string;
+    let tenantId: string;
     if (credError || !creds || creds.length === 0) {
       // Try sibling fallback
       const { data: conn } = await supabase
@@ -387,13 +426,13 @@ serve(async (req) => {
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
-      var clientId = foundCreds.client_id;
-      var clientSecret = foundCreds.client_secret;
-      var tenantId = foundCreds.tenant_id;
+      clientId = foundCreds.client_id;
+      clientSecret = foundCreds.client_secret;
+      tenantId = foundCreds.tenant_id;
     } else {
-      var clientId = creds[0].client_id;
-      var clientSecret = creds[0].client_secret;
-      var tenantId = creds[0].tenant_id;
+      clientId = creds[0].client_id;
+      clientSecret = creds[0].client_secret;
+      tenantId = creds[0].tenant_id;
     }
 
     // Acquire Graph token
@@ -630,8 +669,7 @@ ${missingPermissions.length > 0 ? `\nNote: Some data sources were unavailable du
 
           // EdgeRuntime.waitUntil keeps the function alive past the response so
           // notification I/O completes. Falls back to fire-and-forget where unsupported.
-          // deno-lint-ignore no-explicit-any
-          const er = (globalThis as any).EdgeRuntime;
+          const er = (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } }).EdgeRuntime;
           if (er && typeof er.waitUntil === 'function') {
             er.waitUntil(notifyPromise);
           }

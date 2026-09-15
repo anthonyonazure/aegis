@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -21,7 +21,7 @@ interface HealthCheckResult {
   };
 }
 
-async function verifyAuth(req: Request): Promise<{ userId: string; supabase: any } | { error: string; status: number }> {
+async function verifyAuth(req: Request): Promise<{ userId: string; supabase: SupabaseClient } | { error: string; status: number }> {
   const authHeader = req.headers.get('Authorization');
   
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -48,7 +48,7 @@ async function verifyAuth(req: Request): Promise<{ userId: string; supabase: any
 }
 
 async function getStoredCredentials(
-  supabase: any,
+  supabase: SupabaseClient,
   tenantConnectionId: string,
   userId: string
 ): Promise<{ clientId: string; clientSecret: string; tenantId: string } | null> {
@@ -151,7 +151,7 @@ async function checkGraphApi(accessToken: string): Promise<GraphCheckResult> {
       if (skuResponse.ok) {
         const skuData = await skuResponse.json();
         const skus = skuData.value || [];
-        const totalUnits = skus.reduce((sum: number, sku: any) => {
+        const totalUnits = skus.reduce((sum: number, sku: { prepaidUnits?: { enabled?: number } }) => {
           return sum + (sku.prepaidUnits?.enabled || 0);
         }, 0);
         licenseInfo = { hasLicenses: skus.length > 0, totalLicenses: totalUnits };

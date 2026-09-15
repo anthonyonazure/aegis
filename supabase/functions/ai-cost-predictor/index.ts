@@ -24,6 +24,22 @@ async function getGraphToken(clientId: string, clientSecret: string, tenantId: s
   return (await resp.json()).access_token;
 }
 
+interface GraphSku {
+  skuPartNumber?: string;
+  consumedUnits?: number;
+  prepaidUnits?: { enabled?: number };
+}
+
+interface LicenseCost {
+  name: string;
+  total: number;
+  assigned: number;
+  unused: number;
+  monthlyPerUserCost: number;
+  totalMonthlyCost: number;
+  unusedMonthlyCost: number;
+}
+
 async function graphGet(token: string, ep: string) {
   const r = await fetch(`https://graph.microsoft.com/v1.0${ep}`, { headers: { Authorization: `Bearer ${token}` } });
   if (!r.ok) { console.error(`Graph ${ep}: ${r.status}`); return null; }
@@ -45,21 +61,21 @@ async function fetchLicenseData(token: string) {
     'MICROSOFT_365_COPILOT': 30, 'Microsoft_365_Copilot': 30,
   };
 
-  const licenses = skusData.map((s: any) => {
+  const licenses = skusData.map((s: GraphSku): LicenseCost => {
     const total = s.prepaidUnits?.enabled || 0;
     const assigned = s.consumedUnits || 0;
     const name = s.skuPartNumber || 'Unknown';
     const price = priceMap[name] || 0;
     return { name, total, assigned, unused: total - assigned, monthlyPerUserCost: price, totalMonthlyCost: total * price, unusedMonthlyCost: (total - assigned) * price };
-  }).filter((l: any) => l.total > 0);
+  }).filter((l: LicenseCost) => l.total > 0);
 
   return {
     totalUsers: users?.value?.length || 0,
     licenses,
-    totalMonthlyCost: licenses.reduce((acc: number, l: any) => acc + l.totalMonthlyCost, 0),
-    totalUnusedCost: licenses.reduce((acc: number, l: any) => acc + l.unusedMonthlyCost, 0),
-    totalLicenses: licenses.reduce((acc: number, l: any) => acc + l.total, 0),
-    assignedLicenses: licenses.reduce((acc: number, l: any) => acc + l.assigned, 0),
+    totalMonthlyCost: licenses.reduce((acc: number, l: LicenseCost) => acc + l.totalMonthlyCost, 0),
+    totalUnusedCost: licenses.reduce((acc: number, l: LicenseCost) => acc + l.unusedMonthlyCost, 0),
+    totalLicenses: licenses.reduce((acc: number, l: LicenseCost) => acc + l.total, 0),
+    assignedLicenses: licenses.reduce((acc: number, l: LicenseCost) => acc + l.assigned, 0),
   };
 }
 
@@ -81,7 +97,7 @@ serve(async (req) => {
     const AI_GATEWAY_URL = Deno.env.get('AI_GATEWAY_URL');
     if (!AI_GATEWAY_URL) throw new Error('AI_GATEWAY_URL is not configured');
 
-    let realData: any = legacyData || {};
+    let realData: unknown = legacyData || {};
 
     if (tenantConnectionIds?.length > 0) {
       const authHeader = req.headers.get('authorization');

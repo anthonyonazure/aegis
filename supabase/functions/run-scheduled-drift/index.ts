@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -95,6 +96,25 @@ interface CurrentResource {
   [key: string]: unknown;
 }
 
+type DbClient = SupabaseClient;
+
+interface ScheduleRunSummary {
+  name: string;
+  runId?: string;
+  tenantsChecked?: number;
+  tenantsWithDrift?: number;
+  failed?: number;
+  error?: string;
+}
+
+interface WebhookConfig {
+  id: string;
+  name: string;
+  url: string;
+  secret: string | null;
+  failure_count: number;
+}
+
 Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
@@ -149,7 +169,7 @@ Deno.serve(async (req) => {
     }
 
     const processedSchedules: string[] = [];
-    const results: Record<string, any> = {};
+    const results: Record<string, ScheduleRunSummary> = {};
 
     for (const schedule of schedules as ScheduledDriftConfig[]) {
       // Check if this schedule should run based on its cron expression
@@ -373,7 +393,7 @@ Deno.serve(async (req) => {
 });
 
 async function getTargetTenants(
-  supabase: any,
+  supabase: DbClient,
   schedule: ScheduledDriftConfig
 ): Promise<TenantConnection[]> {
   let query = supabase
@@ -479,7 +499,7 @@ async function fetchGraphResources(
 
 // Get stored credentials for a tenant connection
 async function getStoredCredentials(
-  supabase: any,
+  supabase: DbClient,
   tenantConnectionId: string,
   userId: string
 ): Promise<{ clientId: string; clientSecret: string; tenantId: string } | null> {
@@ -524,7 +544,7 @@ function getChangedKeys(baseline: Record<string, unknown>, current: Record<strin
 
 // Perform real drift detection using Graph API
 async function performRealDriftCheck(
-  supabase: any,
+  supabase: DbClient,
   tenant: TenantConnection,
   resourceIds: string[],
   baselineData: { resources: BaselineResource[]; exportId: string } | null,
@@ -623,7 +643,7 @@ async function performRealDriftCheck(
       // Create maps for comparison
       const baselineMap = new Map<string, BaselineResource>();
       for (const br of baselineResources) {
-        const id = br.resource_id || (br.data as any)?.id;
+        const id = br.resource_id || (br.data as { id?: string } | null)?.id;
         if (id) baselineMap.set(id, br);
       }
 
@@ -651,7 +671,7 @@ async function performRealDriftCheck(
           // Resource was removed
           removedResources.push({
             type: resourceType,
-            name: baseline.resource_name || (baseline.data as any)?.displayName || id,
+            name: baseline.resource_name || (baseline.data as { displayName?: string } | null)?.displayName || id,
             id,
           });
         } else {
@@ -695,7 +715,7 @@ async function performRealDriftCheck(
   };
 }
 
-async function checkShouldRun(supabase: any, schedule: ScheduledDriftConfig): Promise<boolean> {
+async function checkShouldRun(supabase: DbClient, schedule: ScheduledDriftConfig): Promise<boolean> {
   if (!schedule.last_run_at) {
     return true;
   }
@@ -749,7 +769,7 @@ function calculateNextRun(cronExpression: string): string {
 }
 
 async function triggerWebhooks(
-  supabase: any,
+  supabase: DbClient,
   userId: string,
   eventType: string,
   payload: Record<string, unknown>
@@ -792,8 +812,8 @@ async function triggerWebhooks(
 }
 
 async function sendWebhook(
-  supabase: any,
-  webhook: any,
+  supabase: DbClient,
+  webhook: WebhookConfig,
   eventType: string,
   payload: Record<string, unknown>,
   userId: string
@@ -871,7 +891,7 @@ async function generateSignature(payload: string, secret: string): Promise<strin
 
 // Auto-ticketing for PSA integrations
 async function createAutoTickets(
-  supabase: any,
+  supabase: DbClient,
   userId: string,
   scheduleId: string,
   scheduleName: string,

@@ -24,6 +24,34 @@ async function getGraphToken(clientId: string, clientSecret: string, tenantId: s
   return (await resp.json()).access_token;
 }
 
+interface GraphAuthRegistration {
+  isMfaRegistered?: boolean;
+}
+
+interface GraphUser {
+  userType?: string;
+}
+
+interface GraphCAPolicy {
+  displayName?: string;
+  state?: string;
+  conditions?: { users?: unknown; platforms?: unknown; locations?: unknown; applications?: unknown };
+  grantControls?: unknown;
+  sessionControls?: unknown;
+}
+
+interface GraphSku {
+  skuPartNumber?: string;
+  consumedUnits?: number;
+  prepaidUnits?: { enabled?: number };
+}
+
+interface LicenseSummary {
+  name?: string;
+  total: number;
+  assigned: number;
+}
+
 async function graphGet(token: string, ep: string, beta = false) {
   const r = await fetch(`${beta ? 'https://graph.microsoft.com/beta' : 'https://graph.microsoft.com/v1.0'}${ep}`, { headers: { Authorization: `Bearer ${token}` } });
   if (!r.ok) { console.error(`Graph ${ep}: ${r.status}`); return null; }
@@ -40,22 +68,22 @@ async function fetchConfigData(token: string) {
   ]);
 
   const usersData = users?.value || [];
-  const mfaEnabled = (authMethods?.value || []).filter((u: any) => u.isMfaRegistered).length;
+  const mfaEnabled = (authMethods?.value || []).filter((u: GraphAuthRegistration) => u.isMfaRegistered).length;
   const ss = secureScore?.value?.[0];
   const caData = caPolicies?.value || [];
 
   return {
-    conditionalAccessPolicies: caData.map((p: any) => ({
+    conditionalAccessPolicies: caData.map((p: GraphCAPolicy) => ({
       name: p.displayName, state: p.state,
       conditions: { users: p.conditions?.users, platforms: p.conditions?.platforms, locations: p.conditions?.locations, applications: p.conditions?.applications },
       grantControls: p.grantControls, sessionControls: p.sessionControls,
     })),
     totalUsers: usersData.length,
-    guestUsers: usersData.filter((u: any) => u.userType === 'Guest').length,
+    guestUsers: usersData.filter((u: GraphUser) => u.userType === 'Guest').length,
     mfaCoverage: usersData.length > 0 ? Math.round((mfaEnabled / usersData.length) * 100) : 0,
     secureScore: ss?.currentScore || 0,
     maxSecureScore: ss?.maxScore || 0,
-    licenses: (skus?.value || []).map((s: any) => ({ name: s.skuPartNumber, total: s.prepaidUnits?.enabled || 0, assigned: s.consumedUnits || 0 })).filter((l: any) => l.total > 0),
+    licenses: (skus?.value || []).map((s: GraphSku): LicenseSummary => ({ name: s.skuPartNumber, total: s.prepaidUnits?.enabled || 0, assigned: s.consumedUnits || 0 })).filter((l: LicenseSummary) => l.total > 0),
   };
 }
 
@@ -71,8 +99,8 @@ serve(async (req) => {
     const AI_GATEWAY_URL = Deno.env.get('AI_GATEWAY_URL');
     if (!AI_GATEWAY_URL) throw new Error('AI_GATEWAY_URL is not configured');
 
-    let realConfigData: any = legacyConfig || {};
-    let realContext: any = legacyContext || {};
+    let realConfigData: unknown = legacyConfig || {};
+    let realContext: unknown = legacyContext || {};
 
     if (tenantConnectionIds?.length > 0) {
       const authHeader = req.headers.get('authorization');

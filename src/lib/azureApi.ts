@@ -49,7 +49,7 @@ export async function testAzureConnection(
       success: true,
       accessToken: data.accessToken,
       expiresIn: data.expiresIn,
-      subscriptions: data.subscriptions?.map((sub: any) => ({
+      subscriptions: data.subscriptions?.map((sub: AzureSubscription) => ({
         subscriptionId: sub.subscriptionId,
         displayName: sub.displayName,
         state: sub.state,
@@ -121,7 +121,7 @@ export async function listAzureSubscriptions(
 
     return {
       success: true,
-      subscriptions: data.subscriptions?.map((sub: any) => ({
+      subscriptions: data.subscriptions?.map((sub: AzureSubscription) => ({
         subscriptionId: sub.subscriptionId,
         displayName: sub.displayName,
         state: sub.state,
@@ -158,7 +158,7 @@ export async function getAzureTokenFromStoredCredentials(
       success: true,
       accessToken: data.accessToken,
       expiresIn: data.expiresIn,
-      subscriptions: data.subscriptions?.map((sub: any) => ({
+      subscriptions: data.subscriptions?.map((sub: AzureSubscription) => ({
         subscriptionId: sub.subscriptionId,
         displayName: sub.displayName,
         state: sub.state,

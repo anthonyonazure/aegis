@@ -43,7 +43,8 @@ export const ScriptGeneratorSection = () => {
   const toggleCmd = (id: string) => {
     setSelectedCmds(prev => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   };
@@ -176,7 +177,7 @@ export const ScriptGeneratorSection = () => {
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <Label>Investigation Type</Label>
-                <Select value={investigationType} onValueChange={(v: any) => setInvestigationType(v)}>
+                <Select value={investigationType} onValueChange={(v) => setInvestigationType(v as 'tenant' | 'user' | 'both')}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="tenant">Tenant-Wide</SelectItem>

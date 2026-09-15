@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const corsHeaders = {
@@ -71,6 +71,76 @@ const TEAMS_PHONE_SKU_PARTS = [
   'TEAMS_PHONE_STANDARD', // Teams Phone Standard
 ];
 
+// Microsoft Graph response shapes (only the fields this function reads)
+interface GraphCollection<T> {
+  value?: T[];
+}
+
+interface SubscribedSku {
+  skuId: string;
+  skuPartNumber?: string;
+  prepaidUnits?: { enabled?: number };
+  consumedUnits?: number;
+}
+
+interface ConditionalAccessPolicy {
+  state?: string;
+  grantControls?: { builtInControls?: string[] } | null;
+}
+
+interface AuthMethodsReport {
+  totalUserCount?: number;
+  userRegistrationMethodCount?: { userCount?: number }[];
+}
+
+interface AssignedPlan {
+  service?: string;
+  capabilityStatus?: string;
+}
+
+interface Organization {
+  assignedPlans?: AssignedPlan[];
+}
+
+interface GraphUser {
+  id: string;
+  mail?: string | null;
+  mySite?: string | null;
+  displayName?: string;
+  userPrincipalName?: string;
+  signInActivity?: { lastSignInDateTime?: string };
+}
+
+interface SharePointSite {
+  sharingCapability?: string;
+}
+
+interface TeamsAppSettings {
+  allowUserRequestsForTranscription?: boolean;
+}
+
+interface CopilotUsageUser {
+  lastActivityDate?: string | null;
+  copilotChatMessageCount?: number;
+  copilotInWordUsed?: boolean;
+  copilotInExcelUsed?: boolean;
+  copilotInPowerPointUsed?: boolean;
+  copilotInOutlookUsed?: boolean;
+  copilotInTeamsUsed?: boolean;
+}
+
+interface TeamsApp {
+  id: string;
+  displayName?: string;
+  appDefinitions?: { description?: string; publisherName?: string; bot?: unknown }[];
+}
+
+interface DecryptedCredential {
+  client_id: string;
+  client_secret: string;
+  tenant_id: string;
+}
+
 function sanitizeError(error: unknown): string {
   const errorMessage = error instanceof Error ? error.message : String(error);
   console.error('Copilot API error:', errorMessage);
@@ -88,7 +158,7 @@ function sanitizeError(error: unknown): string {
   return 'An error occurred. Please try again.';
 }
 
-async function verifyAuth(req: Request): Promise<{ userId: string; supabase: any; authHeader: string } | { error: string; status: number }> {
+async function verifyAuth(req: Request): Promise<{ userId: string; supabase: SupabaseClient; authHeader: string } | { error: string; status: number }> {
   const authHeader = req.headers.get('Authorization');
   
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -116,7 +186,7 @@ async function verifyAuth(req: Request): Promise<{ userId: string; supabase: any
 }
 
 async function getGraphToken(
-  supabaseClient: any,
+  supabaseClient: SupabaseClient,
   tenantConnectionId: string,
   userId: string
 ): Promise<{ token: string; tenantId: string } | { error: string }> {
@@ -131,7 +201,7 @@ async function getGraphToken(
     return { error: 'Failed to retrieve tenant credentials' };
   }
 
-  const { client_id, client_secret, tenant_id } = credentials[0];
+  const { client_id, client_secret, tenant_id } = credentials[0] as DecryptedCredential;
   
   const tokenEndpoint = `https://login.microsoftonline.com/${tenant_id}/oauth2/v2.0/token`;
   const params = new URLSearchParams({
@@ -161,7 +231,7 @@ async function getGraphToken(
   }
 }
 
-async function graphApiCall(token: string, endpoint: string): Promise<{ data: any } | { error: string }> {
+async function graphApiCall<T = unknown>(token: string, endpoint: string): Promise<{ data: T } | { error: string }> {
   try {
     const response = await fetch(`https://graph.microsoft.com/v1.0${endpoint}`, {
       headers: {
@@ -176,13 +246,13 @@ async function graphApiCall(token: string, endpoint: string): Promise<{ data: an
       return { error: `Graph API error: ${response.status}` };
     }
 
-    return { data: await response.json() };
+    return { data: (await response.json()) as T };
   } catch (error) {
     return { error: sanitizeError(error) };
   }
 }
 
-async function graphApiBetaCall(token: string, endpoint: string): Promise<{ data: any } | { error: string }> {
+async function graphApiBetaCall<T = unknown>(token: string, endpoint: string): Promise<{ data: T } | { error: string }> {
   try {
     const response = await fetch(`https://graph.microsoft.com/beta${endpoint}`, {
       headers: {
@@ -198,17 +268,17 @@ async function graphApiBetaCall(token: string, endpoint: string): Promise<{ data
       return { error: `Graph API error: ${response.status}` };
     }
 
-    return { data: await response.json() };
+    return { data: (await response.json()) as T };
   } catch (error) {
     return { error: sanitizeError(error) };
   }
 }
 
 // Helper: safe Graph call that returns null on error instead of throwing
-async function safeGraphCall(token: string, endpoint: string, beta = false): Promise<any | null> {
+async function safeGraphCall<T>(token: string, endpoint: string, beta = false): Promise<T | null> {
   const result = beta
-    ? await graphApiBetaCall(token, endpoint)
-    : await graphApiCall(token, endpoint);
+    ? await graphApiBetaCall<T>(token, endpoint)
+    : await graphApiCall<T>(token, endpoint);
   return 'data' in result ? result.data : null;
 }
 
@@ -230,41 +300,41 @@ async function performReadinessCheck(token: string, tenantId: string) {
     sharePointData,
     teamsSettingsData,
   ] = await Promise.all([
-    safeGraphCall(token, '/subscribedSkus'),
-    safeGraphCall(token, '/identity/conditionalAccess/policies'),
-    safeGraphCall(token, '/reports/authenticationMethods/usersRegisteredByMethod?usersRegisteredByMethodNames=microsoftAuthenticator,softwareOneTimePasscode', true),
-    safeGraphCall(token, '/organization?$select=displayName,verifiedDomains,assignedPlans'),
-    safeGraphCall(token, '/users?$top=5&$select=id,mail,mailboxSettings'),
-    safeGraphCall(token, '/users?$top=5&$select=id,mySite'),
-    safeGraphCall(token, '/security/informationProtection/sensitivityLabels?$top=5', true),
-    safeGraphCall(token, '/search/acronyms?$top=1', true),
-    safeGraphCall(token, '/sites/root?$select=id,webUrl,sharingCapability', true),
-    safeGraphCall(token, '/teamwork/teamsAppSettings', true),
+    safeGraphCall<GraphCollection<SubscribedSku>>(token, '/subscribedSkus'),
+    safeGraphCall<GraphCollection<ConditionalAccessPolicy>>(token, '/identity/conditionalAccess/policies'),
+    safeGraphCall<AuthMethodsReport>(token, '/reports/authenticationMethods/usersRegisteredByMethod?usersRegisteredByMethodNames=microsoftAuthenticator,softwareOneTimePasscode', true),
+    safeGraphCall<GraphCollection<Organization>>(token, '/organization?$select=displayName,verifiedDomains,assignedPlans'),
+    safeGraphCall<GraphCollection<GraphUser>>(token, '/users?$top=5&$select=id,mail,mailboxSettings'),
+    safeGraphCall<GraphCollection<GraphUser>>(token, '/users?$top=5&$select=id,mySite'),
+    safeGraphCall<GraphCollection<unknown>>(token, '/security/informationProtection/sensitivityLabels?$top=5', true),
+    safeGraphCall<GraphCollection<unknown>>(token, '/search/acronyms?$top=1', true),
+    safeGraphCall<SharePointSite>(token, '/sites/root?$select=id,webUrl,sharingCapability', true),
+    safeGraphCall<TeamsAppSettings>(token, '/teamwork/teamsAppSettings', true),
   ]);
 
   // ── 1. LICENSING (weight 15) ──
   const skus = skusData?.value || [];
-  const copilotSkus = skus.filter((sku: any) =>
+  const copilotSkus = skus.filter((sku: SubscribedSku) =>
     COPILOT_SKU_IDS.includes(sku.skuId) ||
     sku.skuPartNumber?.toLowerCase().includes('copilot')
   );
-  const copilotLicenseCount = copilotSkus.reduce((s: number, k: any) => s + (k.prepaidUnits?.enabled || 0), 0);
-  const consumedLicenses = copilotSkus.reduce((s: number, k: any) => s + (k.consumedUnits || 0), 0);
+  const copilotLicenseCount = copilotSkus.reduce((s: number, k: SubscribedSku) => s + (k.prepaidUnits?.enabled || 0), 0);
+  const consumedLicenses = copilotSkus.reduce((s: number, k: SubscribedSku) => s + (k.consumedUnits || 0), 0);
   const licensingReady = copilotLicenseCount > 0;
   const licensingDetails = {
     copilotLicenses: copilotLicenseCount,
     consumedLicenses,
     availableLicenses: copilotLicenseCount - consumedLicenses,
-    skus: copilotSkus.map((s: any) => ({ name: s.skuPartNumber, enabled: s.prepaidUnits?.enabled || 0, consumed: s.consumedUnits || 0 })),
+    skus: copilotSkus.map((s: SubscribedSku) => ({ name: s.skuPartNumber, enabled: s.prepaidUnits?.enabled || 0, consumed: s.consumedUnits || 0 })),
   };
   if (!licensingReady) recommendations.push('Purchase Microsoft 365 Copilot licenses to enable Copilot features.');
 
   // ── 2. IDENTITY & ACCESS (weight 15) ──
   const caPolicies = caPoliciesData?.value || [];
-  const activeCAPolicies = caPolicies.filter((p: any) => p.state === 'enabled' || p.state === 'enabledForReportingButNotEnforced');
+  const activeCAPolicies = caPolicies.filter((p: ConditionalAccessPolicy) => p.state === 'enabled' || p.state === 'enabledForReportingButNotEnforced');
   const mfaRegistered = authMethodsData?.totalUserCount || 0;
   const mfaCapable = authMethodsData?.userRegistrationMethodCount?.[0]?.userCount || 0;
-  const hasMFA = mfaCapable > 0 || activeCAPolicies.some((p: any) =>
+  const hasMFA = mfaCapable > 0 || activeCAPolicies.some((p: ConditionalAccessPolicy) =>
     p.grantControls?.builtInControls?.includes('mfa')
   );
   const hasCA = activeCAPolicies.length > 0;
@@ -283,17 +353,17 @@ async function performReadinessCheck(token: string, tenantId: string) {
 
   // ── 3. EXCHANGE & MAILBOX (weight 10) ──
   const mailboxUsers = usersMailboxData?.value || [];
-  const hasExchangeMailboxes = mailboxUsers.some((u: any) => u.mail != null);
+  const hasExchangeMailboxes = mailboxUsers.some((u: GraphUser) => u.mail != null);
   const exchangeReady = hasExchangeMailboxes;
   const exchangeDetails = {
     mailboxesDetected: hasExchangeMailboxes,
     sampleUsersChecked: mailboxUsers.length,
-    usersWithMailbox: mailboxUsers.filter((u: any) => u.mail != null).length,
+    usersWithMailbox: mailboxUsers.filter((u: GraphUser) => u.mail != null).length,
   };
   if (!exchangeReady) recommendations.push('Ensure users have Exchange Online mailboxes hosted in the cloud (required for Copilot in Outlook).');
 
   // ── 4. DATA GOVERNANCE (weight 15) ──
-  const hasLabels = labelsData?.value?.length > 0;
+  const hasLabels = (labelsData?.value?.length ?? 0) > 0;
   const dataGovernanceReady = hasLabels;
   const dataGovernanceDetails = {
     sensitivityLabelsEnabled: hasLabels,
@@ -305,13 +375,13 @@ async function performReadinessCheck(token: string, tenantId: string) {
 
   // ── 5. SHAREPOINT & ONEDRIVE (weight 10) ──
   const oneDriveUsers = usersOneDriveData?.value || [];
-  const hasOneDrive = oneDriveUsers.some((u: any) => u.mySite != null && u.mySite !== '');
+  const hasOneDrive = oneDriveUsers.some((u: GraphUser) => u.mySite != null && u.mySite !== '');
   const sharingCapability = sharePointData?.sharingCapability;
   const isOversharing = sharingCapability === 'ExternalUserAndGuestSharing' || sharingCapability === 'Anyone';
   const sharePointReady = hasOneDrive && !isOversharing;
   const sharePointDetails = {
     oneDriveProvisioned: hasOneDrive,
-    usersWithOneDrive: oneDriveUsers.filter((u: any) => u.mySite).length,
+    usersWithOneDrive: oneDriveUsers.filter((u: GraphUser) => u.mySite).length,
     sharingCapability: sharingCapability || 'unknown',
     overshareRisk: isOversharing ? 'high' : 'low',
   };
@@ -320,7 +390,7 @@ async function performReadinessCheck(token: string, tenantId: string) {
 
   // ── 6. TEAMS & VOICE (weight 10) ──
   const teamsTranscription = teamsSettingsData?.allowUserRequestsForTranscription ?? null;
-  const hasTeamsPhone = skus.some((sku: any) =>
+  const hasTeamsPhone = skus.some((sku: SubscribedSku) =>
     TEAMS_PHONE_SKU_PARTS.some(part => sku.skuPartNumber?.toUpperCase().includes(part))
   );
   const teamsReady = teamsTranscription !== false; // null means couldn't check, treat as possibly ok
@@ -336,7 +406,7 @@ async function performReadinessCheck(token: string, tenantId: string) {
   // ── 7. APPS & UPDATE CHANNEL (weight 10) ──
   // Update channel and Connected Experiences require Intune or config manager — check via org plans
   const assignedPlans = orgData?.value?.[0]?.assignedPlans || [];
-  const hasIntune = assignedPlans.some((p: any) => p.service === 'MicrosoftIntune' && p.capabilityStatus === 'Enabled');
+  const hasIntune = assignedPlans.some((p: AssignedPlan) => p.service === 'MicrosoftIntune' && p.capabilityStatus === 'Enabled');
   const appsDetails = {
     updateChannelVerifiable: hasIntune,
     updateChannelRecommendation: 'Current Channel or Monthly Enterprise Channel',
@@ -410,34 +480,34 @@ async function performReadinessCheck(token: string, tenantId: string) {
 
 // Usage Analytics
 async function getUsageAnalytics(token: string, period: string) {
-  const usageResult = await graphApiBetaCall(token, `/reports/getMicrosoft365CopilotUsageUserDetail(period='${period}')`);
-  const usersResult = await graphApiCall(token, '/users/$count');
+  const usageResult = await graphApiBetaCall<GraphCollection<CopilotUsageUser>>(token, `/reports/getMicrosoft365CopilotUsageUserDetail(period='${period}')`);
+  const usersResult = await graphApiCall<number>(token, '/users/$count');
   const totalUsers = 'data' in usersResult ? (usersResult.data || 0) : 100;
 
   if ('data' in usageResult && usageResult.data.value) {
     const users = usageResult.data.value;
-    const activeUsers = users.filter((u: any) => u.lastActivityDate).length;
+    const activeUsers = users.filter((u: CopilotUsageUser) => u.lastActivityDate).length;
     return {
       totalUsers,
       activeUsers,
-      totalQueries: users.reduce((sum: number, u: any) => sum + (u.copilotChatMessageCount || 0), 0),
+      totalQueries: users.reduce((sum: number, u: CopilotUsageUser) => sum + (u.copilotChatMessageCount || 0), 0),
       avgQueriesPerUser: activeUsers > 0
-        ? users.reduce((sum: number, u: any) => sum + (u.copilotChatMessageCount || 0), 0) / activeUsers
+        ? users.reduce((sum: number, u: CopilotUsageUser) => sum + (u.copilotChatMessageCount || 0), 0) / activeUsers
         : 0,
       adoptionRate: totalUsers > 0 ? (activeUsers / totalUsers) * 100 : 0,
       topFeatures: [
-        { name: 'Word', usage: users.filter((u: any) => u.copilotInWordUsed).length },
-        { name: 'Excel', usage: users.filter((u: any) => u.copilotInExcelUsed).length },
-        { name: 'PowerPoint', usage: users.filter((u: any) => u.copilotInPowerPointUsed).length },
-        { name: 'Outlook', usage: users.filter((u: any) => u.copilotInOutlookUsed).length },
-        { name: 'Teams', usage: users.filter((u: any) => u.copilotInTeamsUsed).length },
+        { name: 'Word', usage: users.filter((u: CopilotUsageUser) => u.copilotInWordUsed).length },
+        { name: 'Excel', usage: users.filter((u: CopilotUsageUser) => u.copilotInExcelUsed).length },
+        { name: 'PowerPoint', usage: users.filter((u: CopilotUsageUser) => u.copilotInPowerPointUsed).length },
+        { name: 'Outlook', usage: users.filter((u: CopilotUsageUser) => u.copilotInOutlookUsed).length },
+        { name: 'Teams', usage: users.filter((u: CopilotUsageUser) => u.copilotInTeamsUsed).length },
       ],
       usageByApp: {
-        Word: users.filter((u: any) => u.copilotInWordUsed).length,
-        Excel: users.filter((u: any) => u.copilotInExcelUsed).length,
-        PowerPoint: users.filter((u: any) => u.copilotInPowerPointUsed).length,
-        Outlook: users.filter((u: any) => u.copilotInOutlookUsed).length,
-        Teams: users.filter((u: any) => u.copilotInTeamsUsed).length,
+        Word: users.filter((u: CopilotUsageUser) => u.copilotInWordUsed).length,
+        Excel: users.filter((u: CopilotUsageUser) => u.copilotInExcelUsed).length,
+        PowerPoint: users.filter((u: CopilotUsageUser) => u.copilotInPowerPointUsed).length,
+        Outlook: users.filter((u: CopilotUsageUser) => u.copilotInOutlookUsed).length,
+        Teams: users.filter((u: CopilotUsageUser) => u.copilotInTeamsUsed).length,
       },
     };
   }
@@ -461,26 +531,26 @@ async function getUsageAnalytics(token: string, period: string) {
 
 // Licensing Status
 async function getLicensingStatus(token: string) {
-  const skusResult = await graphApiCall(token, '/subscribedSkus');
+  const skusResult = await graphApiCall<GraphCollection<SubscribedSku>>(token, '/subscribedSkus');
   if (!('data' in skusResult)) {
     return { totalCopilotLicenses: 0, assignedLicenses: 0, availableLicenses: 0, utilizationRate: 0, skuBreakdown: [], licensedUsers: [] };
   }
 
   const skus = skusResult.data.value || [];
-  const copilotSkus = skus.filter((sku: any) =>
+  const copilotSkus = skus.filter((sku: SubscribedSku) =>
     COPILOT_SKU_IDS.includes(sku.skuId) || sku.skuPartNumber?.toLowerCase().includes('copilot')
   );
-  const totalLicenses = copilotSkus.reduce((sum: number, sku: any) => sum + (sku.prepaidUnits?.enabled || 0), 0);
-  const assignedLicenses = copilotSkus.reduce((sum: number, sku: any) => sum + (sku.consumedUnits || 0), 0);
+  const totalLicenses = copilotSkus.reduce((sum: number, sku: SubscribedSku) => sum + (sku.prepaidUnits?.enabled || 0), 0);
+  const assignedLicenses = copilotSkus.reduce((sum: number, sku: SubscribedSku) => sum + (sku.consumedUnits || 0), 0);
 
-  let licensedUsers: Array<{ id: string; displayName: string; email: string; lastActive?: string }> = [];
+  let licensedUsers: Array<{ id: string; displayName?: string; email?: string; lastActive?: string }> = [];
   if (copilotSkus.length > 0) {
-    const skuIds = copilotSkus.map((s: any) => s.skuId).join("','");
-    const usersResult = await graphApiCall(token,
+    const skuIds = copilotSkus.map((s: SubscribedSku) => s.skuId).join("','");
+    const usersResult = await graphApiCall<GraphCollection<GraphUser>>(token,
       `/users?$filter=assignedLicenses/any(l:l/skuId in ('${skuIds}'))&$select=id,displayName,userPrincipalName,signInActivity&$top=50`
     );
     if ('data' in usersResult) {
-      licensedUsers = (usersResult.data.value || []).map((u: any) => ({
+      licensedUsers = (usersResult.data.value || []).map((u: GraphUser) => ({
         id: u.id, displayName: u.displayName, email: u.userPrincipalName, lastActive: u.signInActivity?.lastSignInDateTime,
       }));
     }
@@ -491,16 +561,16 @@ async function getLicensingStatus(token: string) {
     assignedLicenses,
     availableLicenses: totalLicenses - assignedLicenses,
     utilizationRate: totalLicenses > 0 ? (assignedLicenses / totalLicenses) * 100 : 0,
-    skuBreakdown: copilotSkus.map((sku: any) => ({ name: sku.skuPartNumber || 'Unknown', total: sku.prepaidUnits?.enabled || 0, assigned: sku.consumedUnits || 0 })),
+    skuBreakdown: copilotSkus.map((sku: SubscribedSku) => ({ name: sku.skuPartNumber || 'Unknown', total: sku.prepaidUnits?.enabled || 0, assigned: sku.consumedUnits || 0 })),
     licensedUsers,
   };
 }
 
 // Get Copilot plugins/connectors
 async function getPlugins(token: string) {
-  const appsResult = await graphApiCall(token, "/appCatalogs/teamsApps?$filter=distributionMethod eq 'organization'&$expand=appDefinitions");
+  const appsResult = await graphApiCall<GraphCollection<TeamsApp>>(token, "/appCatalogs/teamsApps?$filter=distributionMethod eq 'organization'&$expand=appDefinitions");
   if (!('data' in appsResult)) return [];
-  return (appsResult.data.value || []).map((app: any) => ({
+  return (appsResult.data.value || []).map((app: TeamsApp) => ({
     id: app.id,
     displayName: app.displayName,
     description: app.appDefinitions?.[0]?.description,

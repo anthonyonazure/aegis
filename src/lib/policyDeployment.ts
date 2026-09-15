@@ -249,7 +249,7 @@ export async function getDeploymentTargets(): Promise<DeploymentTarget[]> {
   return connections.map(conn => ({
     tenantConnectionId: conn.id,
     tenantName: conn.display_name || conn.tenant_name || 'Unknown Tenant',
-    customerName: (conn.customers as any)?.name,
+    customerName: (conn.customers as { name: string } | null)?.name,
     customerId: conn.customer_id || undefined,
   }));
 }
