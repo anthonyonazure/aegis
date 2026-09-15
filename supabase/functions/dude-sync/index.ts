@@ -519,7 +519,7 @@ async function executeSync(
           });
           devicesAdded++;
         } catch (e) {
-          details[`add_error_${device.id}`] = String(e);
+          details[`add_error_${device.id}`] = (e instanceof Error ? e.message : String(e));
           devicesSkipped++;
         }
       }
@@ -530,7 +530,7 @@ async function executeSync(
           await graphDelete(token, `/groups/${mapping.device_group_id}/members/${device.id}/$ref`);
           devicesRemoved++;
         } catch (e) {
-          details[`remove_error_${device.id}`] = String(e);
+          details[`remove_error_${device.id}`] = (e instanceof Error ? e.message : String(e));
           devicesSkipped++;
         }
       }
@@ -546,7 +546,7 @@ async function executeSync(
           const nestedResult = await ensureNestedGroups(token, mapping.device_group_id, nestedIds);
           details.nestedDeviceGroups = nestedResult;
         } catch (e) {
-          details.nestedDeviceGroups = { error: String(e) };
+          details.nestedDeviceGroups = { error: (e instanceof Error ? e.message : String(e)) };
         }
       }
 
@@ -558,7 +558,7 @@ async function executeSync(
           const auResult = await addUsersToAdminUnit(token, mapping.admin_unit_id, mapping.user_group_id);
           details.adminUnitUserSync = { adminUnitId: mapping.admin_unit_id, ...auResult };
         } catch (e) {
-          details.adminUnitUserSync = { error: String(e) };
+          details.adminUnitUserSync = { error: (e instanceof Error ? e.message : String(e)) };
         }
       }
 
@@ -582,13 +582,13 @@ async function executeSync(
             ...(tagResult.reason ? { reason: tagResult.reason } : {}),
           };
         } catch (e) {
-          details.defenderTag = { error: String(e) };
+          details.defenderTag = { error: (e instanceof Error ? e.message : String(e)) };
         }
       }
     }
   } catch (e) {
     status = 'error';
-    details.error = String(e);
+    details.error = (e instanceof Error ? e.message : String(e));
   }
 
   const durationMs = Date.now() - startTime;
