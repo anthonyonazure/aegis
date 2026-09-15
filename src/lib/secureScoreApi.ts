@@ -77,7 +77,7 @@ export async function getSecureScores(): Promise<TenantSecureScore[]> {
     throw new Error('Failed to fetch secure scores');
   }
 
-  return (scores || []).map((score: any) => ({
+  return (scores || []).map((score) => ({
     id: score.id,
     tenantConnectionId: score.tenant_connection_id,
     tenantName: score.tenant_connections?.display_name || 
@@ -85,11 +85,11 @@ export async function getSecureScores(): Promise<TenantSecureScore[]> {
                 score.tenant_connections?.tenant_id || 'Unknown',
     customerId: score.tenant_connections?.customer_id,
     customerName: score.tenant_connections?.customers?.name,
-    currentScore: parseFloat(score.current_score) || 0,
-    maxScore: parseFloat(score.max_score) || 0,
-    scorePercentage: parseFloat(score.score_percentage) || 0,
-    controlScores: score.control_scores || [],
-    improvementActions: score.improvement_actions || [],
+    currentScore: parseFloat(String(score.current_score)) || 0,
+    maxScore: parseFloat(String(score.max_score)) || 0,
+    scorePercentage: parseFloat(String(score.score_percentage)) || 0,
+    controlScores: (score.control_scores || []) as unknown as ControlScore[],
+    improvementActions: (score.improvement_actions || []) as unknown as ImprovementAction[],
     updatedAt: new Date(score.updated_at),
   }));
 }
@@ -119,11 +119,11 @@ export async function getScoreHistory(
     throw new Error('Failed to fetch score history');
   }
 
-  return (data || []).map((h: any) => ({
+  return (data || []).map((h) => ({
     id: h.id,
     tenantConnectionId: h.tenant_connection_id,
-    score: parseFloat(h.score) || 0,
-    maxScore: parseFloat(h.max_score) || 0,
+    score: parseFloat(String(h.score)) || 0,
+    maxScore: parseFloat(String(h.max_score)) || 0,
     recordedAt: new Date(h.recorded_at),
   }));
 }
@@ -131,7 +131,7 @@ export async function getScoreHistory(
 // Refresh scores from Microsoft Graph API
 export async function refreshSecureScores(
   tenantConnectionIds?: string[]
-): Promise<{ processed: number; failed: number; errors?: any[] }> {
+): Promise<{ processed: number; failed: number; errors?: unknown[] }> {
   const { data: { session } } = await supabase.auth.getSession();
 
   if (!session) {

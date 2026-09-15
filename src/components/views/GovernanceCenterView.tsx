@@ -446,7 +446,7 @@ export function GovernanceCenterView({ onNavigate, onDeployPolicy }: GovernanceC
         const metrics = data.metrics;
         
         // Map license breakdown with prices
-        const licenseBreakdown: LicenseBreakdown[] = (metrics.licensing.licensesByProduct || []).map((lic: any) => ({
+        const licenseBreakdown: LicenseBreakdown[] = (metrics.licensing.licensesByProduct || []).map((lic: { productName: string; total: number; assigned: number; available: number }) => ({
           productName: lic.productName,
           total: lic.total,
           assigned: lic.assigned,
@@ -483,7 +483,7 @@ export function GovernanceCenterView({ onNavigate, onDeployPolicy }: GovernanceC
 
         // Save metrics to history for trend tracking
         const licenseMonthlyCost = licenseBreakdown.reduce((sum, lic) => sum + (lic.total * lic.monthlyPrice), 0);
-        const actionCounts = (data.actions || []).reduce((counts: Record<string, number>, action: any) => {
+        const actionCounts = (data.actions || []).reduce((counts: Record<string, number>, action: { severity: string }) => {
           counts[action.severity] = (counts[action.severity] || 0) + 1;
           return counts;
         }, {});
@@ -1153,7 +1153,7 @@ export function GovernanceCenterView({ onNavigate, onDeployPolicy }: GovernanceC
                   {metricsHistory.length} data points in the last {historyRange} days
                 </span>
               </div>
-              <Select value={historyRange} onValueChange={(v) => setHistoryRange(v as any)}>
+              <Select value={historyRange} onValueChange={(v) => setHistoryRange(v as '7' | '14' | '30' | '90')}>
                 <SelectTrigger className="w-32">
                   <SelectValue />
                 </SelectTrigger>

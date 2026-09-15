@@ -42,7 +42,7 @@ export interface IntuneCompliancePolicy {
   createdDateTime: string;
   lastModifiedDateTime: string;
   '@odata.type': string;
-  assignments?: any[];
+  assignments?: unknown[];
 }
 
 export interface IntuneDeviceConfig {
@@ -82,7 +82,7 @@ export interface IntuneAutopilotProfile {
   description: string;
   createdDateTime: string;
   lastModifiedDateTime: string;
-  outOfBoxExperienceSettings?: any;
+  outOfBoxExperienceSettings?: Record<string, unknown>;
 }
 
 export type IntuneSectionId = 

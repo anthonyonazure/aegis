@@ -384,12 +384,14 @@ export const ScheduledDriftView = () => {
     switch (config.target_type) {
       case 'all':
         return 'All Tenants';
-      case 'customer':
+      case 'customer': {
         const customer = customers.find(c => c.id === config.target_customer_id);
         return customer?.name || 'Unknown Customer';
-      case 'group':
+      }
+      case 'group': {
         const group = tenantGroups.find(g => g.id === config.target_group_id);
         return group?.name || 'Unknown Group';
+      }
       case 'selected':
         return `${config.target_tenant_ids.length} Selected Tenants`;
       default:

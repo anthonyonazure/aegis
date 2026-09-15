@@ -24,6 +24,21 @@ async function getGraphToken(clientId: string, clientSecret: string, tenantId: s
   return (await resp.json()).access_token;
 }
 
+interface GraphAuthRegistration {
+  isMfaRegistered?: boolean;
+}
+
+interface GraphUser {
+  userType?: string;
+  signInActivity?: { lastSignInDateTime?: string | null };
+}
+
+interface GraphSku {
+  skuPartNumber?: string;
+  consumedUnits?: number;
+  prepaidUnits?: { enabled?: number };
+}
+
 async function graphGet(token: string, ep: string, beta = false) {
   const r = await fetch(`${beta ? 'https://graph.microsoft.com/beta' : 'https://graph.microsoft.com/v1.0'}${ep}`, { headers: { Authorization: `Bearer ${token}` } });
   if (!r.ok) { console.error(`Graph ${ep}: ${r.status}`); return null; }
@@ -41,21 +56,21 @@ async function fetchReportData(token: string, tenantName: string) {
   ]);
 
   const usersData = users?.value || [];
-  const mfaEnabled = (authMethods?.value || []).filter((u: any) => u.isMfaRegistered).length;
+  const mfaEnabled = (authMethods?.value || []).filter((u: GraphAuthRegistration) => u.isMfaRegistered).length;
   const ss = secureScore?.value?.[0];
   const skusData = skus?.value || [];
   let totalLic = 0, assignedLic = 0;
-  skusData.forEach((s: any) => { totalLic += s.prepaidUnits?.enabled || 0; assignedLic += s.consumedUnits || 0; });
+  skusData.forEach((s: GraphSku) => { totalLic += s.prepaidUnits?.enabled || 0; assignedLic += s.consumedUnits || 0; });
 
   const ninetyDaysAgo = new Date(); ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-  const staleAccounts = usersData.filter((u: any) => { const last = u.signInActivity?.lastSignInDateTime; return !last || new Date(last) < ninetyDaysAgo; }).length;
+  const staleAccounts = usersData.filter((u: GraphUser) => { const last = u.signInActivity?.lastSignInDateTime; return !last || new Date(last) < ninetyDaysAgo; }).length;
 
   return {
     tenantName,
     totalUsers: usersData.length,
-    licensedUsers: usersData.filter((u: any) => u.userType !== 'Guest').length,
+    licensedUsers: usersData.filter((u: GraphUser) => u.userType !== 'Guest').length,
     adminUsers: 0, // would need directoryRoles
-    guestUsers: usersData.filter((u: any) => u.userType === 'Guest').length,
+    guestUsers: usersData.filter((u: GraphUser) => u.userType === 'Guest').length,
     secureScore: ss?.currentScore || 0,
     maxSecureScore: ss?.maxScore || 0,
     mfaEnabledPercent: usersData.length > 0 ? Math.round((mfaEnabled / usersData.length) * 100) : 0,
@@ -79,7 +94,7 @@ serve(async (req) => {
     const AI_GATEWAY_URL = Deno.env.get('AI_GATEWAY_URL');
     if (!AI_GATEWAY_URL) throw new Error('AI_GATEWAY_URL is not configured');
 
-    let realData: any = legacyData || {};
+    let realData: unknown = legacyData || {};
 
     if (tenantConnectionIds?.length > 0) {
       const authHeader = req.headers.get('authorization');
@@ -87,7 +102,7 @@ serve(async (req) => {
       const { data: { user }, error: authErr } = await supabase.auth.getUser();
       if (authErr || !user) return new Response(JSON.stringify({ error: 'Authentication required' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
-      const tenantsData: any[] = [];
+      const tenantsData: Record<string, unknown>[] = [];
       for (let i = 0; i < tenantConnectionIds.length; i++) {
         try {
           const { data: creds } = await supabase.rpc('get_decrypted_credential', { p_tenant_connection_id: tenantConnectionIds[i], p_user_id: user.id });

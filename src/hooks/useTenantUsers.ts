@@ -31,7 +31,7 @@ export function useTenantUsers() {
 
       if (data?.value) {
         setUsers(
-          (data.value || []).map((u: any) => ({
+          (data.value || []).map((u: Partial<TenantUser>) => ({
             id: u.id,
             displayName: u.displayName || '',
             userPrincipalName: u.userPrincipalName || '',

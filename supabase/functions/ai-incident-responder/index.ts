@@ -26,7 +26,39 @@ async function getGraphToken(clientId: string, clientSecret: string, tenantId: s
   return (await resp.json()).access_token;
 }
 
-async function fetchGraph(token: string, endpoint: string): Promise<any> {
+interface GraphCollection<T> {
+  value?: T[];
+  '@odata.count'?: number;
+}
+
+interface GraphRiskyUser {
+  userDisplayName?: string;
+  userPrincipalName?: string;
+  riskLevel?: string;
+  riskState?: string;
+}
+
+interface GraphSignIn {
+  userDisplayName?: string;
+  userPrincipalName?: string;
+  status?: { errorCode?: number };
+  location?: { city?: string };
+  ipAddress?: string;
+  riskLevelDuringSignIn?: string;
+  appDisplayName?: string;
+}
+
+interface GraphCAPolicy {
+  displayName?: string;
+  state?: string;
+}
+
+interface GraphSecureScore {
+  currentScore?: number;
+  maxScore?: number;
+}
+
+async function fetchGraph<T>(token: string, endpoint: string): Promise<GraphCollection<T> | null> {
   const resp = await fetch(`https://graph.microsoft.com/v1.0${endpoint}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -36,19 +68,19 @@ async function fetchGraph(token: string, endpoint: string): Promise<any> {
 
 async function fetchSecurityContext(token: string) {
   const [riskyUsers, signIns, caPolicies, secureScores] = await Promise.all([
-    fetchGraph(token, '/identityProtection/riskyUsers?$top=10'),
-    fetchGraph(token, '/auditLogs/signIns?$top=20&$orderby=createdDateTime desc'),
-    fetchGraph(token, '/identity/conditionalAccess/policies?$select=displayName,state'),
-    fetchGraph(token, '/security/secureScores?$top=1'),
+    fetchGraph<GraphRiskyUser>(token, '/identityProtection/riskyUsers?$top=10'),
+    fetchGraph<GraphSignIn>(token, '/auditLogs/signIns?$top=20&$orderby=createdDateTime desc'),
+    fetchGraph<GraphCAPolicy>(token, '/identity/conditionalAccess/policies?$select=displayName,state'),
+    fetchGraph<GraphSecureScore>(token, '/security/secureScores?$top=1'),
   ]);
 
   return {
-    riskyUsers: (riskyUsers?.value || []).map((u: any) => ({
+    riskyUsers: (riskyUsers?.value || []).map((u: GraphRiskyUser) => ({
       user: u.userDisplayName || u.userPrincipalName,
       riskLevel: u.riskLevel,
       riskState: u.riskState,
     })),
-    recentSignIns: (signIns?.value || []).slice(0, 10).map((s: any) => ({
+    recentSignIns: (signIns?.value || []).slice(0, 10).map((s: GraphSignIn) => ({
       user: s.userDisplayName || s.userPrincipalName,
       status: s.status?.errorCode === 0 ? 'Success' : 'Failed',
       location: s.location?.city || 'Unknown',
@@ -56,7 +88,7 @@ async function fetchSecurityContext(token: string) {
       riskLevel: s.riskLevelDuringSignIn || 'none',
       app: s.appDisplayName,
     })),
-    activeCAPolicies: (caPolicies?.value || []).filter((p: any) => p.state === 'enabled').length,
+    activeCAPolicies: (caPolicies?.value || []).filter((p: GraphCAPolicy) => p.state === 'enabled').length,
     totalCAPolicies: caPolicies?.value?.length || 0,
     secureScore: secureScores?.value?.[0]?.currentScore || null,
     maxSecureScore: secureScores?.value?.[0]?.maxScore || null,
@@ -112,7 +144,7 @@ serve(async (req) => {
     if (!AI_GATEWAY_URL) throw new Error('AI_GATEWAY_URL is not configured');
 
     // Fetch live security context if available
-    let liveSecurityContext: any = null;
+    let liveSecurityContext: Awaited<ReturnType<typeof fetchSecurityContext>> | null = null;
     const connIds = tenantConnectionIds || [];
 
     if (connIds.length > 0) {

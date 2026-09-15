@@ -16,6 +16,42 @@ function _checkRate(key: string, max = 15, windowMs = 60000): boolean {
   return true;
 }
 
+interface GraphList<T> {
+  value?: T[];
+  '@odata.count'?: number;
+}
+
+interface SubscribedSku {
+  skuPartNumber?: string;
+  skuId?: string;
+  consumedUnits?: number;
+  prepaidUnits?: { enabled?: number };
+}
+
+interface LicenseSummary {
+  skuPartNumber?: string;
+  skuId?: string;
+  consumedUnits?: number;
+  prepaidUnits: number;
+}
+
+interface CaPolicy {
+  displayName?: string;
+  state?: string;
+  grantControls?: { builtInControls?: string[] } | null;
+}
+
+interface UserRegistrationDetail {
+  methodsRegistered?: string[];
+  isMfaRegistered?: boolean;
+}
+
+interface GraphDomain {
+  id: string;
+  isVerified?: boolean;
+  isDefault?: boolean;
+}
+
 async function getGraphToken(clientId: string, clientSecret: string, tenantId: string): Promise<string> {
   const resp = await fetch(`https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`, {
     method: 'POST',
@@ -26,7 +62,7 @@ async function getGraphToken(clientId: string, clientSecret: string, tenantId: s
   return (await resp.json()).access_token;
 }
 
-async function fetchGraph(token: string, endpoint: string): Promise<any> {
+async function fetchGraph<T>(token: string, endpoint: string): Promise<GraphList<T> | null> {
   const resp = await fetch(`https://graph.microsoft.com/v1.0${endpoint}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -36,40 +72,40 @@ async function fetchGraph(token: string, endpoint: string): Promise<any> {
 
 async function fetchCopilotReadinessData(token: string) {
   const [users, subscribedSkus, caPolicies, authMethods, domains] = await Promise.all([
-    fetchGraph(token, '/users?$count=true&$top=1&$select=id'),
-    fetchGraph(token, '/subscribedSkus'),
-    fetchGraph(token, '/identity/conditionalAccess/policies'),
-    fetchGraph(token, '/reports/authenticationMethods/userRegistrationDetails?$top=999'),
-    fetchGraph(token, '/domains'),
+    fetchGraph<{ id: string }>(token, '/users?$count=true&$top=1&$select=id'),
+    fetchGraph<SubscribedSku>(token, '/subscribedSkus'),
+    fetchGraph<CaPolicy>(token, '/identity/conditionalAccess/policies'),
+    fetchGraph<UserRegistrationDetail>(token, '/reports/authenticationMethods/userRegistrationDetails?$top=999'),
+    fetchGraph<GraphDomain>(token, '/domains'),
   ]);
 
   const totalUsers = users?.['@odata.count'] || users?.value?.length || 0;
-  const licenses = (subscribedSkus?.value || []).map((s: any) => ({
+  const licenses = (subscribedSkus?.value || []).map((s: SubscribedSku): LicenseSummary => ({
     skuPartNumber: s.skuPartNumber,
     skuId: s.skuId,
     consumedUnits: s.consumedUnits,
     prepaidUnits: s.prepaidUnits?.enabled || 0,
   }));
 
-  const copilotSkus = licenses.filter((l: any) =>
+  const copilotSkus = licenses.filter((l: LicenseSummary) =>
     l.skuPartNumber?.toLowerCase().includes('copilot') ||
     l.skuPartNumber?.toLowerCase().includes('microsoft_365_copilot')
   );
 
-  const mfaRegistered = (authMethods?.value || []).filter((u: any) =>
+  const mfaRegistered = (authMethods?.value || []).filter((u: UserRegistrationDetail) =>
     u.methodsRegistered?.includes('microsoftAuthenticator') ||
     u.methodsRegistered?.includes('fido2') ||
     u.methodsRegistered?.includes('windowsHelloForBusiness') ||
     u.isMfaRegistered === true
   ).length;
 
-  const policies = (caPolicies?.value || []).map((p: any) => ({
+  const policies = (caPolicies?.value || []).map((p: CaPolicy) => ({
     name: p.displayName,
     state: p.state,
     grantControls: p.grantControls?.builtInControls || [],
   }));
 
-  const mfaPolicies = policies.filter((p: any) =>
+  const mfaPolicies = policies.filter((p: { state?: string; grantControls: string[] }) =>
     p.state === 'enabled' && p.grantControls?.includes('mfa')
   );
 
@@ -77,14 +113,14 @@ async function fetchCopilotReadinessData(token: string) {
     totalUsers,
     licenses,
     copilotLicenses: copilotSkus,
-    copilotLicenseCount: copilotSkus.reduce((sum: number, s: any) => sum + (s.prepaidUnits || 0), 0),
-    copilotAssigned: copilotSkus.reduce((sum: number, s: any) => sum + (s.consumedUnits || 0), 0),
+    copilotLicenseCount: copilotSkus.reduce((sum: number, s: LicenseSummary) => sum + (s.prepaidUnits || 0), 0),
+    copilotAssigned: copilotSkus.reduce((sum: number, s: LicenseSummary) => sum + (s.consumedUnits || 0), 0),
     mfaRegisteredCount: mfaRegistered,
     mfaPercentage: totalUsers > 0 ? Math.round((mfaRegistered / totalUsers) * 100) : 0,
     conditionalAccessPolicies: policies,
     mfaEnforcingPolicies: mfaPolicies.length,
     totalCAPolicies: policies.length,
-    domains: (domains?.value || []).map((d: any) => ({ id: d.id, isVerified: d.isVerified, isDefault: d.isDefault })),
+    domains: (domains?.value || []).map((d: GraphDomain) => ({ id: d.id, isVerified: d.isVerified, isDefault: d.isDefault })),
   };
 }
 
@@ -108,7 +144,7 @@ serve(async (req) => {
     if (!AI_GATEWAY_URL) throw new Error('AI_GATEWAY_URL is not configured');
 
     // Fetch real data if tenantConnectionIds provided
-    let liveTelemetry: any = null;
+    let liveTelemetry: Awaited<ReturnType<typeof fetchCopilotReadinessData>> | null = null;
     if (tenantConnectionIds?.length > 0) {
       const authHeader = req.headers.get('authorization');
       const supabase = createClient(

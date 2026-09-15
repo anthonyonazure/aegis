@@ -306,7 +306,7 @@ async function importPoliciesToTenant(
     for (const rawPolicy of policies) {
       // Clean the policy data for import
       const policy = cleanPolicyForImport(rawPolicy);
-      let policyName = (policy.displayName || policy.name) as string;
+      const policyName = (policy.displayName || policy.name) as string;
       
       try {
         // Check if policy already exists

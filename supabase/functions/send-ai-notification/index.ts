@@ -46,8 +46,20 @@ async function loadCustomerBrand(customerId: string): Promise<CustomerBrand | nu
   }
 }
 
+interface SlackTextObject {
+  type: string;
+  text: string;
+  emoji?: boolean;
+}
+
+interface SlackBlock {
+  type: string;
+  text?: SlackTextObject;
+  fields?: SlackTextObject[];
+}
+
 async function sendSlackNotification(webhookUrl: string, subject: string, message: string, score?: number, recommendations?: string[]) {
-  const blocks: any[] = [
+  const blocks: SlackBlock[] = [
     {
       type: "header",
       text: { type: "plain_text", text: `📊 ${subject}`, emoji: true }
@@ -86,7 +98,7 @@ async function sendSlackNotification(webhookUrl: string, subject: string, messag
 }
 
 async function sendTeamsNotification(webhookUrl: string, subject: string, message: string, score?: number, recommendations?: string[]) {
-  const facts: any[] = [];
+  const facts: { name: string; value: string }[] = [];
   if (score !== undefined) {
     facts.push({ name: "Score", value: `${score}%` });
   }

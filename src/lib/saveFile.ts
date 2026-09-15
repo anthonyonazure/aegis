@@ -22,7 +22,7 @@ export async function promptSaveFileHandle(options: {
   suggestedName: string;
   types?: SavePickerType[];
 }): Promise<FileSystemFileHandle> {
-  const fn = (window as any).showSaveFilePicker as ShowSaveFilePicker | undefined;
+  const fn = (window as Window & { showSaveFilePicker?: ShowSaveFilePicker }).showSaveFilePicker;
   if (!fn) {
     throw new Error("File System Access API not supported");
   }

@@ -1,4 +1,10 @@
 import { supabase } from '@/integrations/supabase/client';
+import type { Json, Tables, TablesUpdate } from '@/integrations/supabase/types';
+
+type BackupConfigRow = Tables<'automated_backup_configs'>;
+type BackupRunRow = Tables<'automated_backup_runs'> & {
+  automated_backup_configs?: { name: string } | null;
+};
 
 export interface BackupConfig {
   id: string;
@@ -40,7 +46,7 @@ export interface BackupRun {
   totalResources: number;
   exportJobIds: string[];
   errorMessage?: string;
-  results: any[];
+  results: Json;
   expiresAt?: Date;
   createdAt: Date;
 }
@@ -131,7 +137,7 @@ export async function updateBackupConfig(
   id: string,
   updates: Partial<Omit<BackupConfig, 'id' | 'userId' | 'createdAt' | 'updatedAt'>>
 ): Promise<BackupConfig> {
-  const updateData: Record<string, any> = {};
+  const updateData: TablesUpdate<'automated_backup_configs'> = {};
   
   if (updates.name !== undefined) updateData.name = updates.name;
   if (updates.description !== undefined) updateData.description = updates.description;
@@ -201,12 +207,12 @@ export async function getBackupRuns(configId?: string): Promise<BackupRun[]> {
     throw new Error('Failed to fetch backup runs');
   }
 
-  return (data || []).map((run: any) => ({
+  return (data || []).map((run: BackupRunRow) => ({
     id: run.id,
     userId: run.user_id,
     configId: run.config_id,
     configName: run.automated_backup_configs?.name,
-    status: run.status,
+    status: run.status as BackupRun['status'],
     startedAt: run.started_at ? new Date(run.started_at) : undefined,
     completedAt: run.completed_at ? new Date(run.completed_at) : undefined,
     totalTenants: run.total_tenants,
@@ -270,26 +276,26 @@ export async function getBackupStats(): Promise<{
 
   return {
     totalConfigs: configs.length,
-    activeConfigs: configs.filter((c: any) => c.is_active).length,
+    activeConfigs: configs.filter((c) => c.is_active).length,
     totalRuns: runs.length,
-    successfulRuns: runs.filter((r: any) => r.status === 'completed').length,
-    failedRuns: runs.filter((r: any) => r.status === 'failed').length,
-    totalResourcesBackedUp: runs.reduce((sum: number, r: any) => sum + (r.total_resources || 0), 0),
+    successfulRuns: runs.filter((r) => r.status === 'completed').length,
+    failedRuns: runs.filter((r) => r.status === 'failed').length,
+    totalResourcesBackedUp: runs.reduce((sum: number, r) => sum + (r.total_resources || 0), 0),
   };
 }
 
-function mapBackupConfigFromDb(row: any): BackupConfig {
+function mapBackupConfigFromDb(row: BackupConfigRow): BackupConfig {
   return {
     id: row.id,
     userId: row.user_id,
     name: row.name,
     description: row.description,
-    backupType: row.backup_type,
+    backupType: row.backup_type as BackupConfig['backupType'],
     scheduleCron: row.schedule_cron,
     scheduleDescription: row.schedule_description,
     resourceIds: row.resource_ids || [],
     formats: row.formats || [],
-    targetType: row.target_type,
+    targetType: row.target_type as BackupConfig['targetType'],
     targetCustomerId: row.target_customer_id,
     targetGroupId: row.target_group_id,
     targetTenantIds: row.target_tenant_ids || [],

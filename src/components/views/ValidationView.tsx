@@ -128,7 +128,7 @@ const VALIDATION_RULES = [
     check: (data: Record<string, unknown>): { status: 'passed' | 'warning' | 'error'; message: string } => {
       // Handle array data
       if (Array.isArray(data)) {
-        const itemsWithIds = data.filter((item: any) => item?.id);
+        const itemsWithIds = data.filter((item: { id?: unknown } | null) => item?.id);
         if (data.length === 0) {
           return { status: 'passed', message: 'Empty collection (no IDs expected)' };
         }

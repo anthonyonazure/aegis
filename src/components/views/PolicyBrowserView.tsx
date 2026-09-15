@@ -80,8 +80,22 @@ import {
 import { PolicyDeployDialog } from '@/components/PolicyDeployDialog';
 import type { PolicyItem as DeployPolicyItem } from '@/lib/policyDeployment';
 
+interface PolicyTypeDefinition {
+  id: string;
+  name: string;
+  endpoint: string;
+  useBeta?: boolean;
+  isExo?: boolean;
+}
+
 // Policy categories with their Graph API endpoints
-const POLICY_CATEGORIES = [
+const POLICY_CATEGORIES: {
+  id: string;
+  name: string;
+  icon: typeof Lock;
+  color: string;
+  policies: PolicyTypeDefinition[];
+}[] = [
   {
     id: 'conditional-access',
     name: 'Conditional Access',
@@ -475,7 +489,7 @@ export const PolicyBrowserView = () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
 
-      let policies: PolicyItem[] = [];
+      const policies: PolicyItem[] = [];
 
       if (isExo) {
         // Route through email-security edge function
@@ -584,7 +598,7 @@ export const PolicyBrowserView = () => {
               c => c.categoryId === categoryId && c.policyTypeId === policyType.id
             );
             if (!existing) {
-              fetchPolicies(categoryId, policyType.id, policyType.endpoint, (policyType as any).useBeta, (policyType as any).isExo);
+              fetchPolicies(categoryId, policyType.id, policyType.endpoint, policyType.useBeta, policyType.isExo);
             }
           }
         }
@@ -682,8 +696,8 @@ export const PolicyBrowserView = () => {
               },
             ],
           });
-        } catch (err: any) {
-          if (err?.name === 'AbortError') {
+        } catch (err) {
+          if ((err as { name?: string } | null)?.name === 'AbortError') {
             setExporting(false);
             return;
           }
@@ -822,8 +836,8 @@ Source: ${dataSource === 'export' ? 'Previous Export' : 'Live Tenant'}
               },
             ],
           });
-        } catch (err: any) {
-          if (err?.name === 'AbortError') return;
+        } catch (err) {
+          if ((err as { name?: string } | null)?.name === 'AbortError') return;
           saveHandle = null;
         }
       }

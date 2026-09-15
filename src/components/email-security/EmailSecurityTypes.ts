@@ -18,7 +18,7 @@ export interface EopPolicy {
   createdDateTime?: string;
   lastModifiedDateTime?: string;
   priority?: number;
-  settings?: Record<string, any>;
+  settings?: Record<string, unknown>;
   '@odata.type'?: string;
 }
 

@@ -225,7 +225,7 @@ const POWERSHELL_RESOURCES: Record<string, { module: string; commands: string[] 
 };
 
 // PowerShell import commands for Exchange/SharePoint restoration
-const POWERSHELL_IMPORT_COMMANDS: Record<string, { module: string; createCommand: (data: Record<string, any>) => string }> = {
+const POWERSHELL_IMPORT_COMMANDS: Record<string, { module: string; createCommand: (data: Record<string, unknown>) => string }> = {
   // Exchange Online - Transport Rules
   'exchange/transport-rules': {
     module: 'ExchangeOnlineManagement',
@@ -472,7 +472,7 @@ $output | ConvertTo-Json -Depth 20 -Compress
 }
 
 // Generate PowerShell import script for restoring Exchange/SharePoint resources
-function generateImportScript(resources: Array<{ resourceType: string; resourceName?: string; data: Record<string, any> }>): string {
+function generateImportScript(resources: Array<{ resourceType: string; resourceName?: string; data: Record<string, unknown> }>): string {
   const modules = new Set<string>();
   const importCommands: string[] = [];
   

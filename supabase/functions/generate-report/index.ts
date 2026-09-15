@@ -46,7 +46,7 @@ interface RealData {
 async function fetchRealData(supabase: SupabaseClient, userId: string, customerId?: string, dateRangeStart?: string, dateRangeEnd?: string): Promise<RealData> {
   try {
     // Build queries
-    let customerQuery = supabase.from('customers').select('id', { count: 'exact' }).eq('user_id', userId);
+    const customerQuery = supabase.from('customers').select('id', { count: 'exact' }).eq('user_id', userId);
     let tenantQuery = supabase.from('tenant_connections').select('id, tenant_name, display_name, status, environment, health_status, last_sync').eq('user_id', userId);
     if (customerId) {
       tenantQuery = tenantQuery.eq('customer_id', customerId);

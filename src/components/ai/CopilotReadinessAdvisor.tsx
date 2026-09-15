@@ -363,7 +363,8 @@ export const CopilotReadinessAdvisor = ({ selectedTenants }: CopilotReadinessAdv
   const toggleSet = <T,>(setter: React.Dispatch<React.SetStateAction<Set<T>>>, key: T) => {
     setter(prev => {
       const next = new Set(prev);
-      next.has(key) ? next.delete(key) : next.add(key);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   };

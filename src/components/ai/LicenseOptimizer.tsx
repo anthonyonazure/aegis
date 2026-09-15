@@ -236,7 +236,7 @@ export function LicenseOptimizer({ selectedTenants }: LicenseOptimizerProps) {
       if (error) throw error;
 
       // Function returns: { success: true, metrics: { licensing: { licensesByProduct: [...] } }, actions: [...] }
-      const metrics = (data as any)?.metrics ?? data;
+      const metrics = data?.metrics ?? data;
       const products = metrics?.licensing?.licensesByProduct;
 
       if (Array.isArray(products) && products.length > 0) {

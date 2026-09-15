@@ -227,7 +227,7 @@ export function SecureScoreDashboardView() {
   };
 
   // Prepare chart data
-  const trendData = history.reduce((acc: any[], h) => {
+  const trendData = history.reduce((acc: { date: string; avgScore: number; count: number }[], h) => {
     const dateKey = format(h.recordedAt, 'MMM dd');
     const existing = acc.find(a => a.date === dateKey);
     const percentage = h.maxScore > 0 ? (h.score / h.maxScore) * 100 : 0;

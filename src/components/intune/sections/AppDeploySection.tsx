@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Badge } from '@/components/ui/badge';
+import { Badge, type BadgeProps } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -31,7 +31,7 @@ const categoryIcons: Record<AppDeployCategory, React.ElementType> = {
   Custom: FileCode,
 };
 
-const categoryColors: Record<AppDeployCategory, string> = {
+const categoryColors: Record<AppDeployCategory, BadgeProps['variant']> = {
   Browsers: 'default',
   Productivity: 'secondary',
   Communication: 'info',
@@ -80,8 +80,8 @@ export const AppDeploySection = () => {
       if (data?.error) throw new Error(data.error);
       toast.success(`"${template.name}" deployed successfully! Script ID: ${data.scriptId}`);
       setSelectedTemplate(null);
-    } catch (err: any) {
-      toast.error(err?.message || 'Failed to deploy template to tenant.');
+    } catch (err) {
+      toast.error((err instanceof Error && err.message) || 'Failed to deploy template to tenant.');
     } finally {
       setDeploying(false);
     }
@@ -210,7 +210,7 @@ export const AppDeploySection = () => {
                     <Icon className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
                   </div>
                   <div className="flex items-center gap-2">
-                    <Badge variant={categoryColors[template.category] as any} className="text-[10px] px-1.5 py-0">
+                    <Badge variant={categoryColors[template.category]} className="text-[10px] px-1.5 py-0">
                       {template.category}
                     </Badge>
                     <Badge variant="outline" className="text-[10px] px-1.5 py-0">
@@ -242,7 +242,7 @@ export const AppDeploySection = () => {
                   <p className="text-sm font-medium truncate">{template.name}</p>
                   <p className="text-xs text-muted-foreground truncate">{template.description}</p>
                 </div>
-                <Badge variant={categoryColors[template.category] as any} className="text-[10px] flex-shrink-0">
+                <Badge variant={categoryColors[template.category]} className="text-[10px] flex-shrink-0">
                   {template.category}
                 </Badge>
                 <Badge variant="outline" className="text-[10px] flex-shrink-0">
@@ -269,7 +269,7 @@ export const AppDeploySection = () => {
               <DialogHeader>
                 <div className="flex items-center gap-2 flex-wrap">
                   <DialogTitle>{selectedTemplate.name}</DialogTitle>
-                  <Badge variant={categoryColors[selectedTemplate.category] as any}>
+                  <Badge variant={categoryColors[selectedTemplate.category]}>
                     {selectedTemplate.category}
                   </Badge>
                   <Badge variant="outline">{selectedTemplate.publisher}</Badge>

@@ -199,8 +199,21 @@ const GRAPH_ENDPOINTS: Record<string, { endpoint: string; useBeta?: boolean; cre
   'copilot/copilot-plugins': { endpoint: '/appCatalogs/teamsApps?$filter=distributionMethod eq \'organization\'', useBeta: false, supportsImport: false },
 };
 
+// Loose shape of a Microsoft Graph JSON payload: a single object or a collection page.
+interface GraphJson {
+  value?: GraphJson[];
+  id?: string;
+  displayName?: string;
+  name?: string;
+  title?: string;
+  webUrl?: string;
+  '@odata.nextLink'?: string;
+  '@odata.count'?: number;
+  [key: string]: unknown;
+}
+
 // Prepare resource data for import by removing read-only properties
-function prepareResourceForImport(resourceType: string, data: Record<string, any>): Record<string, any> {
+function prepareResourceForImport(resourceType: string, data: Record<string, unknown>): Record<string, unknown> {
   // Common read-only properties to remove
   const readOnlyProps = [
     'id', 
@@ -215,7 +228,7 @@ function prepareResourceForImport(resourceType: string, data: Record<string, any
     '@odata.id',
   ];
 
-  const cleaned: Record<string, any> = {};
+  const cleaned: Record<string, unknown> = {};
   
   for (const [key, value] of Object.entries(data)) {
     // Skip read-only properties
@@ -240,9 +253,9 @@ function prepareResourceForImport(resourceType: string, data: Record<string, any
 async function createGraphResource(
   accessToken: string, 
   endpoint: string, 
-  data: Record<string, any>,
+  data: Record<string, unknown>,
   useBeta: boolean = false
-): Promise<{ success: boolean; data?: any; error?: string }> {
+): Promise<{ success: boolean; data?: GraphJson; error?: string }> {
   const baseUrl = useBeta ? 'https://graph.microsoft.com/beta' : 'https://graph.microsoft.com/v1.0';
   const graphUrl = `${baseUrl}${endpoint}`;
 
@@ -371,11 +384,11 @@ async function getAccessToken(tenantId: string, clientId: string, clientSecret: 
   }
 }
 
-async function fetchGraphData(accessToken: string, endpoint: string, useBeta: boolean = false): Promise<any> {
+async function fetchGraphData(accessToken: string, endpoint: string, useBeta: boolean = false): Promise<GraphJson> {
   const baseUrl = useBeta ? 'https://graph.microsoft.com/beta' : 'https://graph.microsoft.com/v1.0';
   const initialUrl = endpoint.startsWith('http') ? endpoint : `${baseUrl}${endpoint}`;
 
-  const fetchJson = async (url: string): Promise<any> => {
+  const fetchJson = async (url: string): Promise<GraphJson> => {
     const response = await fetch(url, {
       headers: {
         'Authorization': `Bearer ${accessToken}`,
@@ -392,7 +405,7 @@ async function fetchGraphData(accessToken: string, endpoint: string, useBeta: bo
     return await response.json();
   };
 
-  const fetchAllPages = async (url: string): Promise<any> => {
+  const fetchAllPages = async (url: string): Promise<GraphJson> => {
     // Graph collections return { value: [], "@odata.nextLink": "..." }
     // If we don't follow nextLink, exports are incomplete -> false "removed" drift.
     const MAX_PAGES = 50;
@@ -400,8 +413,8 @@ async function fetchGraphData(accessToken: string, endpoint: string, useBeta: bo
     let nextUrl: string | undefined = url;
     let page = 0;
 
-    let combined: any | null = null;
-    const allValues: any[] = [];
+    let combined: GraphJson | null = null;
+    const allValues: GraphJson[] = [];
 
     while (nextUrl && page < MAX_PAGES) {
       const data = await fetchJson(nextUrl);
@@ -762,7 +775,7 @@ serve(async (req) => {
       const results: Array<{
         resource: string;
         success: boolean;
-        data?: any;
+        data?: unknown;
         error?: string;
       }> = [];
 
@@ -1220,7 +1233,7 @@ serve(async (req) => {
 
       // Base64 encode the scripts for the Graph API
       const encoder = new TextEncoder();
-      const body: Record<string, any> = {
+      const body: Record<string, unknown> = {
         displayName: scriptPayload.displayName,
         description: scriptPayload.description || '',
         publisher: scriptPayload.publisher || 'Aegis MSP Manager',

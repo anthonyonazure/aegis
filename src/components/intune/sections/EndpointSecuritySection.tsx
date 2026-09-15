@@ -12,7 +12,7 @@ interface SecurityPolicy {
   createdDateTime?: string;
   lastModifiedDateTime?: string;
   templateReference?: { templateId: string; templateDisplayName: string };
-  settings?: any[];
+  settings?: unknown[];
   '@odata.type'?: string;
 }
 

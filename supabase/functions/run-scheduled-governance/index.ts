@@ -62,7 +62,26 @@ async function getGraphAccessToken(clientId: string, clientSecret: string, tenan
   return data.access_token;
 }
 
-async function fetchGraphData(accessToken: string, endpoint: string, useBeta = false): Promise<any> {
+interface GraphCollection<T> {
+  value?: T[];
+  '@odata.count'?: number;
+}
+
+interface GraphUser {
+  userType?: string;
+  displayName?: string;
+  jobTitle?: string;
+  assignedLicenses?: { skuId?: string }[];
+  signInActivity?: { lastSignInDateTime?: string | null };
+}
+
+interface GraphSku {
+  skuPartNumber?: string;
+  consumedUnits?: number;
+  prepaidUnits?: { enabled?: number };
+}
+
+async function fetchGraphData<T>(accessToken: string, endpoint: string, useBeta = false): Promise<GraphCollection<T> | null> {
   const baseUrl = useBeta ? 'https://graph.microsoft.com/beta' : 'https://graph.microsoft.com/v1.0';
   try {
     const response = await fetch(`${baseUrl}${endpoint}`, {
@@ -81,12 +100,12 @@ async function fetchGraphData(accessToken: string, endpoint: string, useBeta = f
 
 async function fetchGovernanceMetrics(accessToken: string): Promise<GovernanceMetrics> {
   const [secureScoreData, usersData, riskyUsersData, riskySignInsData, caPoliciesData, subscribedSkusData] = await Promise.all([
-    fetchGraphData(accessToken, '/security/secureScores?$top=1'),
-    fetchGraphData(accessToken, '/users?$count=true&$top=999', true),
-    fetchGraphData(accessToken, '/identityProtection/riskyUsers?$filter=riskState eq \'atRisk\''),
-    fetchGraphData(accessToken, '/identityProtection/riskyServicePrincipals?$top=100', true).catch(() => null),
-    fetchGraphData(accessToken, '/identity/conditionalAccess/policies'),
-    fetchGraphData(accessToken, '/subscribedSkus'),
+    fetchGraphData<{ currentScore?: number; maxScore?: number }>(accessToken, '/security/secureScores?$top=1'),
+    fetchGraphData<GraphUser>(accessToken, '/users?$count=true&$top=999', true),
+    fetchGraphData<unknown>(accessToken, '/identityProtection/riskyUsers?$filter=riskState eq \'atRisk\''),
+    fetchGraphData<unknown>(accessToken, '/identityProtection/riskyServicePrincipals?$top=100', true).catch(() => null),
+    fetchGraphData<unknown>(accessToken, '/identity/conditionalAccess/policies'),
+    fetchGraphData<GraphSku>(accessToken, '/subscribedSkus'),
   ]);
 
   // Process secure score
@@ -97,9 +116,9 @@ async function fetchGovernanceMetrics(accessToken: string): Promise<GovernanceMe
   // Process users
   const users = usersData?.value || [];
   const totalUsers = users.length;
-  const guestUsers = users.filter((u: any) => u.userType === 'Guest').length;
-  const adminUsers = users.filter((u: any) => 
-    u.assignedLicenses?.some((l: any) => l.skuId) && 
+  const guestUsers = users.filter((u: GraphUser) => u.userType === 'Guest').length;
+  const adminUsers = users.filter((u: GraphUser) => 
+    u.assignedLicenses?.some((l) => l.skuId) && 
     (u.displayName?.toLowerCase().includes('admin') || u.jobTitle?.toLowerCase().includes('admin'))
   ).length;
 
@@ -110,7 +129,7 @@ async function fetchGovernanceMetrics(accessToken: string): Promise<GovernanceMe
   // Stale accounts (no sign-in for 90 days)
   const ninetyDaysAgo = new Date();
   ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-  const staleAccounts = users.filter((u: any) => {
+  const staleAccounts = users.filter((u: GraphUser) => {
     if (!u.signInActivity?.lastSignInDateTime) return true;
     return new Date(u.signInActivity.lastSignInDateTime) < ninetyDaysAgo;
   }).length;
@@ -238,7 +257,7 @@ serve(async (req) => {
       throw new Error(`Failed to create run record: ${runError.message}`);
     }
 
-    const results: any[] = [];
+    const results: Record<string, unknown>[] = [];
     let completedTenants = 0;
     let failedTenants = 0;
     let tenantsWithAlerts = 0;

@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
 
 export interface ScheduledGovernanceConfig {
   id: string;
@@ -37,7 +38,7 @@ export interface ScheduledGovernanceRun {
   completed_tenants: number;
   failed_tenants: number;
   tenants_with_alerts: number;
-  results: any | null;
+  results: Json | null;
   error_message: string | null;
   started_at: string | null;
   completed_at: string | null;

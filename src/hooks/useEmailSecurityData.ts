@@ -38,8 +38,8 @@ export function useEmailSecurityData<T>({ action }: UseEmailSecurityDataOptions)
       }
 
       setData(result?.data ?? result);
-    } catch (err: any) {
-      const msg = err?.message || 'Failed to fetch email security data';
+    } catch (err) {
+      const msg = (err instanceof Error && err.message) || 'Failed to fetch email security data';
       setError(msg);
       toast({
         title: 'Error fetching email security data',

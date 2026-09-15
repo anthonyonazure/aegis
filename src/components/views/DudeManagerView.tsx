@@ -48,7 +48,7 @@ interface DudeMapping {
   max_removal_percent: number;
   last_sync_at: string | null;
   last_sync_status: string | null;
-  last_sync_summary: any;
+  last_sync_summary: unknown;
   tenant_connection_id: string | null;
   created_at: string;
 }
@@ -65,7 +65,7 @@ interface SyncLog {
   devices_added: number;
   devices_removed: number;
   devices_skipped: number;
-  details: any;
+  details: unknown;
   duration_ms: number | null;
   created_at: string;
 }
@@ -194,7 +194,7 @@ export const DudeManagerView = () => {
       return;
     }
 
-    const payload: any = {
+    const payload = {
       user_group_id: formUserGroupId,
       user_group_name: formUserGroupName,
       device_group_id: formDeviceGroupId,
@@ -219,8 +219,7 @@ export const DudeManagerView = () => {
     } else {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      payload.user_id = user.id;
-      const { error } = await supabase.from('dude_mappings').insert(payload);
+      const { error } = await supabase.from('dude_mappings').insert({ ...payload, user_id: user.id });
       if (error) { toast({ title: 'Error', description: error.message, variant: 'destructive' }); return; }
       toast({ title: 'Mapping Created' });
     }
@@ -344,8 +343,8 @@ export const DudeManagerView = () => {
       });
       if (error) throw error;
       setPreviewData(data);
-    } catch (e: any) {
-      toast({ title: 'Preview Failed', description: e.message, variant: 'destructive' });
+    } catch (e) {
+      toast({ title: 'Preview Failed', description: e instanceof Error ? e.message : String(e), variant: 'destructive' });
       setShowPreview(false);
     }
   };
@@ -364,8 +363,8 @@ export const DudeManagerView = () => {
         variant: data.status === 'error' ? 'destructive' : 'default',
       });
       await Promise.all([loadMappings(), loadSyncLogs()]);
-    } catch (e: any) {
-      toast({ title: 'Sync Failed', description: e.message, variant: 'destructive' });
+    } catch (e) {
+      toast({ title: 'Sync Failed', description: e instanceof Error ? e.message : String(e), variant: 'destructive' });
     }
     setSyncing(prev => { const n = new Set(prev); n.delete(mappingId); return n; });
   };
@@ -378,11 +377,11 @@ export const DudeManagerView = () => {
         body: { action: 'bulk-sync', tenantConnectionId: connectionId },
       });
       if (error) throw error;
-      const successCount = data.results?.filter((r: any) => r.status === 'success').length || 0;
+      const successCount = data.results?.filter((r: { status: string }) => r.status === 'success').length || 0;
       toast({ title: 'Bulk Sync Complete', description: `${successCount}/${data.totalMappings} mappings synced successfully.` });
       await Promise.all([loadMappings(), loadSyncLogs()]);
-    } catch (e: any) {
-      toast({ title: 'Bulk Sync Failed', description: e.message, variant: 'destructive' });
+    } catch (e) {
+      toast({ title: 'Bulk Sync Failed', description: e instanceof Error ? e.message : String(e), variant: 'destructive' });
     }
     setBulkSyncing(false);
   };
@@ -959,7 +958,7 @@ export const DudeManagerView = () => {
               <div>
                 <h4 className="text-sm font-medium text-emerald-400 mb-1">To Add ({previewData.toAdd.length})</h4>
                 <div className="max-h-32 overflow-y-auto space-y-1">
-                  {previewData.toAdd.map((d: any) => (
+                  {previewData.toAdd.map((d) => (
                     <div key={d.id} className="text-xs bg-emerald-500/10 rounded px-2 py-1">{d.displayName || d.id}</div>
                   ))}
                   {previewData.toAdd.length === 0 && <p className="text-xs text-muted-foreground">No devices to add</p>}
@@ -968,7 +967,7 @@ export const DudeManagerView = () => {
               <div>
                 <h4 className="text-sm font-medium text-destructive mb-1">To Remove ({previewData.toRemove.length})</h4>
                 <div className="max-h-32 overflow-y-auto space-y-1">
-                  {previewData.toRemove.map((d: any) => (
+                  {previewData.toRemove.map((d) => (
                     <div key={d.id} className="text-xs bg-destructive/10 rounded px-2 py-1">{d.displayName || d.id}</div>
                   ))}
                   {previewData.toRemove.length === 0 && <p className="text-xs text-muted-foreground">No devices to remove</p>}

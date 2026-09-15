@@ -15,6 +15,42 @@ function _checkRate(key: string, max = 15, windowMs = 60000): boolean {
   e.count++; return true;
 }
 
+interface GraphList<T> {
+  value?: T[];
+}
+
+interface GraphUser {
+  id: string;
+  userType?: string;
+  accountEnabled?: boolean;
+}
+
+interface UserRegistrationDetail {
+  id: string;
+  isMfaRegistered?: boolean;
+}
+
+interface SecureScore {
+  currentScore: number;
+  maxScore: number;
+}
+
+interface RiskyUser {
+  riskState?: string;
+}
+
+interface RiskDetection {
+  riskLevel?: string;
+}
+
+interface MetricsHistoryRow {
+  secure_score: number | null;
+  mfa_enabled_users: number;
+  total_users: number;
+  risky_sign_ins: number | null;
+  recorded_at: string;
+}
+
 async function getGraphToken(clientId: string, clientSecret: string, tenantId: string): Promise<string> {
   const resp = await fetch(`https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`, {
     method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -24,7 +60,7 @@ async function getGraphToken(clientId: string, clientSecret: string, tenantId: s
   return (await resp.json()).access_token;
 }
 
-async function graphGet(token: string, ep: string, beta = false) {
+async function graphGet<T>(token: string, ep: string, beta = false): Promise<GraphList<T> | null> {
   const r = await fetch(`${beta ? 'https://graph.microsoft.com/beta' : 'https://graph.microsoft.com/v1.0'}${ep}`, { headers: { Authorization: `Bearer ${token}` } });
   if (!r.ok) { console.error(`Graph ${ep}: ${r.status}`); return null; }
   return r.json();
@@ -32,31 +68,31 @@ async function graphGet(token: string, ep: string, beta = false) {
 
 async function fetchSecurityData(token: string) {
   const [secureScores, riskyUsers, riskySignIns, caPolicies, authMethods, users] = await Promise.all([
-    graphGet(token, '/security/secureScores?$top=7', true),
-    graphGet(token, '/identityProtection/riskyUsers?$top=50', true),
-    graphGet(token, '/identityProtection/riskySignInDetections?$top=100', true),
-    graphGet(token, '/identity/conditionalAccess/policies'),
-    graphGet(token, '/reports/authenticationMethods/userRegistrationDetails?$top=999', true),
-    graphGet(token, '/users?$select=id,userType,accountEnabled&$top=999'),
+    graphGet<SecureScore>(token, '/security/secureScores?$top=7', true),
+    graphGet<RiskyUser>(token, '/identityProtection/riskyUsers?$top=50', true),
+    graphGet<RiskDetection>(token, '/identityProtection/riskySignInDetections?$top=100', true),
+    graphGet<{ id: string }>(token, '/identity/conditionalAccess/policies'),
+    graphGet<UserRegistrationDetail>(token, '/reports/authenticationMethods/userRegistrationDetails?$top=999', true),
+    graphGet<GraphUser>(token, '/users?$select=id,userType,accountEnabled&$top=999'),
   ]);
 
   const scores = secureScores?.value || [];
   const usersData = users?.value || [];
   const authData = authMethods?.value || [];
-  const mfaEnabled = authData.filter((u: any) => u.isMfaRegistered).length;
+  const mfaEnabled = authData.filter((u: UserRegistrationDetail) => u.isMfaRegistered).length;
   const riskyUsersData = riskyUsers?.value || [];
   const riskySignInsData = riskySignIns?.value || [];
 
   return {
     secureScore: scores[0]?.currentScore || 0,
     maxSecureScore: scores[0]?.maxScore || 100,
-    secureScoreTrend: scores.map((s: any) => s.currentScore).reverse(),
+    secureScoreTrend: scores.map((s: SecureScore) => s.currentScore).reverse(),
     mfaAdoption: usersData.length > 0 ? Math.round((mfaEnabled / usersData.length) * 100) : 0,
     conditionalAccessPolicies: caPolicies?.value?.length || 0,
-    riskyUsers: riskyUsersData.filter((u: any) => u.riskState === 'atRisk').length,
+    riskyUsers: riskyUsersData.filter((u: RiskyUser) => u.riskState === 'atRisk').length,
     riskySignIns: riskySignInsData.length,
-    riskySignInsHigh: riskySignInsData.filter((s: any) => s.riskLevel === 'high').length,
-    staleAccounts: usersData.filter((u: any) => !u.accountEnabled).length,
+    riskySignInsHigh: riskySignInsData.filter((s: RiskDetection) => s.riskLevel === 'high').length,
+    staleAccounts: usersData.filter((u: GraphUser) => !u.accountEnabled).length,
     totalUsers: usersData.length,
   };
 }
@@ -73,8 +109,8 @@ serve(async (req) => {
     const AI_GATEWAY_URL = Deno.env.get('AI_GATEWAY_URL');
     if (!AI_GATEWAY_URL) throw new Error('AI_GATEWAY_URL is not configured');
 
-    let realSecurityData: any = legacyData || {};
-    let realTrends: any = legacyTrends || {};
+    let realSecurityData: unknown = legacyData || {};
+    let realTrends: Record<string, unknown> = legacyTrends || {};
 
     if (tenantConnectionIds?.length > 0) {
       const authHeader = req.headers.get('authorization');
@@ -87,15 +123,16 @@ serve(async (req) => {
       const { data: creds } = await supabase.rpc('get_decrypted_credential', { p_tenant_connection_id: connId, p_user_id: user.id });
       if (creds?.[0]) {
         const token = await getGraphToken(creds[0].client_id, creds[0].client_secret, creds[0].tenant_id);
-        realSecurityData = await fetchSecurityData(token);
-        realTrends = { secureScoreTrend: realSecurityData.secureScoreTrend, mfaAdoptionTrend: [realSecurityData.mfaAdoption] };
+        const telemetry = await fetchSecurityData(token);
+        realSecurityData = telemetry;
+        realTrends = { secureScoreTrend: telemetry.secureScoreTrend, mfaAdoptionTrend: [telemetry.mfaAdoption] };
 
         // Also try to get historical data from DB
         const { data: history } = await supabase.from('governance_metrics_history').select('secure_score, mfa_enabled_users, total_users, risky_sign_ins, recorded_at').eq('tenant_connection_id', connId).order('recorded_at', { ascending: false }).limit(10);
         if (history?.length) {
-          realTrends.secureScoreTrend = history.map((h: any) => h.secure_score).reverse();
-          realTrends.mfaAdoptionTrend = history.map((h: any) => h.total_users > 0 ? Math.round((h.mfa_enabled_users / h.total_users) * 100) : 0).reverse();
-          realTrends.riskySignInsTrend = history.map((h: any) => h.risky_sign_ins || 0).reverse();
+          realTrends.secureScoreTrend = history.map((h: MetricsHistoryRow) => h.secure_score).reverse();
+          realTrends.mfaAdoptionTrend = history.map((h: MetricsHistoryRow) => h.total_users > 0 ? Math.round((h.mfa_enabled_users / h.total_users) * 100) : 0).reverse();
+          realTrends.riskySignInsTrend = history.map((h: MetricsHistoryRow) => h.risky_sign_ins || 0).reverse();
         }
       }
     }

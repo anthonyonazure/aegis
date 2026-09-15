@@ -6,6 +6,92 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// ── Response shapes (only the fields this function reads) ───────────
+interface GraphCollection<T> {
+  value?: T[];
+}
+
+interface GraphServiceRecord {
+  recordType?: string;
+  text?: string;
+  label?: string;
+}
+
+interface GraphDomain {
+  id: string;
+  isVerified?: boolean;
+  serviceConfigurationRecords?: GraphServiceRecord[];
+}
+
+interface GraphAlert {
+  title?: string;
+  severity?: string;
+  category?: string;
+}
+
+interface ExoPolicy {
+  Identity?: string;
+  Guid?: string;
+  Name?: string;
+  AdminDisplayName?: string;
+  Description?: string;
+  State?: string;
+  Enabled?: boolean;
+  Enable?: boolean;
+  Priority?: number;
+  EnableTargetedUserProtection?: boolean;
+  EnableMailboxIntelligence?: boolean;
+  EnableSpoofIntelligence?: boolean;
+  TargetedUsersToProtect?: string[];
+  TargetedDomainsToProtect?: string[];
+  SpamAction?: string;
+  HighConfidenceSpamAction?: string;
+  BulkThreshold?: number;
+  AllowedSenders?: string[];
+  BlockedSenders?: string[];
+  ZapEnabled?: boolean;
+  EnableFileFilter?: boolean;
+  FileTypes?: string[];
+  Action?: string;
+  EnableSafeLinksForEmail?: boolean;
+  ScanUrls?: boolean;
+  DeliverMessageAfterScan?: boolean;
+  TrackClicks?: boolean;
+  AllowClickThrough?: boolean;
+  DoNotRewriteUrls?: string[];
+  Redirect?: boolean;
+  RedirectAddress?: string;
+  ActionOnError?: boolean;
+  [key: string]: unknown;
+}
+
+type ExoCommandResult = GraphCollection<ExoPolicy>;
+
+interface MappedPolicy {
+  id?: string;
+  displayName: string;
+  description?: string | null;
+  source: string;
+  [key: string]: unknown;
+}
+
+interface DomainAuth {
+  domain: string;
+  isVerified: boolean;
+  spf: { status: string; record: string | null };
+  dkim: { status: string; selectors: string[] };
+  dmarc: { status: string; record: null; policy: null };
+}
+
+interface PolicyCounts {
+  antiPhishingCount: number | null;
+  antiSpamCount: number | null;
+  antiMalwareCount: number | null;
+  safeLinksCount: number | null;
+  safeAttachmentsCount: number | null;
+  policyDataAvailable: boolean;
+}
+
 // ── Token helpers ──────────────────────────────────────────────────────
 async function getGraphToken(clientId: string, clientSecret: string, tenantId: string): Promise<string> {
   return getOAuthToken(clientId, clientSecret, tenantId, "https://graph.microsoft.com/.default");
@@ -34,7 +120,7 @@ async function getOAuthToken(clientId: string, clientSecret: string, tenantId: s
 }
 
 // ── Graph helpers ──────────────────────────────────────────────────────
-async function graphGet(token: string, endpoint: string) {
+async function graphGet<T>(token: string, endpoint: string): Promise<T | null> {
   const resp = await fetch(`https://graph.microsoft.com/v1.0${endpoint}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -42,11 +128,11 @@ async function graphGet(token: string, endpoint: string) {
     console.error(`Graph error ${endpoint}: ${resp.status} ${await resp.text()}`);
     return null;
   }
-  return resp.json();
+  return (await resp.json()) as T;
 }
 
 // ── Exchange Online InvokeCommand helper ──────────────────────────────
-async function exoInvokeCommand(token: string, tenantId: string, cmdletName: string) {
+async function exoInvokeCommand(token: string, tenantId: string, cmdletName: string): Promise<ExoCommandResult | null> {
   const url = `https://outlook.office365.com/adminapi/beta/${tenantId}/InvokeCommand`;
   console.log(`EXO InvokeCommand: ${cmdletName}`);
   const resp = await fetch(url, {
@@ -67,25 +153,25 @@ async function exoInvokeCommand(token: string, tenantId: string, cmdletName: str
     console.error(`EXO InvokeCommand error ${cmdletName}: ${resp.status} body=${t}`);
     return null;
   }
-  const data = await resp.json();
+  const data = (await resp.json()) as ExoCommandResult | null;
   const items = data?.value || [];
   console.log(`EXO ${cmdletName}: got ${items.length} items`);
   return data;
 }
 
 // ── Domain auth parser ─────────────────────────────────────────────────
-function parseDomainAuth(domains: any[]): any[] {
-  return domains.map((d: any) => {
+function parseDomainAuth(domains: GraphDomain[]): DomainAuth[] {
+  return domains.map((d: GraphDomain) => {
     const records = d.serviceConfigurationRecords || [];
-    const spfRecord = records.find((r: any) => r.recordType === 'Txt' && r.text?.startsWith('v=spf1'));
-    const dkimRecords = records.filter((r: any) => r.recordType === 'CName' && r.label?.includes('._domainkey'));
+    const spfRecord = records.find((r: GraphServiceRecord) => r.recordType === 'Txt' && r.text?.startsWith('v=spf1'));
+    const dkimRecords = records.filter((r: GraphServiceRecord) => r.recordType === 'CName' && r.label?.includes('._domainkey'));
     return {
       domain: d.id,
       isVerified: d.isVerified || false,
       spf: { status: spfRecord ? 'pass' : 'missing', record: spfRecord?.text || null },
       dkim: {
         status: dkimRecords.length > 0 ? 'pass' : 'missing',
-        selectors: dkimRecords.map((r: any) => r.label?.split('._domainkey')[0]).filter(Boolean),
+        selectors: dkimRecords.map((r: GraphServiceRecord) => r.label?.split('._domainkey')[0]).filter((sel): sel is string => Boolean(sel)),
       },
       dmarc: { status: 'unknown', record: null, policy: null },
     };
@@ -93,9 +179,9 @@ function parseDomainAuth(domains: any[]): any[] {
 }
 
 // ── EXO policy mappers ─────────────────────────────────────────────────
-function mapAntiPhishPolicies(raw: any): any[] {
+function mapAntiPhishPolicies(raw: ExoCommandResult | null): MappedPolicy[] {
   const items = raw?.value || [];
-  return items.map((p: any) => ({
+  return items.map((p: ExoPolicy) => ({
     id: p.Identity || p.Guid || p.Name,
     displayName: p.Name || 'Unnamed Policy',
     description: p.AdminDisplayName || null,
@@ -110,9 +196,9 @@ function mapAntiPhishPolicies(raw: any): any[] {
   }));
 }
 
-function mapAntiSpamPolicies(raw: any): any[] {
+function mapAntiSpamPolicies(raw: ExoCommandResult | null): MappedPolicy[] {
   const items = raw?.value || [];
-  return items.map((p: any) => ({
+  return items.map((p: ExoPolicy) => ({
     id: p.Identity || p.Guid || p.Name,
     displayName: p.Name || 'Unnamed Policy',
     description: p.AdminDisplayName || null,
@@ -128,9 +214,9 @@ function mapAntiSpamPolicies(raw: any): any[] {
   }));
 }
 
-function mapAntiMalwarePolicies(raw: any): any[] {
+function mapAntiMalwarePolicies(raw: ExoCommandResult | null): MappedPolicy[] {
   const items = raw?.value || [];
-  return items.map((p: any) => ({
+  return items.map((p: ExoPolicy) => ({
     id: p.Identity || p.Guid || p.Name,
     displayName: p.Name || 'Unnamed Policy',
     description: p.AdminDisplayName || null,
@@ -144,9 +230,9 @@ function mapAntiMalwarePolicies(raw: any): any[] {
   }));
 }
 
-function mapSafeLinksPolicies(raw: any): any[] {
+function mapSafeLinksPolicies(raw: ExoCommandResult | null): MappedPolicy[] {
   const items = raw?.value || [];
-  return items.map((p: any) => ({
+  return items.map((p: ExoPolicy) => ({
     id: p.Identity || p.Guid || p.Name,
     displayName: p.Name || 'Unnamed Policy',
     description: p.AdminDisplayName || null,
@@ -161,9 +247,9 @@ function mapSafeLinksPolicies(raw: any): any[] {
   }));
 }
 
-function mapSafeAttachmentsPolicies(raw: any): any[] {
+function mapSafeAttachmentsPolicies(raw: ExoCommandResult | null): MappedPolicy[] {
   const items = raw?.value || [];
-  return items.map((p: any) => ({
+  return items.map((p: ExoPolicy) => ({
     id: p.Identity || p.Guid || p.Name,
     displayName: p.Name || 'Unnamed Policy',
     description: p.AdminDisplayName || null,
@@ -178,9 +264,9 @@ function mapSafeAttachmentsPolicies(raw: any): any[] {
 }
 
 // ── Generic EXO policy mapper (for transport rules, connectors, etc.) ──
-function mapGenericExoPolicies(raw: any): any[] {
+function mapGenericExoPolicies(raw: ExoCommandResult | null): MappedPolicy[] {
   const items = raw?.value || [];
-  return items.map((p: any) => ({
+  return items.map((p: ExoPolicy) => ({
     id: p.Identity || p.Guid || p.Name,
     displayName: p.Name || p.Identity || 'Unnamed',
     description: p.AdminDisplayName || p.Description || null,
@@ -192,7 +278,7 @@ function mapGenericExoPolicies(raw: any): any[] {
 }
 
 // ── Singleton EXO policy mapper (for org config - single object returned) ──
-function mapSingletonExoPolicy(raw: any): any[] {
+function mapSingletonExoPolicy(raw: ExoCommandResult | null): MappedPolicy[] {
   const items = raw?.value || [];
   if (items.length === 0) return [];
   const p = items[0];
@@ -206,7 +292,7 @@ function mapSingletonExoPolicy(raw: any): any[] {
 }
 
 // ── Fallback for when EXO REST API is unavailable ──────────────────────
-function exoFallback(action: string): any[] {
+function exoFallback(action: string): MappedPolicy[] {
   const policyName = action.replace('fetch-', '').replace(/-/g, ' ');
   const isDefender = action === "fetch-safe-links" || action === "fetch-safe-attachments";
   return [{
@@ -270,10 +356,10 @@ serve(async (req) => {
 
     const { client_id, client_secret, tenant_id } = creds[0];
 
-    let responseData: any = null;
+    let responseData: unknown = null;
 
     // ── EXO policy fetch actions ───────────────────────────────────────
-    const exoPolicyActions: Record<string, { cmdlet: string; mapper: (raw: any) => any[]; secondaryCmdlet?: string }> = {
+    const exoPolicyActions: Record<string, { cmdlet: string; mapper: (raw: ExoCommandResult | null) => MappedPolicy[]; secondaryCmdlet?: string }> = {
       "fetch-anti-phishing": { cmdlet: "Get-AntiPhishPolicy", mapper: mapAntiPhishPolicies },
       "fetch-anti-spam": { cmdlet: "Get-HostedContentFilterPolicy", mapper: mapAntiSpamPolicies },
       "fetch-anti-malware": { cmdlet: "Get-MalwareFilterPolicy", mapper: mapAntiMalwarePolicies },
@@ -301,11 +387,11 @@ serve(async (req) => {
           if (secondaryCmdlet) {
             const secondaryRaw = await exoInvokeCommand(exoToken, tenant_id, secondaryCmdlet);
             if (secondaryRaw) {
-              const secondaryResult = mapper(secondaryRaw).map((item: any) => ({
+              const secondaryResult = mapper(secondaryRaw).map((item: MappedPolicy) => ({
                 ...item,
                 connectorType: secondaryCmdlet.includes('Outbound') ? 'Outbound' : 'Inbound',
               }));
-              result = result.map((item: any) => ({ ...item, connectorType: 'Inbound' })).concat(secondaryResult);
+              result = result.map((item: MappedPolicy) => ({ ...item, connectorType: 'Inbound' })).concat(secondaryResult);
             }
           }
           responseData = result;
@@ -322,14 +408,14 @@ serve(async (req) => {
 
       switch (action) {
         case "fetch-overview": {
-          const domains = await graphGet(graphToken, "/domains");
+          const domains = await graphGet<GraphCollection<GraphDomain>>(graphToken, "/domains");
           const domainList = domains?.value || [];
           const domainAuth = parseDomainAuth(domainList);
-          const domainsWithFullAuth = domainAuth.filter((d: any) => d.spf.status === 'pass' && d.dkim.status === 'pass').length;
+          const domainsWithFullAuth = domainAuth.filter((d: DomainAuth) => d.spf.status === 'pass' && d.dkim.status === 'pass').length;
           const domainAuthScore = domainList.length > 0 ? Math.round((domainsWithFullAuth / domainList.length) * 100) : 0;
 
           // Try to get EXO policy counts
-          let policyCounts: any = {
+          let policyCounts: PolicyCounts = {
             antiPhishingCount: null, antiSpamCount: null, antiMalwareCount: null,
             safeLinksCount: null, safeAttachmentsCount: null, policyDataAvailable: false,
           };
@@ -383,11 +469,11 @@ serve(async (req) => {
         }
 
         case "fetch-domain-auth": {
-          const domains = await graphGet(graphToken, "/domains");
+          const domains = await graphGet<GraphCollection<GraphDomain>>(graphToken, "/domains");
           const domainList = domains?.value || [];
           const enriched = await Promise.all(
-            domainList.map(async (d: any) => {
-              const records = await graphGet(graphToken, `/domains/${d.id}/serviceConfigurationRecords`);
+            domainList.map(async (d: GraphDomain) => {
+              const records = await graphGet<GraphCollection<GraphServiceRecord>>(graphToken, `/domains/${d.id}/serviceConfigurationRecords`);
               return { ...d, serviceConfigurationRecords: records?.value || [] };
             })
           );
@@ -397,15 +483,15 @@ serve(async (req) => {
 
         case "ai-recommendations": {
           const [domains, securityAlerts] = await Promise.all([
-            graphGet(graphToken, "/domains"),
-            graphGet(graphToken, "/security/alerts_v2?$top=10"),
+            graphGet<GraphCollection<GraphDomain>>(graphToken, "/domains"),
+            graphGet<GraphCollection<GraphAlert>>(graphToken, "/security/alerts_v2?$top=10"),
           ]);
           const domainList = domains?.value || [];
           const domainAuth = parseDomainAuth(domainList);
           const alerts = securityAlerts?.value || [];
 
           // Also try EXO data for richer AI analysis
-          let exoPolicyData: any = null;
+          let exoPolicyData: Record<string, MappedPolicy[]> | null = null;
           try {
             const exoToken = await getExoToken(client_id, client_secret, tenant_id);
             const [antiPhish, antiSpam, antiMalware, safeLinks, safeAttachments] = await Promise.all([
@@ -428,7 +514,7 @@ serve(async (req) => {
 
           const context = {
             domains: domainAuth,
-            recentAlerts: alerts.slice(0, 5).map((a: any) => ({ title: a.title, severity: a.severity, category: a.category })),
+            recentAlerts: alerts.slice(0, 5).map((a: GraphAlert) => ({ title: a.title, severity: a.severity, category: a.category })),
             tenantId: tenant_id,
             exoPolicies: exoPolicyData,
           };

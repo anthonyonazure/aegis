@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Badge, type BadgeProps } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { getMispStats, threatActors, iocEntries, attackTechniques } from '@/lib/mispData';
 import { useTenantSecurityData } from '@/hooks/useTenantSecurityData';
@@ -7,7 +7,7 @@ import { useTenant } from '@/contexts/TenantContext';
 import { Shield, Users, Search, Globe, Rss, AlertTriangle, Grid3X3, Tags, RefreshCw, Activity, ShieldAlert, UserX, LogIn, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 
-const riskColor: Record<string, string> = {
+const riskColor: Record<string, BadgeProps['variant']> = {
   high: 'destructive',
   medium: 'default',
   low: 'secondary',
@@ -135,7 +135,7 @@ export const OverviewSection = () => {
                   alerts.slice(0, 5).map(alert => (
                     <div key={alert.id} className="flex items-center justify-between text-sm gap-2">
                       <span className="truncate max-w-[180px] text-xs">{alert.title}</span>
-                      <Badge variant={riskColor[alert.severity] as any} className="text-[10px] shrink-0">
+                      <Badge variant={riskColor[alert.severity]} className="text-[10px] shrink-0">
                         {alert.severity}
                       </Badge>
                     </div>

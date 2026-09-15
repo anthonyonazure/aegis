@@ -41,8 +41,8 @@ export function useIntuneData<T>({ resource }: UseIntuneDataOptions) {
       } else {
         setData([]);
       }
-    } catch (err: any) {
-      const msg = err?.message || 'Failed to fetch data';
+    } catch (err) {
+      const msg = (err instanceof Error && err.message) || 'Failed to fetch data';
       setError(msg);
       toast({
         title: 'Error fetching Intune data',

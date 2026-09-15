@@ -16,6 +16,41 @@ function _checkRate(key: string, max = 15, windowMs = 60000): boolean {
   return true;
 }
 
+interface GraphList<T> {
+  value?: T[];
+}
+
+interface GraphUser {
+  id: string;
+  userType?: string;
+  signInActivity?: { lastSignInDateTime?: string };
+}
+
+interface UserRegistrationDetail {
+  id: string;
+  isMfaRegistered?: boolean;
+}
+
+interface SecureScore {
+  currentScore: number;
+  maxScore: number;
+}
+
+interface CaPolicy {
+  displayName?: string;
+  state?: string;
+}
+
+interface DirectoryRole {
+  members?: Array<{ '@odata.type'?: string; id: string }>;
+}
+
+interface SubscribedSku {
+  skuPartNumber?: string;
+  consumedUnits?: number;
+  prepaidUnits?: { enabled?: number };
+}
+
 async function getGraphToken(clientId: string, clientSecret: string, tenantId: string): Promise<string> {
   const resp = await fetch(`https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`, {
     method: 'POST',
@@ -26,7 +61,7 @@ async function getGraphToken(clientId: string, clientSecret: string, tenantId: s
   return (await resp.json()).access_token;
 }
 
-async function graphGet(token: string, endpoint: string, beta = false): Promise<any> {
+async function graphGet<T>(token: string, endpoint: string, beta = false): Promise<GraphList<T> | null> {
   const base = beta ? 'https://graph.microsoft.com/beta' : 'https://graph.microsoft.com/v1.0';
   const r = await fetch(`${base}${endpoint}`, { headers: { Authorization: `Bearer ${token}` } });
   if (!r.ok) { console.error(`Graph error ${endpoint}: ${r.status}`); return null; }
@@ -35,20 +70,20 @@ async function graphGet(token: string, endpoint: string, beta = false): Promise<
 
 async function fetchTenantTelemetry(token: string) {
   const [users, skus, secureScore, caPolicies, dirRoles, authMethods] = await Promise.all([
-    graphGet(token, '/users?$select=id,displayName,userType,accountEnabled,signInActivity&$top=999'),
-    graphGet(token, '/subscribedSkus'),
-    graphGet(token, '/security/secureScores?$top=1', true),
-    graphGet(token, '/identity/conditionalAccess/policies'),
-    graphGet(token, '/directoryRoles?$expand=members'),
-    graphGet(token, '/reports/authenticationMethods/userRegistrationDetails?$top=999', true),
+    graphGet<GraphUser>(token, '/users?$select=id,displayName,userType,accountEnabled,signInActivity&$top=999'),
+    graphGet<SubscribedSku>(token, '/subscribedSkus'),
+    graphGet<SecureScore>(token, '/security/secureScores?$top=1', true),
+    graphGet<CaPolicy>(token, '/identity/conditionalAccess/policies'),
+    graphGet<DirectoryRole>(token, '/directoryRoles?$expand=members'),
+    graphGet<UserRegistrationDetail>(token, '/reports/authenticationMethods/userRegistrationDetails?$top=999', true),
   ]);
 
   const usersData = users?.value || [];
-  const guestUsers = usersData.filter((u: any) => u.userType === 'Guest').length;
+  const guestUsers = usersData.filter((u: GraphUser) => u.userType === 'Guest').length;
   const totalUsers = usersData.length;
 
   const ninetyDaysAgo = new Date(); ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-  const staleAccounts = usersData.filter((u: any) => {
+  const staleAccounts = usersData.filter((u: GraphUser) => {
     const last = u.signInActivity?.lastSignInDateTime;
     return !last || new Date(last) < ninetyDaysAgo;
   }).length;
@@ -61,16 +96,16 @@ async function fetchTenantTelemetry(token: string) {
   }
 
   const authData = authMethods?.value || [];
-  const mfaEnabled = authData.filter((u: any) => u.isMfaRegistered).length;
+  const mfaEnabled = authData.filter((u: UserRegistrationDetail) => u.isMfaRegistered).length;
 
   const skusData = skus?.value || [];
   let totalLicenses = 0, assignedLicenses = 0;
-  const licenseDetails = skusData.map((s: any) => {
+  const licenseDetails = skusData.map((s: SubscribedSku) => {
     const total = s.prepaidUnits?.enabled || 0;
     const assigned = s.consumedUnits || 0;
     totalLicenses += total; assignedLicenses += assigned;
     return { name: s.skuPartNumber, total, assigned, available: total - assigned };
-  }).filter((l: any) => l.total > 0);
+  }).filter((l: { total: number }) => l.total > 0);
 
   const ss = secureScore?.value?.[0];
 
@@ -82,7 +117,7 @@ async function fetchTenantTelemetry(token: string) {
     secureScore: ss?.currentScore || 0,
     maxSecureScore: ss?.maxScore || 0,
     conditionalAccessPolicies: caPolicies?.value?.length || 0,
-    caPolicyNames: (caPolicies?.value || []).map((p: any) => ({ name: p.displayName, state: p.state })),
+    caPolicyNames: (caPolicies?.value || []).map((p: CaPolicy) => ({ name: p.displayName, state: p.state })),
     totalLicenses, assignedLicenses,
     unusedLicenses: totalLicenses - assignedLicenses,
     licenseUtilization: totalLicenses > 0 ? Math.round((assignedLicenses / totalLicenses) * 100) : 0,
@@ -105,7 +140,7 @@ serve(async (req) => {
     const AI_GATEWAY_URL = Deno.env.get('AI_GATEWAY_URL');
     if (!AI_GATEWAY_URL) throw new Error('AI_GATEWAY_URL is not configured');
 
-    let realTenantData: any = legacyData || {};
+    let realTenantData: unknown = legacyData || {};
 
     // If tenantConnectionIds provided, fetch real data
     if (tenantConnectionIds?.length > 0) {
@@ -118,7 +153,7 @@ serve(async (req) => {
         return new Response(JSON.stringify({ error: 'Authentication required' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
-      const tenantsData: any[] = [];
+      const tenantsData: Record<string, unknown>[] = [];
       for (let i = 0; i < tenantConnectionIds.length; i++) {
         const connId = tenantConnectionIds[i];
         const tenantName = tenantNames?.[i] || 'Unknown';

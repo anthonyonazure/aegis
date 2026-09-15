@@ -16,6 +16,8 @@ export interface PSAIntegration {
   ticket_on_compliance_fail: boolean;
   ticket_on_anomaly: boolean;
   external_project_key: string | null; // Required for Jira (project key); unused for others
+  vault_secret_id?: string | null;
+  connection_status?: string | null;
   created_at: string;
   updated_at: string;
 }

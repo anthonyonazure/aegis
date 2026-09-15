@@ -66,8 +66,138 @@ async function verifyAuth(req: Request): Promise<{ userId: string } | { error: s
   return { userId: data.claims.sub as string };
 }
 
+// ===== GRAPH RESOURCE SHAPES =====
+// Payloads are exported Microsoft Graph objects; only the fields read by the
+// generators are named, everything else passes through to JSON.stringify.
+
+interface GraphResource {
+  id?: string;
+  name?: string;
+  displayName?: string;
+  description?: string;
+  '@odata.type'?: string;
+  templateId?: string;
+  [key: string]: unknown;
+}
+
+interface CAConditions {
+  clientAppTypes?: string[];
+  applications?: { includeApplications?: string[]; excludeApplications?: string[] };
+  users?: {
+    includeUsers?: string[];
+    excludeUsers?: string[];
+    includeGroups?: string[];
+    excludeGroups?: string[];
+    includeRoles?: string[];
+    excludeRoles?: string[];
+  };
+  locations?: { includeLocations?: string[]; excludeLocations?: string[] };
+  platforms?: { includePlatforms?: string[]; excludePlatforms?: string[] };
+}
+
+interface CAGrantControls {
+  operator?: string;
+  builtInControls?: string[];
+}
+
+interface CASessionControls {
+  signInFrequency?: { value?: number; type?: string };
+}
+
+interface CAPolicy extends GraphResource {
+  state?: string;
+  conditions?: CAConditions;
+  grantControls?: CAGrantControls;
+  sessionControls?: CASessionControls;
+}
+
+type IpRange = string | { cidrAddress?: string };
+
+interface NamedLocation extends GraphResource {
+  ipRanges?: IpRange[];
+  isTrusted?: boolean;
+  countriesAndRegions?: string[];
+  includeUnknownCountriesAndRegions?: boolean;
+}
+
+interface AuthStrength extends GraphResource {
+  allowedCombinations?: string[];
+}
+
+interface Group extends GraphResource {
+  groupTypes?: string[];
+  membershipRule?: string;
+  securityEnabled?: boolean;
+  mailEnabled?: boolean;
+  mailNickname?: string;
+}
+
+interface PermissionScope {
+  id?: string;
+  adminConsentDescription?: string;
+  adminConsentDisplayName?: string;
+  isEnabled?: boolean;
+  type?: string;
+  value?: string;
+}
+
+interface RequiredResourceAccess {
+  resourceAppId?: string;
+  resourceAccess?: { id?: string; type?: string }[];
+}
+
+interface AppWeb {
+  redirectUris?: string[];
+  implicitGrantSettings?: { enableIdTokenIssuance?: boolean };
+}
+
+interface AppApi {
+  oauth2PermissionScopes?: PermissionScope[];
+}
+
+interface AppRegistration extends GraphResource {
+  signInAudience?: string;
+  web?: AppWeb;
+  api?: AppApi;
+  requiredResourceAccess?: RequiredResourceAccess[];
+  identifierUris?: string[];
+}
+
+interface AdminUnit extends GraphResource {
+  visibility?: string;
+}
+
+interface DirectorySetting extends GraphResource {
+  values?: { name?: string; value?: string }[];
+}
+
+interface AutopilotProfile extends GraphResource {
+  deviceNameTemplate?: string;
+  deviceType?: string;
+  enableWhiteGlove?: boolean;
+  extractHardwareHash?: boolean;
+  outOfBoxExperienceSettings?: {
+    hideEULA?: boolean;
+    hidePrivacySettings?: boolean;
+    hideEscapeLink?: boolean;
+    skipKeyboardSelectionPage?: boolean;
+    userType?: string;
+  };
+}
+
+interface DeviceScript extends GraphResource {
+  scriptContent?: string;
+  runAsAccount?: string;
+  enforceSignatureCheck?: boolean;
+  runAs32Bit?: boolean;
+}
+
+function toResourceList(data: unknown): GraphResource[] {
+  return (Array.isArray(data) ? data : [data]) as GraphResource[];
+}
+
 // Utility to sanitize resource names for Terraform/Bicep
-function sanitizeName(name: string): string {
+function sanitizeName(name: string | undefined): string {
   return (name || 'resource')
     .toLowerCase()
     .replace(/[^a-z0-9]/g, '_')
@@ -90,13 +220,13 @@ function escapeBicep(str: string): string {
 
 // ===== TERRAFORM GENERATORS =====
 
-function toTerraform(data: any, resourceType: string): string {
+function toTerraform(data: unknown, resourceType: string): string {
   const resources: string[] = [];
-  const items = Array.isArray(data) ? data : [data];
+  const items = toResourceList(data);
 
   for (const item of items) {
     const resourceName = sanitizeName(item.displayName || item.name || item.id);
-    let terraformResource = '';
+    let terraformResource: string;
 
     switch (resourceType) {
       // Conditional Access
@@ -195,14 +325,14 @@ provider "azurerm" {
 }
 
 // Conditional Access Policy
-function generateCATerraform(policy: any, name: string): string {
-  const conditions = policy.conditions || {};
-  const users = conditions.users || {};
-  const apps = conditions.applications || {};
-  const locations = conditions.locations || {};
-  const platforms = conditions.platforms || {};
-  const grant = policy.grantControls || {};
-  const session = policy.sessionControls || {};
+function generateCATerraform(policy: CAPolicy, name: string): string {
+  const conditions: CAConditions = policy.conditions || {};
+  const users: NonNullable<CAConditions['users']> = conditions.users || {};
+  const apps: NonNullable<CAConditions['applications']> = conditions.applications || {};
+  const locations: NonNullable<CAConditions['locations']> = conditions.locations || {};
+  const platforms: NonNullable<CAConditions['platforms']> = conditions.platforms || {};
+  const grant: CAGrantControls = policy.grantControls || {};
+  const session: CASessionControls = policy.sessionControls || {};
 
   return `resource "azuread_conditional_access_policy" "${name}" {
   display_name = "${escapeHcl(policy.displayName || '')}"
@@ -252,12 +382,12 @@ ${session.signInFrequency ? `
 }
 
 // Named Location
-function generateNamedLocationTerraform(location: any, name: string): string {
+function generateNamedLocationTerraform(location: NamedLocation, name: string): string {
   const isIp = location['@odata.type']?.includes('ipNamedLocation');
   const isCountry = location['@odata.type']?.includes('countryNamedLocation');
 
   if (isIp) {
-    const ranges = (location.ipRanges || []).map((r: any) => r.cidrAddress || r).filter(Boolean);
+    const ranges = (location.ipRanges || []).map((r: IpRange) => (typeof r === 'object' && r.cidrAddress) || r).filter(Boolean);
     return `resource "azuread_named_location" "${name}" {
   display_name = "${escapeHcl(location.displayName || '')}"
 
@@ -281,7 +411,7 @@ function generateNamedLocationTerraform(location: any, name: string): string {
 }
 
 // Authentication Strength
-function generateAuthStrengthTerraform(strength: any, name: string): string {
+function generateAuthStrengthTerraform(strength: AuthStrength, name: string): string {
   return `resource "azuread_authentication_strength_policy" "${name}" {
   display_name = "${escapeHcl(strength.displayName || '')}"
   description  = "${escapeHcl(strength.description || '')}"
@@ -291,7 +421,7 @@ function generateAuthStrengthTerraform(strength: any, name: string): string {
 }
 
 // Group
-function generateGroupTerraform(group: any, name: string): string {
+function generateGroupTerraform(group: Group, name: string): string {
   const isUnified = group.groupTypes?.includes('Unified');
   const isDynamic = group.membershipRule ? true : false;
   const types = [];
@@ -315,9 +445,9 @@ ${isDynamic ? `
 }
 
 // App Registration
-function generateAppRegistrationTerraform(app: any, name: string): string {
-  const web = app.web || {};
-  const api = app.api || {};
+function generateAppRegistrationTerraform(app: AppRegistration, name: string): string {
+  const web: AppWeb = app.web || {};
+  const api: AppApi = app.api || {};
   
   return `resource "azuread_application" "${name}" {
   display_name = "${escapeHcl(app.displayName || '')}"
@@ -331,7 +461,7 @@ ${web.redirectUris?.length ? `
 ` : ''}
 ${api.oauth2PermissionScopes?.length ? `
   api {
-    ${api.oauth2PermissionScopes.map((scope: any) => `
+    ${api.oauth2PermissionScopes.map((scope: PermissionScope) => `
     oauth2_permission_scope {
       admin_consent_description  = "${escapeHcl(scope.adminConsentDescription || '')}"
       admin_consent_display_name = "${escapeHcl(scope.adminConsentDisplayName || '')}"
@@ -343,10 +473,10 @@ ${api.oauth2PermissionScopes?.length ? `
   }
 ` : ''}
 ${app.requiredResourceAccess?.length ? `
-  ${app.requiredResourceAccess.map((rra: any) => `
+  ${app.requiredResourceAccess.map((rra: RequiredResourceAccess) => `
   required_resource_access {
     resource_app_id = "${rra.resourceAppId}"
-    ${(rra.resourceAccess || []).map((ra: any) => `
+    ${(rra.resourceAccess || []).map((ra: { id?: string; type?: string }) => `
     resource_access {
       id   = "${ra.id}"
       type = "${ra.type}"
@@ -361,7 +491,7 @@ resource "azuread_service_principal" "${name}_sp" {
 }
 
 // Admin Unit
-function generateAdminUnitTerraform(unit: any, name: string): string {
+function generateAdminUnitTerraform(unit: AdminUnit, name: string): string {
   return `resource "azuread_administrative_unit" "${name}" {
   display_name              = "${escapeHcl(unit.displayName || '')}"
   description               = "${escapeHcl(unit.description || '')}"
@@ -370,7 +500,7 @@ function generateAdminUnitTerraform(unit: any, name: string): string {
 }
 
 // Directory Settings
-function generateDirectorySettingsTerraform(setting: any, name: string): string {
+function generateDirectorySettingsTerraform(setting: DirectorySetting, name: string): string {
   const values = setting.values || [];
   return `# Directory Setting: ${setting.displayName || name}
 # Template: ${setting.templateId || 'Unknown'}
@@ -378,12 +508,12 @@ function generateDirectorySettingsTerraform(setting: any, name: string): string 
 resource "azuread_directory_role_eligibility_schedule_request" "${name}" {
   # Directory settings require manual configuration or use of azuread_directory_setting
   # Exported values:
-${values.map((v: any) => `  # ${v.name} = "${v.value}"`).join('\n')}
+${values.map((v: { name?: string; value?: string }) => `  # ${v.name} = "${v.value}"`).join('\n')}
 }`;
 }
 
 // Device Configuration
-function generateDeviceConfigTerraform(config: any, name: string): string {
+function generateDeviceConfigTerraform(config: GraphResource, name: string): string {
   const odataType = config['@odata.type'] || '';
   const platform = odataType.includes('windows') ? 'windows' : 
                    odataType.includes('ios') ? 'ios' :
@@ -412,7 +542,7 @@ resource "microsoft365_intune_device_configuration" "${name}" {
 }
 
 // Compliance Policy
-function generateComplianceTerraform(policy: any, name: string): string {
+function generateComplianceTerraform(policy: GraphResource, name: string): string {
   const odataType = policy['@odata.type'] || '';
   const platform = odataType.includes('windows') ? 'windows' : 
                    odataType.includes('ios') ? 'ios' :
@@ -437,7 +567,7 @@ resource "microsoft365_intune_device_compliance_policy" "${name}" {
 }
 
 // Autopilot Profile
-function generateAutopilotTerraform(profile: any, name: string): string {
+function generateAutopilotTerraform(profile: AutopilotProfile, name: string): string {
   return `# Windows Autopilot Deployment Profile: ${profile.displayName}
 
 resource "microsoft365_intune_windows_autopilot_deployment_profile" "${name}" {
@@ -458,7 +588,7 @@ resource "microsoft365_intune_windows_autopilot_deployment_profile" "${name}" {
 }
 
 // PowerShell Script
-function generateScriptTerraform(script: any, name: string): string {
+function generateScriptTerraform(script: DeviceScript, name: string): string {
   // Decode base64 script content in Deno
   let scriptContent = '# Script content not available';
   if (script.scriptContent) {
@@ -487,7 +617,7 @@ ${scriptContent}
 }
 
 // Defender Policy
-function generateDefenderPolicyTerraform(policy: any, name: string, resourceType: string): string {
+function generateDefenderPolicyTerraform(policy: GraphResource, name: string, resourceType: string): string {
   const policyType = resourceType.split('/')[1];
   return `# Microsoft Defender ${policyType}: ${policy.displayName}
 
@@ -506,7 +636,7 @@ resource "microsoft365_intune_device_configuration_policy" "${name}" {
 }
 
 // Security Baseline
-function generateSecurityBaselineTerraform(baseline: any, name: string): string {
+function generateSecurityBaselineTerraform(baseline: GraphResource, name: string): string {
   return `# Security Baseline Template: ${baseline.displayName}
 
 resource "microsoft365_intune_security_baseline" "${name}" {
@@ -522,7 +652,7 @@ resource "microsoft365_intune_security_baseline" "${name}" {
 }
 
 // Generic fallback
-function generateGenericTerraform(item: any, name: string, resourceType: string): string {
+function generateGenericTerraform(item: GraphResource, name: string, resourceType: string): string {
   return `# Resource: ${item.displayName || item.name || name}
 # Type: ${resourceType}
 # ID: ${item.id || 'N/A'}
@@ -539,8 +669,8 @@ ${JSON.stringify(item, null, 2)}
 
 // ===== BICEP GENERATORS =====
 
-function toBicep(data: any, resourceType: string): string {
-  const items = Array.isArray(data) ? data : [data];
+function toBicep(data: unknown, resourceType: string): string {
+  const items = toResourceList(data);
   const resources: string[] = [];
 
   const header = `// Generated by M365 Governance Manager
@@ -599,7 +729,7 @@ param tenantId string = tenant().tenantId
 }
 
 // Group Bicep
-function generateGroupBicep(group: any, name: string): string {
+function generateGroupBicep(group: Group, name: string): string {
   const isUnified = group.groupTypes?.includes('Unified');
   const isDynamic = group.membershipRule ? true : false;
 
@@ -619,7 +749,7 @@ output group_${name}_id string = group_${name}.id`;
 }
 
 // App Registration Bicep
-function generateAppRegistrationBicep(app: any, name: string): string {
+function generateAppRegistrationBicep(app: AppRegistration, name: string): string {
   return `// Application Registration: ${app.displayName}
 resource app_${name} 'Microsoft.Graph/applications@v1.0' = {
   displayName: '${escapeBicep(app.displayName || '')}'
@@ -640,7 +770,7 @@ output app_${name}_appId string = app_${name}.appId`;
 }
 
 // Admin Unit Bicep
-function generateAdminUnitBicep(unit: any, name: string): string {
+function generateAdminUnitBicep(unit: AdminUnit, name: string): string {
   return `// Administrative Unit: ${unit.displayName}
 resource adminUnit_${name} 'Microsoft.Graph/administrativeUnits@v1.0' = {
   displayName: '${escapeBicep(unit.displayName || '')}'
@@ -652,8 +782,8 @@ output adminUnit_${name}_id string = adminUnit_${name}.id`;
 }
 
 // Conditional Access Bicep
-function generateCABicep(policy: any, name: string): string {
-  const conditions = policy.conditions || {};
+function generateCABicep(policy: CAPolicy, name: string): string {
+  const conditions: CAConditions = policy.conditions || {};
   
   return `// Conditional Access Policy: ${policy.displayName}
 // Note: CA policies in Bicep require Microsoft.Graph provider preview
@@ -683,17 +813,17 @@ output caPolicy_${name}_id string = caPolicy_${name}.id`;
 }
 
 // Named Location Bicep
-function generateNamedLocationBicep(location: any, name: string): string {
+function generateNamedLocationBicep(location: NamedLocation, name: string): string {
   const isIp = location['@odata.type']?.includes('ipNamedLocation');
   
   if (isIp) {
-    const ranges = (location.ipRanges || []).map((r: any) => r.cidrAddress || r).filter(Boolean);
+    const ranges = (location.ipRanges || []).map((r: IpRange) => (typeof r === 'object' && r.cidrAddress) || r).filter(Boolean);
     return `// Named Location (IP): ${location.displayName}
 resource namedLocation_${name} 'Microsoft.Graph/namedLocations@v1.0' = {
   displayName: '${escapeBicep(location.displayName || '')}'
   '@odata.type': '#microsoft.graph.ipNamedLocation'
   isTrusted: ${location.isTrusted || false}
-  ipRanges: ${JSON.stringify(ranges.map((r: string) => ({ '@odata.type': '#microsoft.graph.iPv4CidrRange', cidrAddress: r })))}
+  ipRanges: ${JSON.stringify(ranges.map((r: IpRange) => ({ '@odata.type': '#microsoft.graph.iPv4CidrRange', cidrAddress: r })))}
 }`;
   }
   
@@ -707,7 +837,7 @@ resource namedLocation_${name} 'Microsoft.Graph/namedLocations@v1.0' = {
 }
 
 // Device Config Bicep
-function generateDeviceConfigBicep(config: any, name: string): string {
+function generateDeviceConfigBicep(config: GraphResource, name: string): string {
   return `// Intune Device Configuration: ${config.displayName}
 // Note: Intune resources are not directly supported in Bicep.
 // Use deployment scripts or Azure Functions to call Graph API.
@@ -733,7 +863,7 @@ resource deploymentScript_${name} 'Microsoft.Resources/deploymentScripts@2020-10
 }
 
 // Compliance Policy Bicep
-function generateComplianceBicep(policy: any, name: string): string {
+function generateComplianceBicep(policy: GraphResource, name: string): string {
   return `// Intune Compliance Policy: ${policy.displayName}
 // Note: Deploy via Graph API using deployment scripts
 
@@ -757,7 +887,7 @@ resource deploymentScript_${name} 'Microsoft.Resources/deploymentScripts@2020-10
 }
 
 // Generic Bicep
-function generateGenericBicep(item: any, name: string, resourceType: string): string {
+function generateGenericBicep(item: GraphResource, name: string, resourceType: string): string {
   return `// Resource: ${item.displayName || item.name || name}
 // Type: ${resourceType}
 // 
@@ -773,8 +903,8 @@ ${JSON.stringify(item, null, 2)}
 
 // ===== POWERSHELL GENERATORS =====
 
-function toPowerShell(data: any, resourceType: string): string {
-  const items = Array.isArray(data) ? data : [data];
+function toPowerShell(data: unknown, resourceType: string): string {
+  const items = toResourceList(data);
   const scripts: string[] = [];
 
   const header = `# Generated by M365 Governance Manager
@@ -829,8 +959,8 @@ function toPowerShell(data: any, resourceType: string): string {
   return header + scripts.join('\n\n');
 }
 
-function generateCAPowerShell(policy: any): string {
-  const conditions = policy.conditions || {};
+function generateCAPowerShell(policy: CAPolicy): string {
+  const conditions: CAConditions = policy.conditions || {};
   return `#region Conditional Access Policy: ${policy.displayName}
 $policyParams = @{
     DisplayName = "${policy.displayName || ''}"
@@ -858,7 +988,7 @@ New-MgIdentityConditionalAccessPolicy -BodyParameter $policyParams
 #endregion`;
 }
 
-function generateNamedLocationPowerShell(location: any): string {
+function generateNamedLocationPowerShell(location: NamedLocation): string {
   const isIp = location['@odata.type']?.includes('ipNamedLocation');
   
   if (isIp) {
@@ -868,7 +998,7 @@ $locationParams = @{
     DisplayName = "${location.displayName || ''}"
     IsTrusted = $${location.isTrusted || false}
     IpRanges = @(
-        ${(location.ipRanges || []).map((r: any) => `@{ "@odata.type" = "#microsoft.graph.iPv4CidrRange"; CidrAddress = "${r.cidrAddress || r}" }`).join('\n        ')}
+        ${(location.ipRanges || []).map((r: IpRange) => `@{ "@odata.type" = "#microsoft.graph.iPv4CidrRange"; CidrAddress = "${(typeof r === 'object' && r.cidrAddress) || r}" }`).join('\n        ')}
     )
 }
 
@@ -888,7 +1018,7 @@ New-MgIdentityConditionalAccessNamedLocation -BodyParameter $locationParams
 #endregion`;
 }
 
-function generateGroupPowerShell(group: any): string {
+function generateGroupPowerShell(group: Group): string {
   const isUnified = group.groupTypes?.includes('Unified');
   const isDynamic = group.membershipRule ? true : false;
   
@@ -909,7 +1039,7 @@ New-MgGroup -BodyParameter $groupParams
 #endregion`;
 }
 
-function generateAppRegistrationPowerShell(app: any): string {
+function generateAppRegistrationPowerShell(app: AppRegistration): string {
   return `#region Application: ${app.displayName}
 $appParams = @{
     DisplayName = "${app.displayName || ''}"
@@ -928,7 +1058,7 @@ Write-Host "Created application: $($app.DisplayName) with AppId: $($app.AppId)"
 #endregion`;
 }
 
-function generateDeviceConfigPowerShell(config: any): string {
+function generateDeviceConfigPowerShell(config: GraphResource): string {
   return `#region Device Configuration: ${config.displayName}
 $configBody = @'
 ${JSON.stringify(config, null, 2)}
@@ -940,7 +1070,7 @@ Write-Host "Created device configuration: $($response.displayName)"
 #endregion`;
 }
 
-function generateCompliancePowerShell(policy: any): string {
+function generateCompliancePowerShell(policy: GraphResource): string {
   return `#region Compliance Policy: ${policy.displayName}
 $policyBody = @'
 ${JSON.stringify(policy, null, 2)}
@@ -952,7 +1082,7 @@ Write-Host "Created compliance policy: $($response.displayName)"
 #endregion`;
 }
 
-function generateAutopilotPowerShell(profile: any): string {
+function generateAutopilotPowerShell(profile: AutopilotProfile): string {
   return `#region Autopilot Profile: ${profile.displayName}
 $profileBody = @'
 ${JSON.stringify(profile, null, 2)}
@@ -964,7 +1094,7 @@ Write-Host "Created Autopilot profile: $($response.displayName)"
 #endregion`;
 }
 
-function generateScriptPowerShell(script: any): string {
+function generateScriptPowerShell(script: DeviceScript): string {
   return `#region PowerShell Script: ${script.displayName}
 $scriptBody = @'
 ${JSON.stringify(script, null, 2)}
@@ -976,7 +1106,7 @@ Write-Host "Created PowerShell script: $($response.displayName)"
 #endregion`;
 }
 
-function generateGenericPowerShell(item: any, resourceType: string): string {
+function generateGenericPowerShell(item: GraphResource, resourceType: string): string {
   return `#region Resource: ${item.displayName || item.name || 'Unknown'}
 # Type: ${resourceType}
 

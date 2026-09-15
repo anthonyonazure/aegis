@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -155,7 +155,7 @@ Deno.serve(async (req) => {
   }
 });
 
-async function checkShouldRun(supabase: any, schedule: ScheduledExport): Promise<boolean> {
+async function checkShouldRun(supabase: SupabaseClient, schedule: ScheduledExport): Promise<boolean> {
   // If never run before, should run
   const { data } = await supabase
     .from("scheduled_exports")
@@ -222,7 +222,7 @@ function calculateNextRun(cronExpression: string): string {
 }
 
 async function triggerWebhooks(
-  supabase: any,
+  supabase: SupabaseClient,
   userId: string,
   eventType: string,
   payload: Record<string, unknown>

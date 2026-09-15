@@ -74,7 +74,7 @@ export const AIGovernancePolicies = ({ customerId }: AIGovernancePoliciesProps) 
     description: '',
     policyType: 'data-access',
     isActive: true,
-    settings: {} as Record<string, any>,
+    settings: {} as Record<string, unknown>,
     targetType: 'all_tenants',
     targetTenantIds: [] as string[],
     enforcementLevel: 'audit',

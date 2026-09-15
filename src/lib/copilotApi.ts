@@ -1,8 +1,27 @@
 import { supabase } from '@/integrations/supabase/client';
+import type { Json } from '@/integrations/supabase/types';
+
+/** Per-category detail fields returned by the readiness assessment function. */
+export interface ReadinessDetails {
+  copilotLicenses?: number;
+  consumedLicenses?: number;
+  availableLicenses?: number;
+  mfaEnabled?: boolean;
+  conditionalAccessPolicies?: number;
+  mailboxesDetected?: boolean;
+  sensitivityLabelsEnabled?: boolean;
+  oneDriveProvisioned?: boolean;
+  overshareRisk?: string;
+  transcriptionEnabled?: boolean;
+  copilotVoiceReady?: boolean;
+  requiredEndpoints?: string[];
+  wssRequired?: boolean;
+  [key: string]: unknown;
+}
 
 export interface ReadinessCategory {
   ready: boolean;
-  details: any;
+  details: ReadinessDetails;
 }
 
 export interface ReadinessAssessment {
@@ -70,7 +89,7 @@ export interface AIGovernancePolicy {
   description?: string;
   policyType: string;
   isActive: boolean;
-  settings: Record<string, any>;
+  settings: Record<string, unknown>;
   targetType: string;
   targetTenantIds: string[];
   targetGroupId?: string;
@@ -241,7 +260,7 @@ export async function getGovernancePolicies(customerId?: string): Promise<AIGove
     description: p.description,
     policyType: p.policy_type,
     isActive: p.is_active,
-    settings: (p.settings as Record<string, any>) || {},
+    settings: (p.settings as Record<string, unknown>) || {},
     targetType: p.target_type,
     targetTenantIds: p.target_tenant_ids || [],
     targetGroupId: p.target_group_id,
@@ -269,7 +288,7 @@ export async function createGovernancePolicy(
       description: policy.description,
       policy_type: policy.policyType,
       is_active: policy.isActive,
-      settings: policy.settings,
+      settings: policy.settings as Json,
       target_type: policy.targetType,
       target_tenant_ids: policy.targetTenantIds,
       target_group_id: policy.targetGroupId,
@@ -286,7 +305,7 @@ export async function createGovernancePolicy(
     description: data.description,
     policyType: data.policy_type,
     isActive: data.is_active,
-    settings: (data.settings as Record<string, any>) || {},
+    settings: (data.settings as Record<string, unknown>) || {},
     targetType: data.target_type,
     targetTenantIds: data.target_tenant_ids || [],
     targetGroupId: data.target_group_id,
@@ -305,7 +324,7 @@ export async function updateGovernancePolicy(policyId: string, updates: Partial<
       name: updates.name,
       description: updates.description,
       is_active: updates.isActive,
-      settings: updates.settings,
+      settings: updates.settings as Json,
       enforcement_level: updates.enforcementLevel,
     })
     .eq('id', policyId);
@@ -339,15 +358,15 @@ export async function saveReadinessAssessment(
       customer_id: customerId,
       overall_score: assessment.overallScore,
       licensing_ready: assessment.licensing.ready,
-      licensing_details: assessment.licensing.details,
+      licensing_details: assessment.licensing.details as Json,
       permissions_ready: assessment.identity?.ready ?? assessment.permissions?.ready,
-      permissions_details: assessment.identity?.details ?? assessment.permissions?.details,
+      permissions_details: (assessment.identity?.details ?? assessment.permissions?.details) as Json,
       semantic_index_ready: assessment.semanticIndex?.ready ?? assessment.dataGovernance?.ready,
-      semantic_index_details: assessment.semanticIndex?.details ?? assessment.dataGovernance?.details,
+      semantic_index_details: (assessment.semanticIndex?.details ?? assessment.dataGovernance?.details) as Json,
       data_governance_ready: assessment.dataGovernance.ready,
-      data_governance_details: assessment.dataGovernance.details,
+      data_governance_details: assessment.dataGovernance.details as Json,
       network_ready: assessment.network.ready,
-      network_details: assessment.network.details,
+      network_details: assessment.network.details as Json,
       recommendations: assessment.recommendations,
     });
 

@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -29,6 +29,12 @@ interface TenantConnection {
   tenant_id: string;
   display_name: string | null;
   tenant_name: string | null;
+}
+
+interface DecryptedCredential {
+  client_id: string;
+  client_secret: string;
+  tenant_id: string;
 }
 
 interface DeploymentResult {
@@ -263,7 +269,7 @@ Deno.serve(async (req) => {
 });
 
 async function getTargetTenants(
-  supabase: any,
+  supabase: SupabaseClient,
   schedule: ScheduledDeploymentConfig
 ): Promise<TenantConnection[]> {
   let query = supabase
@@ -301,7 +307,7 @@ async function getTargetTenants(
 }
 
 async function deployToTenant(
-  supabase: any,
+  supabase: SupabaseClient,
   tenant: TenantConnection,
   template: Record<string, unknown>,
   userId: string,
@@ -315,7 +321,7 @@ async function deployToTenant(
     p_user_id: userId,
   });
 
-  if (credError || !credentials || (credentials as any[]).length === 0) {
+  if (credError || !credentials || (credentials as DecryptedCredential[]).length === 0) {
     return {
       tenantId: tenant.tenant_id,
       tenantName,
@@ -326,7 +332,7 @@ async function deployToTenant(
     };
   }
 
-  const cred = (credentials as any[])[0];
+  const cred = (credentials as DecryptedCredential[])[0];
 
   // Get access token
   const tokenResult = await getAccessToken(cred.tenant_id, cred.client_id, cred.client_secret);
@@ -521,7 +527,7 @@ function calculateNextRun(cronExpression: string): string {
 }
 
 async function triggerWebhook(
-  supabase: any,
+  supabase: SupabaseClient,
   userId: string,
   eventType: string,
   payload: Record<string, unknown>
@@ -536,7 +542,7 @@ async function triggerWebhook(
 
     if (!webhooks || webhooks.length === 0) return;
 
-    for (const webhook of webhooks as any[]) {
+    for (const webhook of webhooks as { url: string }[]) {
       try {
         await fetch(webhook.url, {
           method: "POST",

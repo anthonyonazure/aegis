@@ -26,7 +26,7 @@ async function getGraphToken(clientId: string, clientSecret: string, tenantId: s
   return (await resp.json()).access_token;
 }
 
-async function fetchGraph(token: string, endpoint: string): Promise<any> {
+async function fetchGraph(token: string, endpoint: string): Promise<unknown> {
   const resp = await fetch(`https://graph.microsoft.com/v1.0${endpoint}`, {
     headers: { Authorization: `Bearer ${token}`, ConsistencyLevel: 'eventual' },
   });
@@ -106,7 +106,7 @@ Return JSON only:
     }
 
     // Step 2: Fetch real data if we have credentials
-    let liveData: Record<string, any> = {};
+    let liveData: Record<string, unknown> = {};
     let dataSource = 'simulated';
     const connIds = tenantConnectionIds || [];
 
