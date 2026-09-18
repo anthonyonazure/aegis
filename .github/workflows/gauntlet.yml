@@ -1,18 +1,30 @@
 name: gauntlet
-# gauntlet-generator: 418f98ece91c
+# gauntlet-generator: a591be70b4ae
 # Regenerate with `arm-gauntlet.ts --upgrade`. A repo whose stamp differs from
 # the installer's is running an older set of gates, which is what the sweep
 # checks rather than guessing from what the file happens to contain.
 on:
+  # Push runs only on the branch this repo publishes from. Every other branch is
+  # checked by its pull request instead. Triggering on both used to run the whole
+  # gauntlet TWICE for every push to an open pull request, once under each name,
+  # and the two never cancelled each other because GitHub files them under
+  # different refs. On 2026-09-15 a fleet-wide upgrade did that across every repo
+  # and cost more in two days than the rest of the month. A branch pushed with no
+  # pull request is no longer checked until one is opened, which is when a check
+  # can block anything.
   push:
+    branches: ["main"]
   pull_request:
   # A repo you have not touched in three months has not been checked in three
   # months, while new vulnerabilities against what it already ships are
   # published daily. The dependency and secret gates are time-sensitive, not
-  # edit-sensitive, so the whole gauntlet re-runs on a clock as well as on a
-  # commit. Silence is not the same as safety.
+  # edit-sensitive, so the whole gauntlet also re-runs on a clock. Weekly, not
+  # daily: across a fleet of private repos a daily run was the single largest
+  # line on the bill, and GitHub's own security alerts, which cost nothing, still
+  # flag a newly published vulnerability the day it lands. Silence is not the
+  # same as safety, and neither is a bill nobody expected.
   schedule:
-    - cron: "17 6 * * *"
+    - cron: "17 6 * * 1"
   workflow_dispatch:
 concurrency:
   # A literal, not ${{ github.workflow }}. That expression is the workflow's
@@ -31,6 +43,7 @@ permissions:
   contents: read
 jobs:
   node:
+    timeout-minutes: 90
     name: Node / TypeScript (bun)
     runs-on: ubuntu-latest
     steps:
@@ -59,6 +72,12 @@ jobs:
             echo "::warning title=GATE typecheck NOT_APPLICABLE::package.json defines no real 'typecheck' script — nothing was checked, so this tick verifies nothing"
             exit 0
           fi
+          src_files=$(git ls-files -- '*.ts' '*.tsx' '*.mts' '*.cts' '*.js' '*.jsx' '*.mjs' ':!:*.config.*' ':!:**/*.config.*' ':!:.claude/**' | wc -l | tr -d ' ')
+          if [ "$src_files" -eq 0 ]; then
+            echo "GATE typecheck = NOT_APPLICABLE (the repository has no source files for it to check yet)" >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning title=GATE typecheck NOT_APPLICABLE::the repository has no source files for it to check yet — nothing was checked, so this tick verifies nothing"
+            exit 0
+          fi
           bun run typecheck
           echo "GATE typecheck = VERIFIED" >> "$GITHUB_STEP_SUMMARY"
       - name: lint
@@ -69,12 +88,23 @@ jobs:
             echo "::warning title=GATE lint NOT_APPLICABLE::package.json defines no real 'lint' script — nothing was checked, so this tick verifies nothing"
             exit 0
           fi
+          src_files=$(git ls-files -- '*.ts' '*.tsx' '*.mts' '*.cts' '*.js' '*.jsx' '*.mjs' ':!:*.config.*' ':!:**/*.config.*' ':!:.claude/**' | wc -l | tr -d ' ')
+          if [ "$src_files" -eq 0 ]; then
+            echo "GATE lint = NOT_APPLICABLE (the repository has no source files for it to check yet)" >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning title=GATE lint NOT_APPLICABLE::the repository has no source files for it to check yet — nothing was checked, so this tick verifies nothing"
+            exit 0
+          fi
           bun run lint
           echo "GATE lint = VERIFIED" >> "$GITHUB_STEP_SUMMARY"
       - name: tests
         run: |
           script=$(node -p "JSON.parse(require('fs').readFileSync('package.json','utf8')).scripts?.test ?? ''" 2>/dev/null || echo "")
           if [ -z "$script" ] || printf '%s' "$script" | grep -Eq '^[[:space:]]*(true|:|exit[[:space:]]+[0-9]+)[[:space:]]*$|^[[:space:]]*echo[^&|;]*([[:space:]]*(&&|;)[[:space:]]*(echo[^&|;]*|true|:|exit[[:space:]]+[0-9]+))*[[:space:]]*$'; then
+            if grep -Eq '"tier"[[:space:]]*:[[:space:]]*"production"' .gauntlet.json 2>/dev/null; then
+              echo "GATE tests = FAILED (this repo is marked production, and package.json defines no real 'test' script)" >> "$GITHUB_STEP_SUMMARY"
+              echo "::error title=GATE tests FAILED::marked production in .gauntlet.json, and package.json defines no real 'test' script"
+              exit 1
+            fi
             echo "GATE tests = NOT_APPLICABLE (package.json defines no real 'test' script)" >> "$GITHUB_STEP_SUMMARY"
             echo "::warning title=GATE tests NOT_APPLICABLE::package.json defines no real 'test' script — nothing was checked, so this tick verifies nothing"
             exit 0
@@ -89,12 +119,24 @@ jobs:
           else
             runner="bun run test"
           fi
+          # A recorded floor was measured with this test command plus --coverage
+          # (see the coverage ratchet). Run the same command here, or a vitest or
+          # jest repo prints no coverage table and its floor is never compared:
+          # ai-secretary's 67% read NOT_APPLICABLE on every run. A repo with no
+          # floor is left as it is, since its coverage provider may not exist.
+          floor=$(node -p "JSON.parse(require('fs').readFileSync('package.json','utf8')).gauntlet?.coverageFloorPercent ?? ''" 2>/dev/null || echo "")
+          if [ -n "$floor" ] && ! printf '%s' "$runner" | grep -q -- '--coverage'; then runner="$runner --coverage"; fi
           echo "running: $runner"
           set +e
           out=$(eval "$runner" 2>&1); code=$?
           set -e
           echo "$out"
-          if printf '%s' "$out" | grep -Eq '0 test files matching|[Nn]o tests? found'; then
+          if printf '%s' "$out" | grep -Eq '0 test files matching|[Nn]o tests? found|[Nn]o test files found'; then
+            if grep -Eq '"tier"[[:space:]]*:[[:space:]]*"production"' .gauntlet.json 2>/dev/null; then
+              echo "GATE tests = FAILED (this repo is marked production, and the test runner found no tests in this repo)" >> "$GITHUB_STEP_SUMMARY"
+              echo "::error title=GATE tests FAILED::marked production in .gauntlet.json, and the test runner found no tests in this repo"
+              exit 1
+            fi
             echo "GATE tests = NOT_APPLICABLE (the test runner found no tests in this repo)" >> "$GITHUB_STEP_SUMMARY"
             echo "::warning title=GATE tests NOT_APPLICABLE::the test runner found no tests in this repo — nothing was checked, so this tick verifies nothing"
             exit 0
@@ -108,7 +150,7 @@ jobs:
           # rather than by bun, whose scalar coverageThreshold is applied per
           # file — one weak module failing a run whose output reads "N pass,
           # 0 fail" is a coverage failure wearing the costume of a broken suite.
-          floor=$(node -p "JSON.parse(require('fs').readFileSync('package.json','utf8')).gauntlet?.coverageFloorPercent ?? ''" 2>/dev/null || echo "")
+          # ($floor was read above, before the tests ran.)
           total=$(printf '%s' "$out" | awk -F'|' '/^ *All files/ { f=$2+0; l=$3+0; print (f<l?f:l) }')
           if [ -z "$floor" ]; then
             echo "GATE coverage = NOT_APPLICABLE (no gauntlet.coverageFloorPercent in package.json)" >> "$GITHUB_STEP_SUMMARY"
@@ -124,6 +166,7 @@ jobs:
       - name: dependency audit
         run: npm audit --audit-level=high
   powershell:
+    timeout-minutes: 90
     name: PowerShell
     runs-on: windows-latest
     steps:
@@ -139,9 +182,14 @@ jobs:
             Invoke-Pester -CI
             "GATE pester = VERIFIED" >> $env:GITHUB_STEP_SUMMARY
           } else {
+            if ((Test-Path .gauntlet.json) -and ((Get-Content .gauntlet.json -Raw) -match '"tier"\s*:\s*"production"')) {
+              "GATE pester = FAILED (this repo is marked production, and it has no *.Tests.ps1)" >> $env:GITHUB_STEP_SUMMARY
+              exit 1
+            }
             "GATE pester = NOT_APPLICABLE (no *.Tests.ps1 in this repo)" >> $env:GITHUB_STEP_SUMMARY
           }
   secrets:
+    timeout-minutes: 90
     name: secret scan (gitleaks)
     runs-on: ubuntu-latest
     container:
@@ -182,6 +230,7 @@ jobs:
           scanned=$(printf '%s' "$out" | grep -Eo '[0-9]+ commits scanned' | tail -1)
           echo "GATE secrets = VERIFIED (no leaks in $scanned)" >> "$GITHUB_STEP_SUMMARY"
   deps:
+    timeout-minutes: 90
     name: dependency CVEs (osv-scanner)
     runs-on: ubuntu-latest
     steps:
@@ -192,8 +241,19 @@ jobs:
           curl -sSfL -o osv-scanner \
             https://github.com/google/osv-scanner/releases/latest/download/osv-scanner_linux_amd64
           chmod +x osv-scanner
+          # Reviewed exceptions from .gauntlet.json become "$@". Directories
+          # only: osv-scanner cannot skip a single file.
+          if [ ! -f .github/gauntlet-scan-exceptions ]; then
+            echo "SCAN EXCEPTIONS = FAILED (.github/gauntlet-scan-exceptions is missing, so .gauntlet.json cannot be read; re-arm with --upgrade)" >> "$GITHUB_STEP_SUMMARY"
+            echo "::error title=scan exceptions::.github/gauntlet-scan-exceptions is missing, so .gauntlet.json cannot be read. Re-arm with --upgrade."
+            exit 1
+          fi
+          exc_dir=$(mktemp -d)
+          python3 .github/gauntlet-scan-exceptions osv "$exc_dir" report
+          set --
+          while IFS= read -r exc_arg; do set -- "$@" "$exc_arg"; done < "$exc_dir/args"
           set +e
-          ./osv-scanner scan source --recursive ./
+          ./osv-scanner scan source --recursive "$@" ./
           code=$?
           set -e
           # 0 = clean. 1 = vulnerabilities found, and that must fail the build.
@@ -207,6 +267,7 @@ jobs:
           fi
           exit $code
   confusion:
+    timeout-minutes: 90
     name: dependency confusion
     runs-on: ubuntu-latest
     steps:
@@ -387,6 +448,7 @@ jobs:
           fi
           echo "GATE dependency-confusion = VERIFIED ($total package names checked against their public registries)" >> "$GITHUB_STEP_SUMMARY"
   phi:
+    timeout-minutes: 90
     name: PHI in logs
     runs-on: ubuntu-latest
     steps:
@@ -415,6 +477,7 @@ jobs:
           fi
           echo "GATE phi-in-logs = VERIFIED" >> "$GITHUB_STEP_SUMMARY"
   sbom:
+    timeout-minutes: 90
     name: software bill of materials
     runs-on: ubuntu-latest
     steps:
@@ -431,6 +494,7 @@ jobs:
           path: sbom.cyclonedx.json
           retention-days: 365
   licenses:
+    timeout-minutes: 90
     name: licence policy
     runs-on: ubuntu-latest
     steps:
@@ -464,6 +528,7 @@ jobs:
           fi
           echo "GATE licences = VERIFIED" >> "$GITHUB_STEP_SUMMARY"
   sast:
+    timeout-minutes: 90
     name: static analysis (semgrep)
     runs-on: ubuntu-latest
     container:
@@ -474,7 +539,16 @@ jobs:
       - name: advisory scan (all severities, never blocks)
         run: |
           git config --global --add safe.directory "$(pwd)"
-          semgrep scan --config=p/default --metrics=off --no-error \
+          if [ ! -f .github/gauntlet-scan-exceptions ]; then
+            echo "SCAN EXCEPTIONS = FAILED (.github/gauntlet-scan-exceptions is missing, so .gauntlet.json cannot be read; re-arm with --upgrade)" >> "$GITHUB_STEP_SUMMARY"
+            echo "::error title=scan exceptions::.github/gauntlet-scan-exceptions is missing, so .gauntlet.json cannot be read. Re-arm with --upgrade."
+            exit 1
+          fi
+          exc_dir=$(mktemp -d)
+          python3 .github/gauntlet-scan-exceptions semgrep "$exc_dir" quiet
+          set --
+          while IFS= read -r exc_arg; do set -- "$@" "$exc_arg"; done < "$exc_dir/args"
+          semgrep scan --config=p/default --metrics=off --no-error "$@" \
             --text --output=advisory.txt . || true
           {
             echo "### Semgrep advisory findings (not blocking)"
@@ -487,8 +561,17 @@ jobs:
           # Repeated deliberately: each step must stand on its own, so that
           # deleting the step above can never silently disarm this one.
           git config --global --add safe.directory "$(pwd)"
+          if [ ! -f .github/gauntlet-scan-exceptions ]; then
+            echo "SCAN EXCEPTIONS = FAILED (.github/gauntlet-scan-exceptions is missing, so .gauntlet.json cannot be read; re-arm with --upgrade)" >> "$GITHUB_STEP_SUMMARY"
+            echo "::error title=scan exceptions::.github/gauntlet-scan-exceptions is missing, so .gauntlet.json cannot be read. Re-arm with --upgrade."
+            exit 1
+          fi
+          exc_dir=$(mktemp -d)
+          python3 .github/gauntlet-scan-exceptions semgrep "$exc_dir" report
+          set --
+          while IFS= read -r exc_arg; do set -- "$@" "$exc_arg"; done < "$exc_dir/args"
           set +e
-          out=$(semgrep scan --config=p/default --metrics=off --severity=ERROR --error . 2>&1); code=$?
+          out=$(semgrep scan --config=p/default --metrics=off --severity=ERROR --error "$@" . 2>&1); code=$?
           set -e
           echo "$out"
           targets=$(printf '%s' "$out" | awk '/Ran [0-9]+ rules? on [0-9]+ files?:/ { n = $5 } END { if (n != "") print n }')
@@ -504,6 +587,7 @@ jobs:
           if [ "$code" -ne 0 ]; then exit "$code"; fi
           echo "GATE sast = VERIFIED (no ERROR-severity findings across $targets files)" >> "$GITHUB_STEP_SUMMARY"
   pipeline:
+    timeout-minutes: 90
     name: pipeline security (zizmor, actionlint)
     runs-on: ubuntu-latest
     permissions:
@@ -565,6 +649,7 @@ jobs:
           fi
           echo "GATE pipeline = VERIFIED ($# workflow file(s) audited, no findings at medium or above)" >> "$GITHUB_STEP_SUMMARY"
   supplychain:
+    timeout-minutes: 90
     name: supply chain posture (scorecard) — ADVISORY
     runs-on: ubuntu-latest
     permissions:
@@ -601,6 +686,10 @@ jobs:
     permissions:
       contents: read
       security-events: write
+      # The CodeQL action reads its own workflow run. On a private repo without
+      # this, analyze fails with "Resource not accessible by integration":
+      # vortex-email-comply, run 34974718788, red for a missing permission.
+      actions: read
     strategy:
       fail-fast: false
       matrix:
